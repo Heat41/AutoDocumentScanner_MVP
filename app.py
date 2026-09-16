@@ -1,5 +1,5 @@
 from pathlib import Path
-import cv2
+import argparse
 
 from scanner import AutoDocumentScanner
 
@@ -16,25 +16,48 @@ SUPPORTED_EXTENSIONS = {
 }
 
 
-def get_input_images():
-    INPUT_DIR.mkdir(
+def get_input_images(folder):
+    folder.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    images = []
-
-    for file_path in INPUT_DIR.iterdir():
+    return sorted(
+        path
+        for path in folder.iterdir()
         if (
-            file_path.is_file()
-            and file_path.suffix.lower() in SUPPORTED_EXTENSIONS
-        ):
-            images.append(file_path)
-
-    return sorted(images)
+            path.is_file()
+            and path.suffix.lower()
+            in SUPPORTED_EXTENSIONS
+        )
+    )
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="AutoDocumentScanner MVP"
+    )
+
+    parser.add_argument(
+        "--grayscale",
+        action="store_true",
+        help="Output grayscale. Default tetap warna.",
+    )
+
+    parser.add_argument(
+        "--ui",
+        action="store_true",
+        help="Buka antarmuka desktop minimal.",
+    )
+
+    args = parser.parse_args()
+
+    if args.ui:
+        from ui import main as run_ui
+
+        run_ui()
+        return
+
     print("======================================")
     print(" AUTO DOCUMENT SCANNER")
     print("======================================")
@@ -44,14 +67,29 @@ def main():
         exist_ok=True,
     )
 
-    images = get_input_images()
+    images = get_input_images(
+        INPUT_DIR
+    )
 
     if not images:
         print("\n[ERROR] Tidak ada gambar di folder input.")
-        print(f"Folder: {INPUT_DIR.resolve()}")
+        print(
+            f"Folder: {INPUT_DIR.resolve()}"
+        )
         return
 
-    print(f"\nDitemukan {len(images)} gambar.\n")
+    output_mode = (
+        "grayscale"
+        if args.grayscale
+        else "color"
+    )
+
+    print(
+        f"\nDitemukan {len(images)} gambar."
+    )
+    print(
+        f"Mode output: {output_mode}\n"
+    )
 
     scanner = AutoDocumentScanner()
 
@@ -74,14 +112,36 @@ def main():
         )
 
         try:
-            result, corners = scanner.scan(
+            scanner.scan(
                 input_path,
                 output_path,
                 mode="ktp",
+                output_mode=output_mode,
             )
 
-            print("[OK] Dokumen berhasil diproses.")
-            print(f"Output: {output_path}")
+            metadata = (
+                scanner.last_detection
+                or {}
+            )
+
+            print(
+                "[OK] Perspective correction selesai."
+            )
+            print(
+                f"Candidate: "
+                f"{metadata.get('candidate_count', '-')}"
+            )
+            print(
+                f"Source   : "
+                f"{metadata.get('selected_source', '-')}"
+            )
+            print(
+                f"Score    : "
+                f"{metadata.get('score', 0):.3f}"
+            )
+            print(
+                f"Output   : {output_path}"
+            )
 
             success_count += 1
 
@@ -89,21 +149,17 @@ def main():
             print(
                 f"[FAILED] {exc}"
             )
-
             failed_count += 1
 
     print("\n======================================")
     print(" SELESAI")
     print("======================================")
-
     print(
         f"Berhasil : {success_count}"
     )
-
     print(
         f"Gagal    : {failed_count}"
     )
-
     print(
         f"Output   : {OUTPUT_DIR.resolve()}"
     )
