@@ -518,6 +518,390 @@ class AutoPerspectiveEngine:
 
         return overall, border_coverage
 
+    @staticmethod
+    def _sample_map(image, points):
+        h, w = image.shape[:2]
+
+        xs = np.clip(
+            np.rint(points[:, 0]).astype(np.int32),
+            0,
+            w - 1,
+        )
+        ys = np.clip(
+            np.rint(points[:, 1]).astype(np.int32),
+            0,
+            h - 1,
+        )
+
+        return image[ys, xs]
+
+    @staticmethod
+    def _intersect_lines(line_a, line_b):
+        p1, v1 = line_a
+        p2, v2 = line_b
+
+        matrix = np.column_stack(
+            (v1, -v2)
+        )
+
+        det = float(
+            np.linalg.det(matrix)
+        )
+
+        if abs(det) < 1e-6:
+            return None
+
+        t = np.linalg.solve(
+            matrix,
+            p2 - p1,
+        )[0]
+
+        return (
+            p1 + t * v1
+        ).astype(np.float32)
+
+    def _snap_quad_to_boundary(self, image, quad):
+        """
+        Snap empat sisi kandidat ke boundary fisik kartu.
+
+        Ini meniru perilaku document scanner HP: kandidat awal hanya memberi
+        lokasi kasar, lalu setiap sisi digeser tegak-lurus sampai menemukan
+        transisi kuat dari background -> badan kartu. Karena sisi digeser
+        sebagai garis, perspektif/trapezoid tetap dipertahankan.
+        """
+        quad = self.order_points(
+            quad
+        )
+
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+        gray = cv2.GaussianBlur(
+            gray,
+            (5, 5),
+            0,
+        )
+
+        gx = cv2.Sobel(
+            gray,
+            cv2.CV_32F,
+            1,
+            0,
+            ksize=3,
+        )
+        gy = cv2.Sobel(
+            gray,
+            cv2.CV_32F,
+            0,
+            1,
+            ksize=3,
+        )
+
+        gradient = cv2.magnitude(
+            gx,
+            gy,
+        )
+
+        gradient = cv2.GaussianBlur(
+            gradient,
+            (3, 3),
+            0,
+        )
+
+        color_mask = self._ktp_color_mask(
+            image
+        )
+
+        h, w = image.shape[:2]
+
+        side_lengths = [
+            np.linalg.norm(
+                quad[(index + 1) % 4]
+                - quad[index]
+            )
+            for index in range(4)
+        ]
+
+        short_side = max(
+            min(side_lengths),
+            1.0,
+        )
+
+        search_radius = int(
+            np.clip(
+                short_side * 0.10,
+                10,
+                70,
+            )
+        )
+
+        sample_gap = float(
+            np.clip(
+                short_side * 0.018,
+                3.0,
+                10.0,
+            )
+        )
+
+        snapped_lines = []
+
+        for index in range(4):
+            p1 = quad[index].astype(
+                np.float32
+            )
+            p2 = quad[
+                (index + 1) % 4
+            ].astype(
+                np.float32
+            )
+
+            tangent = p2 - p1
+            length = float(
+                np.linalg.norm(tangent)
+            )
+
+            if length < 5:
+                return quad
+
+            tangent /= length
+
+            # Dengan urutan TL,TR,BR,BL pada koordinat gambar,
+            # normal ini mengarah ke bagian dalam kartu.
+            inward = np.array(
+                [
+                    -tangent[1],
+                    tangent[0],
+                ],
+                dtype=np.float32,
+            )
+
+            # Hindari rounded corner/glare: nilai hanya 72% bagian tengah edge.
+            t_values = np.linspace(
+                0.14,
+                0.86,
+                72,
+                dtype=np.float32,
+            )
+
+            base_points = (
+                p1[None, :]
+                + (
+                    p2 - p1
+                )[None, :]
+                * t_values[:, None]
+            )
+
+            best_offset = 0.0
+            best_score = -1e9
+
+            for offset in range(
+                -search_radius,
+                search_radius + 1,
+                2,
+            ):
+                line_points = (
+                    base_points
+                    + inward[None, :]
+                    * float(offset)
+                )
+
+                inside_points = (
+                    line_points
+                    + inward[None, :]
+                    * sample_gap
+                )
+                outside_points = (
+                    line_points
+                    - inward[None, :]
+                    * sample_gap
+                )
+
+                # Jangan memilih garis yang sebagian besar keluar frame.
+                valid = (
+                    (line_points[:, 0] >= 1)
+                    & (line_points[:, 0] < w - 1)
+                    & (line_points[:, 1] >= 1)
+                    & (line_points[:, 1] < h - 1)
+                )
+
+                if float(
+                    np.mean(valid)
+                ) < 0.82:
+                    continue
+
+                line_points = line_points[
+                    valid
+                ]
+                inside_points = inside_points[
+                    valid
+                ]
+                outside_points = outside_points[
+                    valid
+                ]
+
+                grad_values = self._sample_map(
+                    gradient,
+                    line_points,
+                )
+
+                # Median/percentile lebih tahan terhadap teks yang kebetulan
+                # memotong garis dibanding mean biasa.
+                gradient_score = float(
+                    np.percentile(
+                        grad_values,
+                        68,
+                    )
+                ) / 255.0
+
+                inside_color = self._sample_map(
+                    color_mask,
+                    inside_points,
+                )
+                outside_color = self._sample_map(
+                    color_mask,
+                    outside_points,
+                )
+
+                inside_fraction = float(
+                    np.mean(
+                        inside_color > 0
+                    )
+                )
+                outside_fraction = float(
+                    np.mean(
+                        outside_color > 0
+                    )
+                )
+
+                transition = max(
+                    0.0,
+                    inside_fraction
+                    - outside_fraction,
+                )
+
+                # Preferensi kecil terhadap perpindahan minimum agar edge tidak
+                # "meloncat" ke garis internal lain bila dua skor mirip.
+                movement_penalty = (
+                    abs(offset)
+                    / max(search_radius, 1)
+                ) * 0.08
+
+                score = (
+                    gradient_score * 0.52
+                    + transition * 0.48
+                    - movement_penalty
+                )
+
+                if score > best_score:
+                    best_score = score
+                    best_offset = float(
+                        offset
+                    )
+
+            shifted_p1 = (
+                p1
+                + inward
+                * best_offset
+            )
+            shifted_p2 = (
+                p2
+                + inward
+                * best_offset
+            )
+
+            snapped_lines.append(
+                (
+                    shifted_p1,
+                    shifted_p2 - shifted_p1,
+                )
+            )
+
+        tl = self._intersect_lines(
+            snapped_lines[3],
+            snapped_lines[0],
+        )
+        tr = self._intersect_lines(
+            snapped_lines[0],
+            snapped_lines[1],
+        )
+        br = self._intersect_lines(
+            snapped_lines[1],
+            snapped_lines[2],
+        )
+        bl = self._intersect_lines(
+            snapped_lines[2],
+            snapped_lines[3],
+        )
+
+        if any(
+            point is None
+            for point in (
+                tl,
+                tr,
+                br,
+                bl,
+            )
+        ):
+            return quad
+
+        snapped = np.array(
+            [tl, tr, br, bl],
+            dtype=np.float32,
+        )
+
+        if not cv2.isContourConvex(
+            snapped.astype(np.int32)
+        ):
+            return quad
+
+        original_area = abs(
+            cv2.contourArea(
+                quad.astype(np.float32)
+            )
+        )
+        snapped_area = abs(
+            cv2.contourArea(
+                snapped.astype(np.float32)
+            )
+        )
+
+        if original_area <= 1:
+            return quad
+
+        area_ratio = (
+            snapped_area
+            / original_area
+        )
+
+        if not (
+            0.68
+            <= area_ratio
+            <= 1.28
+        ):
+            return quad
+
+        diagonal = float(
+            np.hypot(w, h)
+        )
+        movement = float(
+            np.mean(
+                np.linalg.norm(
+                    snapped - quad,
+                    axis=1,
+                )
+            )
+            / max(diagonal, 1.0)
+        )
+
+        if movement > 0.11:
+            return quad
+
+        return self.order_points(
+            snapped
+        )
+
     def _candidate_score(self, candidate, image, edge_map):
         h, w = image.shape[:2]
         image_area = float(h * w)
@@ -793,6 +1177,27 @@ class AutoPerspectiveEngine:
             }
 
         for candidate in candidates:
+            raw_points = candidate.points.copy()
+
+            candidate.points = self._snap_quad_to_boundary(
+                resized,
+                candidate.points,
+            )
+
+            moved = float(
+                np.mean(
+                    np.linalg.norm(
+                        candidate.points - raw_points,
+                        axis=1,
+                    )
+                )
+            )
+
+            if moved >= 1.5:
+                candidate.source = (
+                    f"{candidate.source}_snapped"
+                )
+
             candidate.score = self._candidate_score(
                 candidate,
                 resized,
