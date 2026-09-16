@@ -652,8 +652,8 @@ class AutoDocumentScanner:
 
         angles = []
 
-        for line in lines[:, 0]:
-            x1, y1, x2, y2 = line
+        for line in np.asarray(lines).reshape(-1, 4):
+            x1, y1, x2, y2 = [int(value) for value in line]
             dx = x2 - x1
             dy = y2 - y1
 
