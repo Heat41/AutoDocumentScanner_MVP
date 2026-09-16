@@ -12,10 +12,12 @@ class AutoDocumentScanner:
         detection_height=900,
         ktp_corner_padding=0.012,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
+        ktp_safe_margin=0.02,
     ):
         self.detection_height = detection_height
         self.ktp_corner_padding = ktp_corner_padding
         self.ktp_aspect_ratio = ktp_aspect_ratio
+        self.ktp_safe_margin = ktp_safe_margin
 
     # ============================================================
     # POINT ORDERING
@@ -123,7 +125,6 @@ class AutoDocumentScanner:
             cv2.COLOR_BGR2GRAY,
         )
 
-        # Bilateral filter menjaga garis tepi lebih baik daripada blur biasa.
         gray = cv2.bilateralFilter(
             gray,
             7,
@@ -192,7 +193,6 @@ class AutoDocumentScanner:
         if width <= 1 or height <= 1:
             return -1.0
 
-        # Utamakan quadrilateral besar dan berbentuk persegi panjang.
         bbox_area = width * height
         rectangularity = min(area / bbox_area, 1.0) if bbox_area > 0 else 0.0
         area_ratio = min(area / image_area, 1.0)
@@ -257,7 +257,6 @@ class AutoDocumentScanner:
             if perimeter <= 0:
                 continue
 
-            # Coba beberapa toleransi karena edge KTP sering tidak sempurna.
             for epsilon_ratio in (0.015, 0.02, 0.025, 0.03):
                 approx = cv2.approxPolyDP(
                     contour,
@@ -284,7 +283,6 @@ class AutoDocumentScanner:
                     best_score = score
                     best_quad = quad
 
-        # Fallback aman: gunakan minimum-area rectangle dari contour besar.
         if best_quad is None:
             if fallback_contour is None:
                 return None
@@ -297,7 +295,6 @@ class AutoDocumentScanner:
                 rect
             ).astype(np.float32)
 
-        # Kembali ke koordinat gambar asli.
         best_quad /= scale
 
         return best_quad.astype(np.float32)
@@ -310,7 +307,6 @@ class AutoDocumentScanner:
     def auto_rotate(image, mode="document"):
         height, width = image.shape[:2]
 
-        # KTP selalu dihasilkan dalam orientasi landscape.
         if mode == "ktp" and height > width:
             image = cv2.rotate(
                 image,
@@ -326,7 +322,6 @@ class AutoDocumentScanner:
     def normalize_ktp_aspect_ratio(self, image):
         """
         Normalisasi ke rasio kartu ID-1/KTP sekitar 1.586:1.
-        Koreksi ini dilakukan setelah perspective transform dan auto-rotate.
         """
         height, width = image.shape[:2]
 
@@ -344,6 +339,51 @@ class AutoDocumentScanner:
             interpolation=cv2.INTER_CUBIC,
         )
 
+    def add_ktp_safe_margin(self, image):
+        """
+        Membuat margin luar yang benar-benar terlihat tanpa mengubah
+        rasio output KTP. Kartu diperkecil sedikit lalu ditempatkan di
+        canvas netral dengan rasio yang sama.
+        """
+        if self.ktp_safe_margin <= 0:
+            return image
+
+        height, width = image.shape[:2]
+
+        margin = min(max(self.ktp_safe_margin, 0.0), 0.10)
+
+        inner_width = max(
+            2,
+            int(round(width * (1.0 - (2.0 * margin)))),
+        )
+        inner_height = max(
+            2,
+            int(round(height * (1.0 - (2.0 * margin)))),
+        )
+
+        inner = cv2.resize(
+            image,
+            (inner_width, inner_height),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        # Latar netral seperti hasil scanner.
+        canvas = np.full(
+            (height, width, 3),
+            245,
+            dtype=np.uint8,
+        )
+
+        x = (width - inner_width) // 2
+        y = (height - inner_height) // 2
+
+        canvas[
+            y:y + inner_height,
+            x:x + inner_width,
+        ] = inner
+
+        return canvas
+
     # ============================================================
     # IMAGE ENHANCEMENT
     # ============================================================
@@ -352,7 +392,6 @@ class AutoDocumentScanner:
     def enhance(image):
         """
         Enhancement ringan untuk menjaga warna dokumen tetap natural.
-        CLAHE hanya dipakai pada luminance lalu dibaurkan dengan citra asli.
         """
         lab = cv2.cvtColor(
             image,
@@ -377,7 +416,6 @@ class AutoDocumentScanner:
             cv2.COLOR_LAB2BGR,
         )
 
-        # Mayoritas warna berasal dari gambar asli.
         return cv2.addWeighted(
             image,
             0.72,
@@ -435,6 +473,11 @@ class AutoDocumentScanner:
         result = self.enhance(
             result
         )
+
+        if mode == "ktp":
+            result = self.add_ktp_safe_margin(
+                result
+            )
 
         if output_path:
             output_path = Path(output_path)
