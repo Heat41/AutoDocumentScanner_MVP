@@ -12,7 +12,7 @@ class AutoDocumentScanner:
         detection_height=900,
         ktp_corner_padding=0.0,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
-        ktp_safe_margin=0.02,
+        ktp_safe_margin=0.0,
         ktp_edge_trim=0.006,
     ):
         self.detection_height = detection_height
@@ -506,7 +506,7 @@ class AutoDocumentScanner:
             result
         )
 
-        if mode == "ktp":
+        if mode == "ktp" and self.ktp_safe_margin > 0:
             result = self.add_ktp_safe_margin(
                 result
             )
