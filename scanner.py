@@ -1077,6 +1077,38 @@ class AutoDocumentScanner:
         return canvas
 
     # ============================================================
+    # OUTPUT MODE
+    # ============================================================
+
+    @staticmethod
+    def apply_output_mode(image, output_mode="color"):
+        """
+        Output final default tetap berwarna.
+
+        output_mode:
+        - "color"     : pertahankan warna asli/enhanced
+        - "grayscale" : keluarkan grayscale 3-channel agar pipeline/output
+                        tetap konsisten untuk penyimpanan dan UI
+        """
+        if output_mode == "color":
+            return image
+
+        if output_mode == "grayscale":
+            gray = cv2.cvtColor(
+                image,
+                cv2.COLOR_BGR2GRAY,
+            )
+
+            return cv2.cvtColor(
+                gray,
+                cv2.COLOR_GRAY2BGR,
+            )
+
+        raise ValueError(
+            "output_mode harus 'color' atau 'grayscale'."
+        )
+
+    # ============================================================
     # IMAGE ENHANCEMENT
     # ============================================================
 
@@ -1125,6 +1157,7 @@ class AutoDocumentScanner:
         image_path,
         output_path=None,
         mode="document",
+        output_mode="color",
     ):
         image_path = Path(image_path)
 
@@ -1184,6 +1217,11 @@ class AutoDocumentScanner:
             result = self.add_ktp_safe_margin(
                 result
             )
+
+        result = self.apply_output_mode(
+            result,
+            output_mode=output_mode,
+        )
 
         if output_path:
             output_path = Path(output_path)
