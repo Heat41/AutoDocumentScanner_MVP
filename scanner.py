@@ -254,13 +254,14 @@ class AutoDocumentScanner:
         )
 
         image_area = resized.shape[0] * resized.shape[1]
-        min_area = image_area * 0.08
+        # KTP yang difoto agak jauh tetap perlu dianggap kandidat.
+        min_area = image_area * 0.04
 
         best_quad = None
         best_score = -1.0
         fallback_contour = None
 
-        for contour in contours[:40]:
+        for contour in contours[:80]:
             area = cv2.contourArea(contour)
 
             if area < min_area:
@@ -351,16 +352,87 @@ class AutoDocumentScanner:
     # ============================================================
 
     @staticmethod
-    def auto_rotate(image, mode="document"):
+    def _detect_face_score(image):
+        """
+        Nilai kandidat orientasi berdasarkan deteksi wajah.
+        KTP Indonesia menempatkan foto wajah di sisi kanan saat orientasi benar.
+        """
+        try:
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            detector = cv2.CascadeClassifier(cascade_path)
+
+            if detector.empty():
+                return 0.0
+
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+            # Haar lebih stabil pada ukuran sedang.
+            h, w = gray.shape[:2]
+            scale = min(1.0, 900.0 / max(h, w))
+            if scale < 1.0:
+                gray = cv2.resize(
+                    gray,
+                    (int(round(w * scale)), int(round(h * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+
+            faces = detector.detectMultiScale(
+                gray,
+                scaleFactor=1.08,
+                minNeighbors=4,
+                minSize=(40, 40),
+            )
+
+            if len(faces) == 0:
+                return 0.0
+
+            gh, gw = gray.shape[:2]
+            best = 0.0
+
+            for x, y, fw, fh in faces:
+                area_ratio = (fw * fh) / float(gw * gh)
+                cx = x + (fw / 2.0)
+
+                # Orientasi KTP benar: foto berada di sisi kanan.
+                right_bonus = 1.0 if cx >= (gw * 0.55) else 0.25
+                score = area_ratio * right_bonus
+
+                if score > best:
+                    best = score
+
+            return best
+
+        except Exception:
+            return 0.0
+
+    def auto_rotate(self, image, mode="document"):
         height, width = image.shape[:2]
 
-        if mode == "ktp" and height > width:
+        if mode != "ktp":
+            return image
+
+        # KTP selalu landscape.
+        if height > width:
             image = cv2.rotate(
                 image,
                 cv2.ROTATE_90_CLOCKWISE,
             )
 
-        return image
+        # Setelah landscape, cek 0° vs 180°.
+        # Pilih orientasi yang paling mungkin menempatkan wajah di kanan.
+        normal = image
+        rotated_180 = cv2.rotate(
+            image,
+            cv2.ROTATE_180,
+        )
+
+        normal_score = self._detect_face_score(normal)
+        rotated_score = self._detect_face_score(rotated_180)
+
+        if rotated_score > normal_score:
+            return rotated_180
+
+        return normal
 
     # ============================================================
     # KTP GEOMETRY NORMALIZATION
