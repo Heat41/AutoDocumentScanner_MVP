@@ -594,37 +594,62 @@ class AutoDocumentScanner:
 
         return right_score - left_score
 
-    def auto_rotate(self, image, mode="document"):
-        height, width = image.shape[:2]
+    def _orientation_score(self, image):
+        """
+        Skor orientasi KTP:
+        1) wajah upright di sisi kanan menjadi sinyal utama,
+        2) posisi blok foto di sisi kanan hanya menjadi fallback ringan.
+        """
+        face_score = self._detect_face_score(image)
+        portrait_score = self._portrait_block_score(image)
+        layout_score = self._photo_side_score(image)
 
+        return (
+            (face_score * 20.0)
+            + (portrait_score * 1.5)
+            + (layout_score * 0.5)
+        )
+
+    def auto_rotate(self, image, mode="document"):
         if mode != "ktp":
             return image
 
-        # KTP selalu landscape.
+        height, width = image.shape[:2]
+
+        # Jika input portrait, kita tidak boleh selalu memutar clockwise.
+        # Foto bisa berasal dari rotasi kiri ATAU kanan. Uji keduanya.
         if height > width:
-            image = cv2.rotate(
+            candidate_cw = cv2.rotate(
                 image,
                 cv2.ROTATE_90_CLOCKWISE,
             )
+            candidate_ccw = cv2.rotate(
+                image,
+                cv2.ROTATE_90_COUNTERCLOCKWISE,
+            )
 
-        # Setelah landscape, cek 0° vs 180°.
-        # Pilih orientasi yang paling mungkin menempatkan wajah di kanan.
+            cw_score = self._orientation_score(candidate_cw)
+            ccw_score = self._orientation_score(candidate_ccw)
+
+            # Jika skor hampir sama, pilih counter-clockwise sebagai default
+            # karena kasus foto HP yang diputar ke kanan akan kembali upright.
+            if cw_score > ccw_score + 0.015:
+                return candidate_cw
+
+            return candidate_ccw
+
+        # Jika sudah landscape, bandingkan posisi sekarang dengan 180 derajat.
         normal = image
         rotated_180 = cv2.rotate(
             image,
             cv2.ROTATE_180,
         )
 
-        normal_layout = self._photo_side_score(normal)
-        rotated_layout = self._photo_side_score(rotated_180)
+        normal_score = self._orientation_score(normal)
+        rotated_score = self._orientation_score(rotated_180)
 
-        normal_portrait = self._portrait_block_score(normal)
-        rotated_portrait = self._portrait_block_score(rotated_180)
-
-        normal_score = (normal_portrait * 3.0) + normal_layout
-        rotated_score = (rotated_portrait * 3.0) + rotated_layout
-
-        if rotated_score > normal_score + 0.01:
+        # Jangan membalik kalau bukti tidak cukup kuat.
+        if rotated_score > normal_score + 0.03:
             return rotated_180
 
         return normal
