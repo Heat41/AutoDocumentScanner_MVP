@@ -91,6 +91,16 @@ class AutoDocumentScanner:
         max_width = max(max_width, 2)
         max_height = max(max_height, 2)
 
+        if mode == "ktp":
+            # Jangan hanya resize setelah warp. Terapkan rasio KTP langsung
+            # pada homography supaya perspektif dipetakan ke geometri kartu.
+            landscape_width = max(max_width, max_height)
+            max_width = landscape_width
+            max_height = max(
+                2,
+                int(round(max_width / self.ktp_aspect_ratio)),
+            )
+
         destination = np.array(
             [
                 [0, 0],
@@ -174,18 +184,22 @@ class AutoDocumentScanner:
 
     def _detect_ktp_color_candidate(self, image):
         """
-        Fallback khusus KTP. Area cyan-biru digabungkan lalu convex hull-nya
-        dipakai untuk memperkirakan empat sudut kartu. Kandidat warna hanya
-        dipakai bila contour tepi biasa gagal, agar tidak merusak kasus yang
-        sudah terdeteksi dengan baik.
-        """
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        Deteksi badan KTP dari dominasi cyan/biru terhadap channel merah.
 
-        mask = cv2.inRange(
-            hsv,
-            np.array([70, 14, 55], dtype=np.uint8),
-            np.array([122, 255, 255], dtype=np.uint8),
-        )
+        Pendekatan ini lebih stabil daripada HSV luas pada background laptop
+        abu-abu karena hanya memilih piksel yang benar-benar lebih biru/cyan.
+        """
+        b, g, r = cv2.split(image)
+
+        b16 = b.astype(np.int16)
+        g16 = g.astype(np.int16)
+        r16 = r.astype(np.int16)
+
+        mask = (
+            (b16 - r16 > 18)
+            & (g16 - r16 > 3)
+            & (b > 80)
+        ).astype(np.uint8) * 255
 
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
@@ -196,69 +210,79 @@ class AutoDocumentScanner:
             mask,
             cv2.MORPH_CLOSE,
             kernel,
-            iterations=4,
+            iterations=3,
         )
 
         contours, _ = cv2.findContours(
             mask,
             cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE,
+            cv2.CHAIN_APPROX_NONE,
         )
 
         if not contours:
             return None
 
         image_area = image.shape[0] * image.shape[1]
-        useful = [
-            contour
-            for contour in contours
-            if cv2.contourArea(contour) >= image_area * 0.004
-        ]
 
-        if not useful:
+        contour = max(
+            contours,
+            key=cv2.contourArea,
+        )
+
+        if cv2.contourArea(contour) < image_area * 0.12:
             return None
 
-        points = np.vstack(useful)
-        hull = cv2.convexHull(points)
-
+        hull = cv2.convexHull(contour)
         perimeter = cv2.arcLength(hull, True)
 
-        for epsilon_ratio in (0.012, 0.018, 0.025, 0.035, 0.05):
+        for epsilon_ratio in (0.008, 0.010, 0.015, 0.020, 0.025, 0.030, 0.040):
             approx = cv2.approxPolyDP(
                 hull,
                 epsilon_ratio * perimeter,
                 True,
             )
 
-            if len(approx) == 4:
-                quad = approx.reshape(4, 2).astype(np.float32)
+            if len(approx) != 4:
+                continue
 
-                if cv2.isContourConvex(quad.astype(np.int32)):
-                    return quad
+            quad = approx.reshape(4, 2).astype(np.float32)
 
-        # Jika rounded corner / glare membuat approxPolyDP tidak menjadi
-        # tepat 4 titik, ambil empat ekstrem convex hull. Ini mempertahankan
-        # bentuk trapezoid/perspektif; berbeda dengan minAreaRect yang hanya
-        # menghasilkan persegi panjang berotasi dan tidak mengoreksi perspektif.
-        hull_points = hull.reshape(-1, 2).astype(np.float32)
+            if not cv2.isContourConvex(
+                quad.astype(np.int32)
+            ):
+                continue
 
-        sums = hull_points.sum(axis=1)
-        diffs = np.diff(hull_points, axis=1).reshape(-1)
+            ordered = self.order_points(quad)
+            area = abs(
+                cv2.contourArea(
+                    ordered.astype(np.float32)
+                )
+            )
 
-        quad = np.array(
-            [
-                hull_points[np.argmin(sums)],   # top-left
-                hull_points[np.argmin(diffs)],  # top-right
-                hull_points[np.argmax(sums)],   # bottom-right
-                hull_points[np.argmax(diffs)],  # bottom-left
-            ],
-            dtype=np.float32,
-        )
+            if area < image_area * 0.12:
+                continue
 
-        if abs(cv2.contourArea(quad)) < image_area * 0.08:
-            return None
+            tl, tr, br, bl = ordered
 
-        return quad
+            width = (
+                np.linalg.norm(tr - tl)
+                + np.linalg.norm(br - bl)
+            ) / 2.0
+            height = (
+                np.linalg.norm(bl - tl)
+                + np.linalg.norm(br - tr)
+            ) / 2.0
+
+            if min(width, height) <= 1:
+                continue
+
+            ratio = max(width, height) / min(width, height)
+
+            # Perspektif kuat dapat mengubah apparent ratio cukup besar.
+            if 1.10 <= ratio <= 2.25:
+                return ordered.astype(np.float32)
+
+        return None
 
     def _detect_ktp_border_line_candidate(self, image):
         """
@@ -514,6 +538,12 @@ class AutoDocumentScanner:
         image_area = resized.shape[0] * resized.shape[1]
         # KTP yang difoto agak jauh tetap perlu dianggap kandidat.
         min_area = image_area * 0.04
+
+        # Untuk mode KTP, kandidat cyan-dominance yang valid lebih dipercaya
+        # daripada contour internal/text karena mewakili badan kartu fisik.
+        if mode == "ktp" and color_quad is not None:
+            color_quad /= scale
+            return color_quad.astype(np.float32)
 
         best_quad = None
         best_score = -1.0
