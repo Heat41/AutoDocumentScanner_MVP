@@ -172,8 +172,7 @@ class AutoDocumentScanner:
     # DOCUMENT DETECTION
     # ============================================================
 
-    @staticmethod
-    def _quad_score(points, image_area):
+    def _quad_score(self, points, image_area, mode="document"):
         rect = AutoDocumentScanner.order_points(points)
         tl, tr, br, bl = rect
 
@@ -199,9 +198,28 @@ class AutoDocumentScanner:
         rectangularity = min(area / bbox_area, 1.0) if bbox_area > 0 else 0.0
         area_ratio = min(area / image_area, 1.0)
 
+        if mode == "ktp":
+            long_side = max(width, height)
+            short_side = min(width, height)
+
+            if short_side <= 1:
+                return -1.0
+
+            ratio = long_side / short_side
+            ratio_error = abs(ratio - self.ktp_aspect_ratio) / self.ktp_aspect_ratio
+            ratio_score = max(0.0, 1.0 - (ratio_error / 0.45))
+
+            # Untuk KTP, ukuran tetap penting tetapi bentuk kartu lebih dominan
+            # agar contour meja/kertas besar tidak otomatis terpilih.
+            return (
+                (area_ratio * 0.45)
+                + (rectangularity * 0.20)
+                + (ratio_score * 0.35)
+            )
+
         return (area_ratio * 0.8) + (rectangularity * 0.2)
 
-    def detect_document(self, image):
+    def detect_document(self, image, mode="document"):
         original_height, original_width = image.shape[:2]
 
         scale = 1.0
@@ -279,6 +297,7 @@ class AutoDocumentScanner:
                 score = self._quad_score(
                     quad,
                     image_area,
+                    mode=mode,
                 )
 
                 if score > best_score:
@@ -289,13 +308,39 @@ class AutoDocumentScanner:
             if fallback_contour is None:
                 return None
 
-            rect = cv2.minAreaRect(
-                fallback_contour
-            )
+            # Coba beberapa contour besar sebagai fallback dan tetap
+            # pilih yang paling menyerupai KTP saat mode KTP aktif.
+            fallback_best = None
+            fallback_best_score = -1.0
 
-            best_quad = cv2.boxPoints(
-                rect
-            ).astype(np.float32)
+            for contour in contours[:12]:
+                area = cv2.contourArea(contour)
+
+                if area < min_area:
+                    continue
+
+                rect = cv2.minAreaRect(contour)
+                quad = cv2.boxPoints(rect).astype(np.float32)
+
+                score = self._quad_score(
+                    quad,
+                    image_area,
+                    mode=mode,
+                )
+
+                if score > fallback_best_score:
+                    fallback_best_score = score
+                    fallback_best = quad
+
+            if fallback_best is None:
+                rect = cv2.minAreaRect(
+                    fallback_contour
+                )
+                fallback_best = cv2.boxPoints(
+                    rect
+                ).astype(np.float32)
+
+            best_quad = fallback_best
 
         best_quad /= scale
 
@@ -474,7 +519,8 @@ class AutoDocumentScanner:
             )
 
         corners = self.detect_document(
-            image
+            image,
+            mode=mode,
         )
 
         if corners is None:
