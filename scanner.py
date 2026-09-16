@@ -236,8 +236,29 @@ class AutoDocumentScanner:
                 if cv2.isContourConvex(quad.astype(np.int32)):
                     return quad
 
-        rect = cv2.minAreaRect(hull)
-        return cv2.boxPoints(rect).astype(np.float32)
+        # Jika rounded corner / glare membuat approxPolyDP tidak menjadi
+        # tepat 4 titik, ambil empat ekstrem convex hull. Ini mempertahankan
+        # bentuk trapezoid/perspektif; berbeda dengan minAreaRect yang hanya
+        # menghasilkan persegi panjang berotasi dan tidak mengoreksi perspektif.
+        hull_points = hull.reshape(-1, 2).astype(np.float32)
+
+        sums = hull_points.sum(axis=1)
+        diffs = np.diff(hull_points, axis=1).reshape(-1)
+
+        quad = np.array(
+            [
+                hull_points[np.argmin(sums)],   # top-left
+                hull_points[np.argmin(diffs)],  # top-right
+                hull_points[np.argmax(sums)],   # bottom-right
+                hull_points[np.argmax(diffs)],  # bottom-left
+            ],
+            dtype=np.float32,
+        )
+
+        if abs(cv2.contourArea(quad)) < image_area * 0.08:
+            return None
+
+        return quad
 
     # ============================================================
     # DOCUMENT DETECTION
@@ -432,6 +453,56 @@ class AutoDocumentScanner:
         best_quad /= scale
 
         return best_quad.astype(np.float32)
+
+    def refine_ktp_perspective(self, image):
+        """
+        Pass kedua khusus KTP setelah warp awal.
+
+        Kasus tertentu menghasilkan crop yang benar tetapi masih trapezoid
+        karena deteksi pertama memakai edge/background yang kurang presisi.
+        Pada tahap ini KTP sudah memenuhi sebagian besar frame, sehingga
+        badan kartu berwarna cyan dapat dipakai untuk menemukan empat sudut
+        yang lebih akurat lalu di-warp sekali lagi.
+        """
+        quad = self._detect_ktp_color_candidate(image)
+
+        if quad is None:
+            return image
+
+        ordered = self.order_points(quad)
+
+        image_area = image.shape[0] * image.shape[1]
+        quad_area = abs(cv2.contourArea(ordered.astype(np.float32)))
+        area_ratio = quad_area / float(max(image_area, 1))
+
+        # Jangan gunakan kandidat kecil/internal sebagai batas kartu.
+        if area_ratio < 0.55:
+            return image
+
+        tl, tr, br, bl = ordered
+
+        width_top = np.linalg.norm(tr - tl)
+        width_bottom = np.linalg.norm(br - bl)
+        height_left = np.linalg.norm(bl - tl)
+        height_right = np.linalg.norm(br - tr)
+
+        if min(width_top, width_bottom, height_left, height_right) < 20:
+            return image
+
+        long_side = (
+            max(width_top, width_bottom)
+            / max(min(height_left, height_right), 1.0)
+        )
+
+        # Toleransi cukup lebar karena candidate masih berada dalam perspektif.
+        if not (1.15 <= long_side <= 2.20):
+            return image
+
+        return self.perspective_transform(
+            image,
+            ordered,
+            mode="document",
+        )
 
     # ============================================================
     # AUTO ROTATE
@@ -888,6 +959,11 @@ class AutoDocumentScanner:
             corners,
             mode=mode,
         )
+
+        if mode == "ktp":
+            result = self.refine_ktp_perspective(
+                result
+            )
 
         result = self.auto_rotate(
             result,
