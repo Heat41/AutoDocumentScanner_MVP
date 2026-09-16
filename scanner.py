@@ -169,6 +169,86 @@ class AutoDocumentScanner:
         return edges
 
     # ============================================================
+    # KTP COLOR CANDIDATE
+    # ============================================================
+
+    def _detect_ktp_color_candidate(self, image):
+        """
+        Fallback/pendamping deteksi contour: manfaatkan dominasi warna
+        cyan-biru khas KTP untuk menemukan badan kartu pada background
+        meja, laptop, dan permukaan lain.
+        """
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        mask = cv2.inRange(
+            hsv,
+            np.array([72, 18, 70], dtype=np.uint8),
+            np.array([118, 255, 255], dtype=np.uint8),
+        )
+
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (11, 11),
+        )
+
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_CLOSE,
+            kernel,
+            iterations=3,
+        )
+
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_OPEN,
+            kernel,
+            iterations=1,
+        )
+
+        contours, _ = cv2.findContours(
+            mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+
+        if not contours:
+            return None, 0.0
+
+        image_area = image.shape[0] * image.shape[1]
+
+        best_quad = None
+        best_score = -1.0
+        best_area_ratio = 0.0
+
+        for contour in sorted(
+            contours,
+            key=cv2.contourArea,
+            reverse=True,
+        )[:8]:
+            area = cv2.contourArea(contour)
+
+            if area < image_area * 0.03:
+                continue
+
+            rect = cv2.minAreaRect(contour)
+            quad = cv2.boxPoints(rect).astype(np.float32)
+
+            score = self._quad_score(
+                quad,
+                image_area,
+                mode="ktp",
+            )
+
+            area_ratio = area / float(image_area)
+
+            if score > best_score:
+                best_score = score
+                best_quad = quad
+                best_area_ratio = area_ratio
+
+        return best_quad, best_area_ratio
+
+    # ============================================================
     # DOCUMENT DETECTION
     # ============================================================
 
@@ -238,6 +318,14 @@ class AutoDocumentScanner:
 
         edges = self.preprocess(resized)
 
+        color_quad = None
+        color_area_ratio = 0.0
+
+        if mode == "ktp":
+            color_quad, color_area_ratio = self._detect_ktp_color_candidate(
+                resized
+            )
+
         contours, _ = cv2.findContours(
             edges,
             cv2.RETR_LIST,
@@ -245,26 +333,9 @@ class AutoDocumentScanner:
         )
 
         if not contours:
-            if mode == "ktp":
-                frame_ratio = max(original_width, original_height) / max(
-                    min(original_width, original_height),
-                    1,
-                )
-                ratio_error = abs(frame_ratio - self.ktp_aspect_ratio) / self.ktp_aspect_ratio
-
-                # Foto yang sudah hampir penuh KTP sering tidak memiliki
-                # contour luar yang tertutup. Gunakan frame sebagai fallback
-                # bila proporsinya memang menyerupai KTP.
-                if ratio_error <= 0.28:
-                    return np.array(
-                        [
-                            [0, 0],
-                            [original_width - 1, 0],
-                            [original_width - 1, original_height - 1],
-                            [0, original_height - 1],
-                        ],
-                        dtype=np.float32,
-                    )
+            if color_quad is not None:
+                color_quad /= scale
+                return color_quad.astype(np.float32)
 
             return None
 
@@ -281,6 +352,19 @@ class AutoDocumentScanner:
         best_quad = None
         best_score = -1.0
         fallback_contour = None
+
+        if color_quad is not None:
+            best_quad = color_quad.copy()
+            best_score = self._quad_score(
+                color_quad,
+                image_area,
+                mode=mode,
+            )
+
+            # Kandidat warna yang mencakup bagian besar frame biasanya
+            # merupakan badan KTP itu sendiri, bukan objek background.
+            if color_area_ratio >= 0.12:
+                best_score += 0.18
 
         for contour in contours[:80]:
             area = cv2.contourArea(contour)
@@ -328,24 +412,6 @@ class AutoDocumentScanner:
 
         if best_quad is None:
             if fallback_contour is None:
-                if mode == "ktp":
-                    frame_ratio = max(original_width, original_height) / max(
-                        min(original_width, original_height),
-                        1,
-                    )
-                    ratio_error = abs(frame_ratio - self.ktp_aspect_ratio) / self.ktp_aspect_ratio
-
-                    if ratio_error <= 0.28:
-                        return np.array(
-                            [
-                                [0, 0],
-                                [original_width - 1, 0],
-                                [original_width - 1, original_height - 1],
-                                [0, original_height - 1],
-                            ],
-                            dtype=np.float32,
-                        )
-
                 return None
 
             # Coba beberapa contour besar sebagai fallback dan tetap
