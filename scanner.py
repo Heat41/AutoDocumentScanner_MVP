@@ -388,9 +388,16 @@ class AutoDocumentScanner:
             mode=mode,
         )
 
-        result = self.deskew_small_angle(
-            result
-        )
+        # Untuk KTP, perspective engine sudah memetakan empat sisi fisik
+        # langsung ke rectangle. Deskew berbasis Hough setelah homography
+        # justru bisa memiringkan kembali dimensi kartu karena garis teks
+        # internal ikut terbaca sebagai acuan.
+        #
+        # Deskew kecil hanya dipakai untuk mode dokumen umum.
+        if mode != "ktp":
+            result = self.deskew_small_angle(
+                result
+            )
 
         result = self.trim_edges(
             result
