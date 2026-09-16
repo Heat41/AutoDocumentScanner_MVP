@@ -245,6 +245,27 @@ class AutoDocumentScanner:
         )
 
         if not contours:
+            if mode == "ktp":
+                frame_ratio = max(original_width, original_height) / max(
+                    min(original_width, original_height),
+                    1,
+                )
+                ratio_error = abs(frame_ratio - self.ktp_aspect_ratio) / self.ktp_aspect_ratio
+
+                # Foto yang sudah hampir penuh KTP sering tidak memiliki
+                # contour luar yang tertutup. Gunakan frame sebagai fallback
+                # bila proporsinya memang menyerupai KTP.
+                if ratio_error <= 0.28:
+                    return np.array(
+                        [
+                            [0, 0],
+                            [original_width - 1, 0],
+                            [original_width - 1, original_height - 1],
+                            [0, original_height - 1],
+                        ],
+                        dtype=np.float32,
+                    )
+
             return None
 
         contours = sorted(
@@ -307,6 +328,24 @@ class AutoDocumentScanner:
 
         if best_quad is None:
             if fallback_contour is None:
+                if mode == "ktp":
+                    frame_ratio = max(original_width, original_height) / max(
+                        min(original_width, original_height),
+                        1,
+                    )
+                    ratio_error = abs(frame_ratio - self.ktp_aspect_ratio) / self.ktp_aspect_ratio
+
+                    if ratio_error <= 0.28:
+                        return np.array(
+                            [
+                                [0, 0],
+                                [original_width - 1, 0],
+                                [original_width - 1, original_height - 1],
+                                [0, original_height - 1],
+                            ],
+                            dtype=np.float32,
+                        )
+
                 return None
 
             # Coba beberapa contour besar sebagai fallback dan tetap
@@ -405,6 +444,45 @@ class AutoDocumentScanner:
         except Exception:
             return 0.0
 
+    @staticmethod
+    def _photo_side_score(image):
+        """
+        Heuristik fallback orientasi KTP berdasarkan lokasi area foto.
+        Dalam orientasi normal, foto identitas berada di sisi kanan.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        h, w = gray.shape[:2]
+
+        y1 = int(round(h * 0.18))
+        y2 = int(round(h * 0.82))
+
+        left = slice(int(round(w * 0.03)), int(round(w * 0.31)))
+        right = slice(int(round(w * 0.69)), int(round(w * 0.97)))
+
+        def score(region_slice):
+            g = gray[y1:y2, region_slice]
+            s = hsv[y1:y2, region_slice, 1]
+
+            if g.size == 0:
+                return 0.0
+
+            dark_fraction = float(np.mean(g < 120))
+            saturation = float(np.mean(s)) / 255.0
+            contrast = min(float(np.std(g)) / 64.0, 1.0)
+
+            return (
+                (dark_fraction * 0.45)
+                + (saturation * 0.35)
+                + (contrast * 0.20)
+            )
+
+        right_score = score(right)
+        left_score = score(left)
+
+        return right_score - left_score
+
     def auto_rotate(self, image, mode="document"):
         height, width = image.shape[:2]
 
@@ -426,8 +504,17 @@ class AutoDocumentScanner:
             cv2.ROTATE_180,
         )
 
-        normal_score = self._detect_face_score(normal)
-        rotated_score = self._detect_face_score(rotated_180)
+        normal_face = self._detect_face_score(normal)
+        rotated_face = self._detect_face_score(rotated_180)
+
+        # Haar face detection tidak selalu berhasil pada foto KTP yang blur,
+        # kecil, atau berpantulan. Karena itu gabungkan dengan heuristik
+        # posisi blok foto (kanan pada orientasi KTP yang benar).
+        normal_layout = self._photo_side_score(normal)
+        rotated_layout = self._photo_side_score(rotated_180)
+
+        normal_score = (normal_face * 8.0) + normal_layout
+        rotated_score = (rotated_face * 8.0) + rotated_layout
 
         if rotated_score > normal_score:
             return rotated_180
