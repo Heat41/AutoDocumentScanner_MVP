@@ -24,6 +24,7 @@ class AutoDocumentScanner:
         )
 
         self.last_detection = {}
+        self.last_corners = None
 
     @staticmethod
     def _detect_face_score(image):
@@ -373,6 +374,7 @@ class AutoDocumentScanner:
         )
 
         self.last_detection = metadata
+        self.last_corners = corners
 
         if corrected is None:
             raise RuntimeError(
