@@ -1,11 +1,21 @@
 from pathlib import Path
+
 import cv2
 import numpy as np
 
 
 class AutoDocumentScanner:
-    def __init__(self, detection_height=900):
+    KTP_ASPECT_RATIO = 85.60 / 53.98
+
+    def __init__(
+        self,
+        detection_height=900,
+        ktp_corner_padding=0.012,
+        ktp_aspect_ratio=KTP_ASPECT_RATIO,
+    ):
         self.detection_height = detection_height
+        self.ktp_corner_padding = ktp_corner_padding
+        self.ktp_aspect_ratio = ktp_aspect_ratio
 
     # ============================================================
     # POINT ORDERING
@@ -14,6 +24,9 @@ class AutoDocumentScanner:
     @staticmethod
     def order_points(points):
         points = np.asarray(points, dtype=np.float32)
+
+        if points.shape != (4, 2):
+            raise ValueError("Perspective transform membutuhkan tepat 4 titik.")
 
         rect = np.zeros((4, 2), dtype=np.float32)
 
@@ -28,26 +41,51 @@ class AutoDocumentScanner:
         return rect
 
     # ============================================================
+    # CORNER REFINEMENT
+    # ============================================================
+
+    def expand_corners(self, points, image_shape, mode="document"):
+        """
+        Sedikit memperluas quadrilateral agar tepi kartu/dokumen tidak
+        terpotong terlalu rapat, terutama pada KTP yang bersudut membulat.
+        """
+        rect = self.order_points(points)
+
+        if mode != "ktp" or self.ktp_corner_padding <= 0:
+            return rect
+
+        center = rect.mean(axis=0)
+        expanded = center + (rect - center) * (1.0 + self.ktp_corner_padding)
+
+        height, width = image_shape[:2]
+        expanded[:, 0] = np.clip(expanded[:, 0], 0, width - 1)
+        expanded[:, 1] = np.clip(expanded[:, 1], 0, height - 1)
+
+        return expanded.astype(np.float32)
+
+    # ============================================================
     # PERSPECTIVE TRANSFORM
     # ============================================================
 
-    def perspective_transform(self, image, points):
-        rect = self.order_points(points)
+    def perspective_transform(self, image, points, mode="document"):
+        rect = self.expand_corners(
+            points,
+            image.shape,
+            mode=mode,
+        )
 
         tl, tr, br, bl = rect
 
         width_top = np.linalg.norm(tr - tl)
         width_bottom = np.linalg.norm(br - bl)
-
-        max_width = int(max(width_top, width_bottom))
+        max_width = int(round(max(width_top, width_bottom)))
 
         height_right = np.linalg.norm(br - tr)
         height_left = np.linalg.norm(bl - tl)
+        max_height = int(round(max(height_right, height_left)))
 
-        max_height = int(max(height_right, height_left))
-
-        max_width = max(max_width, 1)
-        max_height = max(max_height, 1)
+        max_width = max(max_width, 2)
+        max_height = max(max_height, 2)
 
         destination = np.array(
             [
@@ -59,12 +97,17 @@ class AutoDocumentScanner:
             dtype=np.float32,
         )
 
-        matrix = cv2.getPerspectiveTransform(rect, destination)
+        matrix = cv2.getPerspectiveTransform(
+            rect,
+            destination,
+        )
 
         warped = cv2.warpPerspective(
             image,
             matrix,
             (max_width, max_height),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
         )
 
         return warped
@@ -73,19 +116,33 @@ class AutoDocumentScanner:
     # IMAGE PREPROCESSING
     # ============================================================
 
-    def preprocess(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        gray = cv2.GaussianBlur(
-            gray,
-            (5, 5),
-            0,
+    @staticmethod
+    def preprocess(image):
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
         )
+
+        # Bilateral filter menjaga garis tepi lebih baik daripada blur biasa.
+        gray = cv2.bilateralFilter(
+            gray,
+            7,
+            45,
+            45,
+        )
+
+        median = float(np.median(gray))
+
+        lower = int(max(0, 0.66 * median))
+        upper = int(min(255, 1.33 * median))
+
+        if upper <= lower:
+            lower, upper = 50, 150
 
         edges = cv2.Canny(
             gray,
-            50,
-            150,
+            lower,
+            upper,
         )
 
         kernel = cv2.getStructuringElement(
@@ -100,11 +157,47 @@ class AutoDocumentScanner:
             iterations=2,
         )
 
+        edges = cv2.dilate(
+            edges,
+            np.ones((3, 3), dtype=np.uint8),
+            iterations=1,
+        )
+
         return edges
 
     # ============================================================
     # DOCUMENT DETECTION
     # ============================================================
+
+    @staticmethod
+    def _quad_score(points, image_area):
+        rect = AutoDocumentScanner.order_points(points)
+        tl, tr, br, bl = rect
+
+        area = abs(cv2.contourArea(rect.astype(np.float32)))
+
+        if area <= 0:
+            return -1.0
+
+        width = (
+            np.linalg.norm(tr - tl)
+            + np.linalg.norm(br - bl)
+        ) / 2.0
+
+        height = (
+            np.linalg.norm(bl - tl)
+            + np.linalg.norm(br - tr)
+        ) / 2.0
+
+        if width <= 1 or height <= 1:
+            return -1.0
+
+        # Utamakan quadrilateral besar dan berbentuk persegi panjang.
+        bbox_area = width * height
+        rectangularity = min(area / bbox_area, 1.0) if bbox_area > 0 else 0.0
+        area_ratio = min(area / image_area, 1.0)
+
+        return (area_ratio * 0.8) + (rectangularity * 0.2)
 
     def detect_document(self, image):
         original_height, original_width = image.shape[:2]
@@ -113,8 +206,7 @@ class AutoDocumentScanner:
 
         if original_height > self.detection_height:
             scale = self.detection_height / float(original_height)
-
-            resized_width = int(original_width * scale)
+            resized_width = int(round(original_width * scale))
 
             resized = cv2.resize(
                 image,
@@ -132,6 +224,9 @@ class AutoDocumentScanner:
             cv2.CHAIN_APPROX_SIMPLE,
         )
 
+        if not contours:
+            return None
+
         contours = sorted(
             contours,
             key=cv2.contourArea,
@@ -139,59 +234,73 @@ class AutoDocumentScanner:
         )
 
         image_area = resized.shape[0] * resized.shape[1]
+        min_area = image_area * 0.08
 
-        document_contour = None
+        best_quad = None
+        best_score = -1.0
+        fallback_contour = None
 
-        for contour in contours[:20]:
+        for contour in contours[:40]:
             area = cv2.contourArea(contour)
 
-            # abaikan object terlalu kecil
-            if area < image_area * 0.10:
+            if area < min_area:
                 continue
+
+            if fallback_contour is None:
+                fallback_contour = contour
 
             perimeter = cv2.arcLength(
                 contour,
                 True,
             )
 
-            approx = cv2.approxPolyDP(
-                contour,
-                0.02 * perimeter,
-                True,
-            )
+            if perimeter <= 0:
+                continue
 
-            if len(approx) == 4:
-                document_contour = approx.reshape(4, 2)
-                break
+            # Coba beberapa toleransi karena edge KTP sering tidak sempurna.
+            for epsilon_ratio in (0.015, 0.02, 0.025, 0.03):
+                approx = cv2.approxPolyDP(
+                    contour,
+                    epsilon_ratio * perimeter,
+                    True,
+                )
 
-        # ========================================================
-        # FALLBACK
-        # ========================================================
+                if len(approx) != 4:
+                    continue
 
-        if document_contour is None:
+                quad = approx.reshape(4, 2).astype(np.float32)
 
-            if not contours:
+                if not cv2.isContourConvex(
+                    quad.astype(np.int32)
+                ):
+                    continue
+
+                score = self._quad_score(
+                    quad,
+                    image_area,
+                )
+
+                if score > best_score:
+                    best_score = score
+                    best_quad = quad
+
+        # Fallback aman: gunakan minimum-area rectangle dari contour besar.
+        if best_quad is None:
+            if fallback_contour is None:
                 return None
 
-            largest = contours[0]
-
-            rect = cv2.minAreaRect(largest)
-
-            box = cv2.boxPoints(rect)
-
-            document_contour = np.asarray(
-                box,
-                dtype=np.float32,
+            rect = cv2.minAreaRect(
+                fallback_contour
             )
 
-        document_contour = document_contour.astype(
-            np.float32
-        )
+            best_quad = cv2.boxPoints(
+                rect
+            ).astype(np.float32)
 
-        # kembali ke koordinat image asli
-        document_contour /= scale
+        # Kembali ke koordinat gambar asli.
+        best_quad /= scale
 
-        return document_contour
+        return best_quad.astype(np.float32)
 
     # ============================================================
     # AUTO ROTATE
@@ -201,15 +310,39 @@ class AutoDocumentScanner:
     def auto_rotate(image, mode="document"):
         height, width = image.shape[:2]
 
-        # KTP normalnya horizontal
-        if mode == "ktp":
-            if height > width:
-                image = cv2.rotate(
-                    image,
-                    cv2.ROTATE_90_CLOCKWISE,
-                )
+        # KTP selalu dihasilkan dalam orientasi landscape.
+        if mode == "ktp" and height > width:
+            image = cv2.rotate(
+                image,
+                cv2.ROTATE_90_CLOCKWISE,
+            )
 
         return image
+
+    # ============================================================
+    # KTP GEOMETRY NORMALIZATION
+    # ============================================================
+
+    def normalize_ktp_aspect_ratio(self, image):
+        """
+        Normalisasi ke rasio kartu ID-1/KTP sekitar 1.586:1.
+        Koreksi ini dilakukan setelah perspective transform dan auto-rotate.
+        """
+        height, width = image.shape[:2]
+
+        if height <= 1 or width <= 1:
+            return image
+
+        target_height = max(
+            2,
+            int(round(width / self.ktp_aspect_ratio)),
+        )
+
+        return cv2.resize(
+            image,
+            (width, target_height),
+            interpolation=cv2.INTER_CUBIC,
+        )
 
     # ============================================================
     # IMAGE ENHANCEMENT
@@ -217,6 +350,10 @@ class AutoDocumentScanner:
 
     @staticmethod
     def enhance(image):
+        """
+        Enhancement ringan untuk menjaga warna dokumen tetap natural.
+        CLAHE hanya dipakai pada luminance lalu dibaurkan dengan citra asli.
+        """
         lab = cv2.cvtColor(
             image,
             cv2.COLOR_BGR2LAB,
@@ -225,14 +362,14 @@ class AutoDocumentScanner:
         l, a, b = cv2.split(lab)
 
         clahe = cv2.createCLAHE(
-            clipLimit=2.0,
+            clipLimit=1.35,
             tileGridSize=(8, 8),
         )
 
-        l = clahe.apply(l)
+        enhanced_l = clahe.apply(l)
 
         merged = cv2.merge(
-            (l, a, b)
+            (enhanced_l, a, b)
         )
 
         enhanced = cv2.cvtColor(
@@ -240,7 +377,14 @@ class AutoDocumentScanner:
             cv2.COLOR_LAB2BGR,
         )
 
-        return enhanced
+        # Mayoritas warna berasal dari gambar asli.
+        return cv2.addWeighted(
+            image,
+            0.72,
+            enhanced,
+            0.28,
+            0,
+        )
 
     # ============================================================
     # MAIN SCANNER
@@ -263,7 +407,9 @@ class AutoDocumentScanner:
                 f"Gambar tidak dapat dibaca: {image_path}"
             )
 
-        corners = self.detect_document(image)
+        corners = self.detect_document(
+            image
+        )
 
         if corners is None:
             raise RuntimeError(
@@ -273,6 +419,7 @@ class AutoDocumentScanner:
         result = self.perspective_transform(
             image,
             corners,
+            mode=mode,
         )
 
         result = self.auto_rotate(
@@ -280,7 +427,14 @@ class AutoDocumentScanner:
             mode=mode,
         )
 
-        result = self.enhance(result)
+        if mode == "ktp":
+            result = self.normalize_ktp_aspect_ratio(
+                result
+            )
+
+        result = self.enhance(
+            result
+        )
 
         if output_path:
             output_path = Path(output_path)
@@ -290,9 +444,14 @@ class AutoDocumentScanner:
                 exist_ok=True,
             )
 
-            cv2.imwrite(
+            ok = cv2.imwrite(
                 str(output_path),
                 result,
             )
+
+            if not ok:
+                raise RuntimeError(
+                    f"Gagal menyimpan hasil: {output_path}"
+                )
 
         return result, corners
