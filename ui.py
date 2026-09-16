@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import cv2
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 from scanner import AutoDocumentScanner
 
@@ -43,6 +43,9 @@ class ScannerUI(tk.Tk):
 
         self._original_photo = None
         self._result_photo = None
+
+        self._corners_by_file = {}
+        self._metadata_by_file = {}
 
         self._configure_style()
         self._build_ui()
@@ -429,7 +432,7 @@ class ScannerUI(tk.Tk):
 
     @staticmethod
     def _load_preview(path):
-        image = Image.open(path)
+        image = Image.open(path).convert("RGB")
         image.thumbnail(
             (390, 430)
         )
@@ -438,15 +441,105 @@ class ScannerUI(tk.Tk):
             image
         )
 
+    @staticmethod
+    def _load_preview_with_corners(path, corners):
+        image = Image.open(path).convert("RGB")
+
+        original_width, original_height = image.size
+
+        image.thumbnail(
+            (390, 430)
+        )
+
+        preview_width, preview_height = image.size
+        scale_x = preview_width / max(original_width, 1)
+        scale_y = preview_height / max(original_height, 1)
+
+        draw = ImageDraw.Draw(image)
+
+        scaled = [
+            (
+                float(point[0]) * scale_x,
+                float(point[1]) * scale_y,
+            )
+            for point in corners
+        ]
+
+        # Garis dibuat netral tetapi tetap terlihat jelas.
+        line_color = (82, 92, 102)
+        point_fill = (245, 247, 249)
+        point_outline = (55, 62, 70)
+
+        if len(scaled) == 4:
+            polygon = scaled + [scaled[0]]
+            draw.line(
+                polygon,
+                fill=line_color,
+                width=3,
+            )
+
+            labels = ("TL", "TR", "BR", "BL")
+
+            for label, (x, y) in zip(labels, scaled):
+                radius = 6
+
+                draw.ellipse(
+                    (
+                        x - radius,
+                        y - radius,
+                        x + radius,
+                        y + radius,
+                    ),
+                    fill=point_fill,
+                    outline=point_outline,
+                    width=2,
+                )
+
+                draw.text(
+                    (x + 8, y - 8),
+                    label,
+                    fill=point_outline,
+                )
+
+        return ImageTk.PhotoImage(
+            image
+        )
+
     def _show_original(self, path):
         try:
-            self._original_photo = (
-                self._load_preview(path)
+            corners = self._corners_by_file.get(
+                str(Path(path))
             )
+
+            if corners is not None:
+                self._original_photo = (
+                    self._load_preview_with_corners(
+                        path,
+                        corners,
+                    )
+                )
+            else:
+                self._original_photo = (
+                    self._load_preview(path)
+                )
+
             self.original_label.configure(
                 image=self._original_photo,
                 text="",
             )
+
+            metadata = self._metadata_by_file.get(
+                str(Path(path))
+            )
+
+            if metadata:
+                self.status_text.set(
+                    "Deteksi: "
+                    f"{metadata.get('selected_source', '-')} | "
+                    f"candidate {metadata.get('candidate_count', '-')} | "
+                    f"score {metadata.get('score', 0):.3f}"
+                )
+
         except Exception:
             self.original_label.configure(
                 image="",
@@ -520,11 +613,22 @@ class ScannerUI(tk.Tk):
             )
 
             try:
-                self.scanner.scan(
+                _, corners = self.scanner.scan(
                     input_path,
                     output_path,
                     mode="ktp",
                     output_mode=output_mode,
+                )
+
+                self._corners_by_file[
+                    str(input_path)
+                ] = corners.copy()
+
+                self._metadata_by_file[
+                    str(input_path)
+                ] = dict(
+                    self.scanner.last_detection
+                    or {}
                 )
 
                 success += 1
@@ -544,6 +648,17 @@ class ScannerUI(tk.Tk):
             if last_output:
                 self._show_result(
                     last_output
+                )
+
+            selection = self.listbox.curselection()
+
+            if selection:
+                self._show_original(
+                    self.files[selection[0]]
+                )
+            elif self.files:
+                self._show_original(
+                    self.files[-1]
                 )
 
             if failed:
