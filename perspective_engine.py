@@ -196,58 +196,188 @@ class AutoPerspectiveEngine:
     @staticmethod
     def _ktp_color_mask(image):
         """
-        Mask bantuan badan KTP. Menggabungkan HSV dan dominasi cyan pada BGR.
-        Mask hanya dipakai sebagai bukti tambahan, bukan sebagai keputusan tunggal.
+        Mask badan KTP yang konservatif.
+
+        Jangan gabungkan HSV lebar dengan background karena permukaan laptop,
+        meja abu-abu, atau pantulan dapat ikut memiliki hue biru. Yang dipakai
+        adalah dominasi kanal cyan/biru terhadap merah sehingga background
+        netral jauh lebih sulit menyatu dengan badan kartu.
         """
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-        hsv_mask = cv2.inRange(
-            hsv,
-            np.array([72, 18, 45], dtype=np.uint8),
-            np.array([125, 255, 255], dtype=np.uint8),
-        )
-
         b, g, r = cv2.split(image)
+
         b16 = b.astype(np.int16)
         g16 = g.astype(np.int16)
         r16 = r.astype(np.int16)
 
-        dominance = (
-            (b16 - r16 > 14)
-            & (g16 - r16 > -2)
-            & (b > 65)
+        mask = (
+            (b16 - r16 > 18)
+            & (g16 - r16 > 3)
+            & (b > 60)
         ).astype(np.uint8) * 255
 
-        mask = cv2.bitwise_or(
-            hsv_mask,
-            dominance,
-        )
-
-        kernel = cv2.getStructuringElement(
+        close_kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
             (7, 7),
+        )
+        open_kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (5, 5),
         )
 
         mask = cv2.morphologyEx(
             mask,
             cv2.MORPH_CLOSE,
-            kernel,
+            close_kernel,
             iterations=3,
         )
 
         mask = cv2.morphologyEx(
             mask,
             cv2.MORPH_OPEN,
-            kernel,
+            open_kernel,
             iterations=1,
         )
 
         return mask
 
+    def _fit_quad_to_contour(self, contour, initial_quad):
+        """
+        Refine 4 sudut dari rounded-corner KTP.
+
+        ApproxPolyDP biasanya berhenti di lengkungan sudut, bukan di
+        perpotongan teoritis sisi lurus kartu. Untuk meniru corner manual
+        scanner HP, fit garis pada bagian tengah keempat sisi contour lalu
+        hitung intersection-nya.
+        """
+        points = contour.reshape(-1, 2).astype(np.float32)
+
+        if len(points) < 20:
+            return self.order_points(initial_quad)
+
+        quad = self.order_points(initial_quad)
+        fitted_lines = []
+
+        for index in range(4):
+            p1 = quad[index]
+            p2 = quad[(index + 1) % 4]
+
+            vector = p2 - p1
+            length = float(np.linalg.norm(vector))
+
+            if length < 10:
+                return quad
+
+            unit = vector / length
+            relative = points - p1
+
+            projection = (
+                relative @ unit
+            ) / max(length, 1.0)
+
+            perpendicular = np.abs(
+                relative[:, 0] * unit[1]
+                - relative[:, 1] * unit[0]
+            )
+
+            # Hindari rounded corner; pakai bagian tengah edge saja.
+            max_distance = max(
+                10.0,
+                length * 0.045,
+            )
+
+            selected = (
+                (projection >= 0.12)
+                & (projection <= 0.88)
+                & (perpendicular <= max_distance)
+            )
+
+            edge_points = points[selected]
+
+            if len(edge_points) < 10:
+                return quad
+
+            vx, vy, x0, y0 = cv2.fitLine(
+                edge_points.reshape(-1, 1, 2),
+                cv2.DIST_HUBER,
+                0,
+                0.01,
+                0.01,
+            ).flatten()
+
+            fitted_lines.append(
+                (
+                    np.array(
+                        [x0, y0],
+                        dtype=np.float32,
+                    ),
+                    np.array(
+                        [vx, vy],
+                        dtype=np.float32,
+                    ),
+                )
+            )
+
+        tl = self._intersect_lines(
+            fitted_lines[3],
+            fitted_lines[0],
+        )
+        tr = self._intersect_lines(
+            fitted_lines[0],
+            fitted_lines[1],
+        )
+        br = self._intersect_lines(
+            fitted_lines[1],
+            fitted_lines[2],
+        )
+        bl = self._intersect_lines(
+            fitted_lines[2],
+            fitted_lines[3],
+        )
+
+        if any(
+            point is None
+            for point in (tl, tr, br, bl)
+        ):
+            return quad
+
+        refined = np.array(
+            [tl, tr, br, bl],
+            dtype=np.float32,
+        )
+
+        if not cv2.isContourConvex(
+            refined.astype(np.int32)
+        ):
+            return quad
+
+        original_area = abs(
+            cv2.contourArea(
+                quad.astype(np.float32)
+            )
+        )
+        refined_area = abs(
+            cv2.contourArea(
+                refined.astype(np.float32)
+            )
+        )
+
+        if original_area <= 1:
+            return quad
+
+        change = refined_area / original_area
+
+        if not (0.72 <= change <= 1.32):
+            return quad
+
+        return self.order_points(refined)
+
     def _color_candidate(self, image):
         """
-        Kandidat tambahan dari badan KTP cyan/biru.
-        Tidak otomatis dipilih; kandidat tetap melewati scoring dan warp validation.
+        Candidate boundary KTP dari badan cyan/biru.
+
+        Candidate warna tetap ikut scoring umum, tetapi corner-nya terlebih
+        dahulu di-refine dengan line fitting agar rounded corner tidak membuat
+        crop terlalu masuk ke dalam.
         """
         mask = self._ktp_color_mask(image)
 
@@ -268,7 +398,9 @@ class AutoPerspectiveEngine:
             key=cv2.contourArea,
             reverse=True,
         )[:8]:
-            if cv2.contourArea(contour) < image_area * 0.045:
+            contour_area = cv2.contourArea(contour)
+
+            if contour_area < image_area * 0.035:
                 continue
 
             hull = cv2.convexHull(contour)
@@ -277,16 +409,17 @@ class AutoPerspectiveEngine:
             if perimeter <= 0:
                 continue
 
-            added = False
+            initial = None
 
             for eps in (
-                0.010,
-                0.014,
+                0.008,
+                0.012,
+                0.016,
                 0.020,
-                0.028,
-                0.038,
-                0.052,
-                0.070,
+                0.026,
+                0.034,
+                0.045,
+                0.060,
             ):
                 approx = cv2.approxPolyDP(
                     hull,
@@ -299,56 +432,58 @@ class AutoPerspectiveEngine:
 
                 quad = approx.reshape(4, 2).astype(np.float32)
 
-                if not cv2.isContourConvex(
+                if cv2.isContourConvex(
                     quad.astype(np.int32)
                 ):
+                    initial = self.order_points(quad)
+                    break
+
+            if initial is None:
+                hull_points = hull.reshape(-1, 2).astype(np.float32)
+
+                if len(hull_points) < 4:
                     continue
 
-                result.append(
-                    PerspectiveCandidate(
-                        points=self.order_points(quad),
-                        score=0.0,
-                        source="color",
-                    )
-                )
-                added = True
-                break
-
-            if added:
-                continue
-
-            # Rounded corner / glare sering menghasilkan 5-6 titik.
-            # Ambil empat ekstrem convex hull sebagai kandidat tambahan.
-            hull_points = hull.reshape(-1, 2).astype(np.float32)
-
-            if len(hull_points) >= 4:
                 sums = hull_points.sum(axis=1)
                 diffs = np.diff(
                     hull_points,
                     axis=1,
                 ).reshape(-1)
 
-                quad = np.array(
-                    [
-                        hull_points[np.argmin(sums)],
-                        hull_points[np.argmin(diffs)],
-                        hull_points[np.argmax(sums)],
-                        hull_points[np.argmax(diffs)],
-                    ],
-                    dtype=np.float32,
+                initial = self.order_points(
+                    np.array(
+                        [
+                            hull_points[np.argmin(sums)],
+                            hull_points[np.argmin(diffs)],
+                            hull_points[np.argmax(sums)],
+                            hull_points[np.argmax(diffs)],
+                        ],
+                        dtype=np.float32,
+                    )
                 )
 
-                if (
-                    abs(cv2.contourArea(quad))
-                    >= image_area * 0.045
-                ):
-                    result.append(
-                        PerspectiveCandidate(
-                            points=self.order_points(quad),
-                            score=0.0,
-                            source="color_extreme",
-                        )
+            refined = self._fit_quad_to_contour(
+                contour,
+                initial,
+            )
+
+            if (
+                abs(
+                    cv2.contourArea(
+                        refined.astype(np.float32)
                     )
+                )
+                < image_area * 0.035
+            ):
+                continue
+
+            result.append(
+                PerspectiveCandidate(
+                    points=refined,
+                    score=0.0,
+                    source="color_refined",
+                )
+            )
 
         return result
 
@@ -987,11 +1122,12 @@ class AutoPerspectiveEngine:
 
         # Apparent ratio dapat berubah cukup besar karena perspektif.
         # Karena itu ratio hanya validator ringan, bukan faktor dominan.
-        source_bonus = (
-            0.055
-            if candidate.source.startswith("color")
-            else 0.0
-        )
+        if candidate.source == "color_refined":
+            source_bonus = 0.16
+        elif candidate.source.startswith("color"):
+            source_bonus = 0.055
+        else:
+            source_bonus = 0.0
 
         score = (
             min(area_ratio / 0.65, 1.0) * 0.22
@@ -1177,26 +1313,33 @@ class AutoPerspectiveEngine:
             }
 
         for candidate in candidates:
-            raw_points = candidate.points.copy()
+            if candidate.source == "color_refined":
+                # Sudut sudah berasal dari empat fitted physical edges.
+                # Jangan snap ulang ke edge internal/background.
+                candidate.points = self.order_points(
+                    candidate.points
+                )
+            else:
+                raw_points = candidate.points.copy()
 
-            candidate.points = self._snap_quad_to_boundary(
-                resized,
-                candidate.points,
-            )
+                candidate.points = self._snap_quad_to_boundary(
+                    resized,
+                    candidate.points,
+                )
 
-            moved = float(
-                np.mean(
-                    np.linalg.norm(
-                        candidate.points - raw_points,
-                        axis=1,
+                moved = float(
+                    np.mean(
+                        np.linalg.norm(
+                            candidate.points - raw_points,
+                            axis=1,
+                        )
                     )
                 )
-            )
 
-            if moved >= 1.5:
-                candidate.source = (
-                    f"{candidate.source}_snapped"
-                )
+                if moved >= 1.5:
+                    candidate.source = (
+                        f"{candidate.source}_snapped"
+                    )
 
             candidate.score = self._candidate_score(
                 candidate,
