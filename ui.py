@@ -64,6 +64,12 @@ class ScannerUI(tk.Tk):
             background="#FFFFFF",
         )
         style.configure(
+            "CardLabel.TLabel",
+            background="#FFFFFF",
+            foreground="#30343B",
+            font=("Segoe UI Semibold", 10),
+        )
+        style.configure(
             "TLabel",
             background="#F3F4F5",
             foreground="#30343B",
@@ -205,9 +211,7 @@ class ScannerUI(tk.Tk):
         ttk.Label(
             left,
             text="File",
-            background="#FFFFFF",
-            foreground="#30343B",
-            font=("Segoe UI Semibold", 10),
+            style="CardLabel.TLabel",
         ).pack(
             anchor="w",
             pady=(0, 8),
@@ -311,9 +315,7 @@ class ScannerUI(tk.Tk):
         ttk.Label(
             frame,
             text=title,
-            background="#FFFFFF",
-            foreground="#30343B",
-            font=("Segoe UI Semibold", 10),
+            style="CardLabel.TLabel",
         ).pack(
             anchor="w",
             pady=(0, 8),
@@ -481,12 +483,15 @@ class ScannerUI(tk.Tk):
             "Memproses..."
         )
 
+        mode = self.output_mode.get()
+
         threading.Thread(
             target=self._process_worker,
+            args=(mode,),
             daemon=True,
         ).start()
 
-    def _process_worker(self):
+    def _process_worker(self, output_mode):
         success = 0
         failed = 0
         last_output = None
@@ -519,7 +524,7 @@ class ScannerUI(tk.Tk):
                     input_path,
                     output_path,
                     mode="ktp",
-                    output_mode=self.output_mode.get(),
+                    output_mode=output_mode,
                 )
 
                 success += 1
