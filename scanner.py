@@ -174,35 +174,29 @@ class AutoDocumentScanner:
 
     def _detect_ktp_color_candidate(self, image):
         """
-        Fallback/pendamping deteksi contour: manfaatkan dominasi warna
-        cyan-biru khas KTP untuk menemukan badan kartu pada background
-        meja, laptop, dan permukaan lain.
+        Fallback khusus KTP. Area cyan-biru digabungkan lalu convex hull-nya
+        dipakai untuk memperkirakan empat sudut kartu. Kandidat warna hanya
+        dipakai bila contour tepi biasa gagal, agar tidak merusak kasus yang
+        sudah terdeteksi dengan baik.
         """
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         mask = cv2.inRange(
             hsv,
-            np.array([72, 18, 70], dtype=np.uint8),
-            np.array([118, 255, 255], dtype=np.uint8),
+            np.array([70, 14, 55], dtype=np.uint8),
+            np.array([122, 255, 255], dtype=np.uint8),
         )
 
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
-            (11, 11),
+            (9, 9),
         )
 
         mask = cv2.morphologyEx(
             mask,
             cv2.MORPH_CLOSE,
             kernel,
-            iterations=3,
-        )
-
-        mask = cv2.morphologyEx(
-            mask,
-            cv2.MORPH_OPEN,
-            kernel,
-            iterations=1,
+            iterations=4,
         )
 
         contours, _ = cv2.findContours(
@@ -212,41 +206,38 @@ class AutoDocumentScanner:
         )
 
         if not contours:
-            return None, 0.0
+            return None
 
         image_area = image.shape[0] * image.shape[1]
+        useful = [
+            contour
+            for contour in contours
+            if cv2.contourArea(contour) >= image_area * 0.004
+        ]
 
-        best_quad = None
-        best_score = -1.0
-        best_area_ratio = 0.0
+        if not useful:
+            return None
 
-        for contour in sorted(
-            contours,
-            key=cv2.contourArea,
-            reverse=True,
-        )[:8]:
-            area = cv2.contourArea(contour)
+        points = np.vstack(useful)
+        hull = cv2.convexHull(points)
 
-            if area < image_area * 0.03:
-                continue
+        perimeter = cv2.arcLength(hull, True)
 
-            rect = cv2.minAreaRect(contour)
-            quad = cv2.boxPoints(rect).astype(np.float32)
-
-            score = self._quad_score(
-                quad,
-                image_area,
-                mode="ktp",
+        for epsilon_ratio in (0.012, 0.018, 0.025, 0.035, 0.05):
+            approx = cv2.approxPolyDP(
+                hull,
+                epsilon_ratio * perimeter,
+                True,
             )
 
-            area_ratio = area / float(image_area)
+            if len(approx) == 4:
+                quad = approx.reshape(4, 2).astype(np.float32)
 
-            if score > best_score:
-                best_score = score
-                best_quad = quad
-                best_area_ratio = area_ratio
+                if cv2.isContourConvex(quad.astype(np.int32)):
+                    return quad
 
-        return best_quad, best_area_ratio
+        rect = cv2.minAreaRect(hull)
+        return cv2.boxPoints(rect).astype(np.float32)
 
     # ============================================================
     # DOCUMENT DETECTION
@@ -319,10 +310,9 @@ class AutoDocumentScanner:
         edges = self.preprocess(resized)
 
         color_quad = None
-        color_area_ratio = 0.0
 
         if mode == "ktp":
-            color_quad, color_area_ratio = self._detect_ktp_color_candidate(
+            color_quad = self._detect_ktp_color_candidate(
                 resized
             )
 
@@ -352,19 +342,6 @@ class AutoDocumentScanner:
         best_quad = None
         best_score = -1.0
         fallback_contour = None
-
-        if color_quad is not None:
-            best_quad = color_quad.copy()
-            best_score = self._quad_score(
-                color_quad,
-                image_area,
-                mode=mode,
-            )
-
-            # Kandidat warna yang mencakup bagian besar frame biasanya
-            # merupakan badan KTP itu sendiri, bukan objek background.
-            if color_area_ratio >= 0.12:
-                best_score += 0.18
 
         for contour in contours[:80]:
             area = cv2.contourArea(contour)
@@ -411,6 +388,10 @@ class AutoDocumentScanner:
                     best_quad = quad
 
         if best_quad is None:
+            if color_quad is not None:
+                color_quad /= scale
+                return color_quad.astype(np.float32)
+
             if fallback_contour is None:
                 return None
 
@@ -549,6 +530,70 @@ class AutoDocumentScanner:
 
         return right_score - left_score
 
+    @staticmethod
+    def _portrait_block_score(image):
+        """
+        Skor orientasi berdasarkan blok foto paspor. Berbeda dari teks,
+        area foto membentuk komponen gelap/berkontras yang relatif besar.
+        Nilai positif berarti blok foto lebih kuat di sisi kanan.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape[:2]
+
+        y1 = int(round(h * 0.14))
+        y2 = int(round(h * 0.82))
+
+        def side_score(x1, x2):
+            roi = gray[y1:y2, x1:x2]
+
+            if roi.size == 0:
+                return 0.0
+
+            threshold = min(175, int(np.mean(roi) * 0.92))
+            dark = (roi < threshold).astype(np.uint8) * 255
+
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_RECT,
+                (9, 9),
+            )
+            dark = cv2.morphologyEx(
+                dark,
+                cv2.MORPH_CLOSE,
+                kernel,
+                iterations=2,
+            )
+            dark = cv2.morphologyEx(
+                dark,
+                cv2.MORPH_OPEN,
+                kernel,
+                iterations=1,
+            )
+
+            contours, _ = cv2.findContours(
+                dark,
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+
+            if not contours:
+                return 0.0
+
+            roi_area = roi.shape[0] * roi.shape[1]
+            largest = max(cv2.contourArea(contour) for contour in contours)
+
+            return largest / float(max(roi_area, 1))
+
+        left_score = side_score(
+            int(round(w * 0.02)),
+            int(round(w * 0.38)),
+        )
+        right_score = side_score(
+            int(round(w * 0.62)),
+            int(round(w * 0.98)),
+        )
+
+        return right_score - left_score
+
     def auto_rotate(self, image, mode="document"):
         height, width = image.shape[:2]
 
@@ -570,22 +615,78 @@ class AutoDocumentScanner:
             cv2.ROTATE_180,
         )
 
-        normal_face = self._detect_face_score(normal)
-        rotated_face = self._detect_face_score(rotated_180)
-
-        # Haar face detection tidak selalu berhasil pada foto KTP yang blur,
-        # kecil, atau berpantulan. Karena itu gabungkan dengan heuristik
-        # posisi blok foto (kanan pada orientasi KTP yang benar).
         normal_layout = self._photo_side_score(normal)
         rotated_layout = self._photo_side_score(rotated_180)
 
-        normal_score = (normal_face * 8.0) + normal_layout
-        rotated_score = (rotated_face * 8.0) + rotated_layout
+        normal_portrait = self._portrait_block_score(normal)
+        rotated_portrait = self._portrait_block_score(rotated_180)
 
-        if rotated_score > normal_score:
+        normal_score = (normal_portrait * 3.0) + normal_layout
+        rotated_score = (rotated_portrait * 3.0) + rotated_layout
+
+        if rotated_score > normal_score + 0.01:
             return rotated_180
 
         return normal
+
+    def deskew_ktp(self, image):
+        """
+        Koreksi kemiringan kecil setelah perspective transform.
+        Hanya sudut horizontal kecil yang digunakan agar tidak merusak
+        perspective correction utama.
+        """
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 60, 160)
+
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            np.pi / 180.0,
+            threshold=max(50, image.shape[1] // 8),
+            minLineLength=max(60, image.shape[1] // 5),
+            maxLineGap=20,
+        )
+
+        if lines is None:
+            return image
+
+        angles = []
+
+        for line in lines[:, 0]:
+            x1, y1, x2, y2 = line
+            dx = x2 - x1
+            dy = y2 - y1
+
+            if abs(dx) < 1:
+                continue
+
+            angle = np.degrees(np.arctan2(dy, dx))
+
+            if -8.0 <= angle <= 8.0:
+                angles.append(angle)
+
+        if len(angles) < 3:
+            return image
+
+        angle = float(np.median(angles))
+
+        if abs(angle) < 0.35:
+            return image
+
+        h, w = image.shape[:2]
+        matrix = cv2.getRotationMatrix2D(
+            (w / 2.0, h / 2.0),
+            angle,
+            1.0,
+        )
+
+        return cv2.warpAffine(
+            image,
+            matrix,
+            (w, h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
 
     # ============================================================
     # KTP GEOMETRY NORMALIZATION
@@ -765,6 +866,10 @@ class AutoDocumentScanner:
         )
 
         if mode == "ktp":
+            result = self.deskew_ktp(
+                result
+            )
+
             result = self.trim_ktp_edges(
                 result
             )
