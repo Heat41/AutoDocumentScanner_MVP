@@ -10,14 +10,16 @@ class AutoDocumentScanner:
     def __init__(
         self,
         detection_height=900,
-        ktp_corner_padding=0.012,
+        ktp_corner_padding=0.0,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
         ktp_safe_margin=0.02,
+        ktp_edge_trim=0.006,
     ):
         self.detection_height = detection_height
         self.ktp_corner_padding = ktp_corner_padding
         self.ktp_aspect_ratio = ktp_aspect_ratio
         self.ktp_safe_margin = ktp_safe_margin
+        self.ktp_edge_trim = ktp_edge_trim
 
     # ============================================================
     # POINT ORDERING
@@ -339,6 +341,32 @@ class AutoDocumentScanner:
             interpolation=cv2.INTER_CUBIC,
         )
 
+    def trim_ktp_edges(self, image):
+        """
+        Trim sangat tipis setelah warp untuk membuang sisa background
+        yang mungkin ikut terbawa di tepi kartu tanpa memotong isi penting.
+        """
+        if self.ktp_edge_trim <= 0:
+            return image
+
+        height, width = image.shape[:2]
+
+        trim_x = int(round(width * self.ktp_edge_trim))
+        trim_y = int(round(height * self.ktp_edge_trim))
+
+        if (
+            trim_x <= 0
+            and trim_y <= 0
+        ):
+            return image
+
+        x1 = min(max(trim_x, 0), max(width - 2, 0))
+        y1 = min(max(trim_y, 0), max(height - 2, 0))
+        x2 = max(width - trim_x, x1 + 2)
+        y2 = max(height - trim_y, y1 + 2)
+
+        return image[y1:y2, x1:x2]
+
     def add_ktp_safe_margin(self, image):
         """
         Membuat margin luar yang benar-benar terlihat tanpa mengubah
@@ -466,6 +494,10 @@ class AutoDocumentScanner:
         )
 
         if mode == "ktp":
+            result = self.trim_ktp_edges(
+                result
+            )
+
             result = self.normalize_ktp_aspect_ratio(
                 result
             )
