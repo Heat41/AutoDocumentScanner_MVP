@@ -464,9 +464,9 @@ class AutoDocumentScanner:
 
             faces = detector.detectMultiScale(
                 gray,
-                scaleFactor=1.08,
-                minNeighbors=4,
-                minSize=(40, 40),
+                scaleFactor=1.06,
+                minNeighbors=3,
+                minSize=(28, 28),
             )
 
             if len(faces) == 0:
@@ -594,30 +594,18 @@ class AutoDocumentScanner:
 
         return right_score - left_score
 
-    def _orientation_score(self, image):
-        """
-        Skor orientasi KTP:
-        1) wajah upright di sisi kanan menjadi sinyal utama,
-        2) posisi blok foto di sisi kanan hanya menjadi fallback ringan.
-        """
-        face_score = self._detect_face_score(image)
-        portrait_score = self._portrait_block_score(image)
-        layout_score = self._photo_side_score(image)
-
-        return (
-            (face_score * 20.0)
-            + (portrait_score * 1.5)
-            + (layout_score * 0.5)
-        )
-
     def auto_rotate(self, image, mode="document"):
+        """
+        Koreksi orientasi KTP secara konservatif.
+        - Portrait: uji CW dan CCW; jika deteksi wajah tidak tegas, default CCW.
+        - Landscape: hanya balik 180° bila wajah upright terdeteksi lebih kuat.
+        - Tanpa bukti wajah, jangan membalik 180°.
+        """
         if mode != "ktp":
             return image
 
         height, width = image.shape[:2]
 
-        # Jika input portrait, kita tidak boleh selalu memutar clockwise.
-        # Foto bisa berasal dari rotasi kiri ATAU kanan. Uji keduanya.
         if height > width:
             candidate_cw = cv2.rotate(
                 image,
@@ -628,30 +616,46 @@ class AutoDocumentScanner:
                 cv2.ROTATE_90_COUNTERCLOCKWISE,
             )
 
-            cw_score = self._orientation_score(candidate_cw)
-            ccw_score = self._orientation_score(candidate_ccw)
+            cw_face = self._detect_face_score(candidate_cw)
+            ccw_face = self._detect_face_score(candidate_ccw)
 
-            # Jika skor hampir sama, pilih counter-clockwise sebagai default
-            # karena kasus foto HP yang diputar ke kanan akan kembali upright.
-            if cw_score > ccw_score + 0.015:
+            if cw_face > 0 and ccw_face <= 0:
                 return candidate_cw
 
+            if ccw_face > 0 and cw_face <= 0:
+                return candidate_ccw
+
+            if cw_face > 0 and ccw_face > 0:
+                if cw_face > ccw_face * 1.15:
+                    return candidate_cw
+                if ccw_face > cw_face * 1.15:
+                    return candidate_ccw
+
+            # Default aman untuk foto HP yang diputar ke kanan:
+            # kembalikan dengan rotasi counter-clockwise.
             return candidate_ccw
 
-        # Jika sudah landscape, bandingkan posisi sekarang dengan 180 derajat.
         normal = image
         rotated_180 = cv2.rotate(
             image,
             cv2.ROTATE_180,
         )
 
-        normal_score = self._orientation_score(normal)
-        rotated_score = self._orientation_score(rotated_180)
+        normal_face = self._detect_face_score(normal)
+        rotated_face = self._detect_face_score(rotated_180)
 
-        # Jangan membalik kalau bukti tidak cukup kuat.
-        if rotated_score > normal_score + 0.03:
+        if rotated_face > 0 and normal_face <= 0:
             return rotated_180
 
+        if normal_face > 0 and rotated_face <= 0:
+            return normal
+
+        if normal_face > 0 and rotated_face > 0:
+            if rotated_face > normal_face * 1.20:
+                return rotated_180
+            return normal
+
+        # Penting: tanpa bukti wajah yang jelas, jangan membalik 180°.
         return normal
 
     def deskew_ktp(self, image):
