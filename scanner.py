@@ -260,6 +260,156 @@ class AutoDocumentScanner:
 
         return quad
 
+    def _detect_ktp_border_line_candidate(self, image):
+        """
+        Deteksi empat sisi KTP dari boundary warna cyan, lalu fit garis
+        top/right/bottom/left dan ambil titik perpotongannya.
+
+        Ini lebih cocok untuk kasus KTP miring/perspektif di atas laptop/meja
+        dibanding minAreaRect karena mempertahankan trapezoid sebenarnya.
+        """
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        mask = cv2.inRange(
+            hsv,
+            np.array([72, 40, 50], dtype=np.uint8),
+            np.array([122, 255, 255], dtype=np.uint8),
+        )
+
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (7, 7),
+        )
+
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_CLOSE,
+            kernel,
+            iterations=3,
+        )
+
+        contours, _ = cv2.findContours(
+            mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_NONE,
+        )
+
+        if not contours:
+            return None
+
+        contour = max(
+            contours,
+            key=cv2.contourArea,
+        )
+
+        image_area = image.shape[0] * image.shape[1]
+
+        if cv2.contourArea(contour) < image_area * 0.20:
+            return None
+
+        points = contour.reshape(-1, 2).astype(np.float32)
+
+        if len(points) < 20:
+            return None
+
+        x = points[:, 0]
+        y = points[:, 1]
+
+        x10 = np.percentile(x, 10)
+        x90 = np.percentile(x, 90)
+        y10 = np.percentile(y, 10)
+        y90 = np.percentile(y, 90)
+
+        left_points = points[x <= x10]
+        right_points = points[x >= x90]
+        top_points = points[y <= y10]
+        bottom_points = points[y >= y90]
+
+        if min(
+            len(left_points),
+            len(right_points),
+            len(top_points),
+            len(bottom_points),
+        ) < 8:
+            return None
+
+        def fit_line(pts):
+            vx, vy, x0, y0 = cv2.fitLine(
+                pts.reshape(-1, 1, 2),
+                cv2.DIST_L2,
+                0,
+                0.01,
+                0.01,
+            ).flatten()
+
+            return (
+                np.array([x0, y0], dtype=np.float32),
+                np.array([vx, vy], dtype=np.float32),
+            )
+
+        def intersect(line_a, line_b):
+            p1, v1 = line_a
+            p2, v2 = line_b
+
+            matrix = np.column_stack(
+                (v1, -v2)
+            )
+
+            det = np.linalg.det(matrix)
+
+            if abs(det) < 1e-6:
+                return None
+
+            t = np.linalg.solve(
+                matrix,
+                p2 - p1,
+            )[0]
+
+            return p1 + (t * v1)
+
+        left_line = fit_line(left_points)
+        right_line = fit_line(right_points)
+        top_line = fit_line(top_points)
+        bottom_line = fit_line(bottom_points)
+
+        tl = intersect(top_line, left_line)
+        tr = intersect(top_line, right_line)
+        br = intersect(bottom_line, right_line)
+        bl = intersect(bottom_line, left_line)
+
+        if any(point is None for point in (tl, tr, br, bl)):
+            return None
+
+        quad = np.array(
+            [tl, tr, br, bl],
+            dtype=np.float32,
+        )
+
+        height, width = image.shape[:2]
+
+        # Beri toleransi kecil untuk hasil fit yang sedikit keluar frame.
+        quad[:, 0] = np.clip(
+            quad[:, 0],
+            -0.03 * width,
+            1.03 * width,
+        )
+        quad[:, 1] = np.clip(
+            quad[:, 1],
+            -0.03 * height,
+            1.03 * height,
+        )
+
+        area = abs(
+            cv2.contourArea(
+                quad.astype(np.float32)
+            )
+        )
+
+        if area < image_area * 0.20:
+            return None
+
+        return quad
+
     # ============================================================
     # DOCUMENT DETECTION
     # ============================================================
@@ -331,9 +481,14 @@ class AutoDocumentScanner:
         edges = self.preprocess(resized)
 
         color_quad = None
+        border_line_quad = None
 
         if mode == "ktp":
             color_quad = self._detect_ktp_color_candidate(
+                resized
+            )
+
+            border_line_quad = self._detect_ktp_border_line_candidate(
                 resized
             )
 
@@ -363,6 +518,19 @@ class AutoDocumentScanner:
         best_quad = None
         best_score = -1.0
         fallback_contour = None
+
+        if border_line_quad is not None:
+            line_score = self._quad_score(
+                border_line_quad,
+                image_area,
+                mode=mode,
+            )
+
+            # Border-line candidate mendapat sedikit prioritas karena
+            # memakai empat sisi aktual kartu dan lebih presisi untuk
+            # koreksi perspektif dibanding contour internal.
+            best_quad = border_line_quad.copy()
+            best_score = line_score + 0.12
 
         for contour in contours[:80]:
             area = cv2.contourArea(contour)
