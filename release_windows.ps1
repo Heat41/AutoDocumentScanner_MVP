@@ -65,13 +65,14 @@ Copy-Item (Join-Path $Root "DEPLOYMENT.md") (Join-Path $PackageDir "DEPLOYMENT.m
 Write-Host "`n[3/5] Buat checksum isi paket"
 $ChecksumFile = Join-Path $PackageDir "SHA256SUMS.txt"
 $Lines = @()
+$PackagePrefixLength = $PackageDir.Length
 
 Get-ChildItem $PackageDir -Recurse -File |
     Where-Object { $_.FullName -ne $ChecksumFile } |
     Sort-Object FullName |
     ForEach-Object {
         $Hash = Get-FileHash $_.FullName -Algorithm SHA256
-        $Relative = [System.IO.Path]::GetRelativePath($PackageDir, $_.FullName)
+        $Relative = $_.FullName.Substring($PackagePrefixLength).TrimStart("\")
         $Lines += "$($Hash.Hash.ToLower())  $Relative"
     }
 
