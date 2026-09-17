@@ -1,0 +1,43 @@
+#define MyAppName "AutoDocumentScanner"
+#define MyAppVersion "@@VERSION@@"
+#define MyAppExeName "AutoDocumentScanner.exe"
+#define MyPublisher "Heat41"
+
+[Setup]
+AppId={{9A7D4B5F-7CF4-4A74-9F63-66B8B148A8F2}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyPublisher}
+DefaultDirName={localappdata}\Programs\AutoDocumentScanner
+DefaultGroupName=AutoDocumentScanner
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+OutputDir=@@OUTPUT_DIR@@
+OutputBaseFilename=AutoDocumentScanner-v{#MyAppVersion}-Setup
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+SetupLogging=yes
+Uninstallable=yes
+UninstallDisplayIcon={app}\{#MyAppExeName}
+CloseApplications=yes
+RestartApplications=no
+
+[Tasks]
+Name: "desktopicon"; Description: "Buat shortcut di Desktop"; GroupDescription: "Shortcut tambahan:"; Flags: unchecked
+
+[Files]
+Source: "@@SOURCE_DIR@@\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Dirs]
+Name: "{app}\input"; Flags: uninsneveruninstall
+Name: "{app}\output"; Flags: uninsneveruninstall
+
+[Icons]
+Name: "{group}\AutoDocumentScanner"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\AutoDocumentScanner"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "Jalankan AutoDocumentScanner"; Flags: nowait postinstall skipifsilent
