@@ -36,9 +36,9 @@ def prepare_runtime_directory():
 def main():
     prepare_runtime_directory()
 
-    # Import only after the runtime directory is prepared. This launcher is a
-    # packaging shell; the locked scanner/UI implementation remains unchanged.
-    from ui_textured import main as run_ui
+    # Import only after the runtime directory is prepared. The responsive
+    # shell changes layout only; the locked scanner pipeline stays unchanged.
+    from ui_responsive import main as run_ui
 
     run_ui()
 
