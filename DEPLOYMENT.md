@@ -1,4 +1,4 @@
-# AutoDocumentScanner v1.0.0
+# AutoDocumentScanner v1.0.1
 
 ## Paket distribusi Windows
 
@@ -67,7 +67,7 @@ Semua artefak akhir dibuat di folder `release\`.
 ## Struktur ZIP portable
 
 ```text
-AutoDocumentScanner-v1.0.0-windows-x64\
+AutoDocumentScanner-v1.0.1-windows-x64\
 |-- AutoDocumentScanner.exe
 |-- _internal\
 |-- input\
@@ -83,11 +83,11 @@ Folder `input` dan `output` pada paket release harus kosong. Data pengujian loka
 
 ```text
 release\
-|-- AutoDocumentScanner-v1.0.0-windows-x64\
-|-- AutoDocumentScanner-v1.0.0-windows-x64.zip
-|-- AutoDocumentScanner-v1.0.0-windows-x64.zip.sha256.txt
-|-- AutoDocumentScanner-v1.0.0-Setup.exe
-`-- AutoDocumentScanner-v1.0.0-Setup.exe.sha256.txt
+|-- AutoDocumentScanner-v1.0.1-windows-x64\
+|-- AutoDocumentScanner-v1.0.1-windows-x64.zip
+|-- AutoDocumentScanner-v1.0.1-windows-x64.zip.sha256.txt
+|-- AutoDocumentScanner-v1.0.1-Setup.exe
+`-- AutoDocumentScanner-v1.0.1-Setup.exe.sha256.txt
 ```
 
 ## UAT PC induk
@@ -95,7 +95,8 @@ release\
 Setelah dipindahkan ke PC induk, lakukan pengujian singkat sebelum dipakai operasional:
 
 - aplikasi dapat dibuka tanpa Python;
-- UI tampil normal;
+- UI tampil normal dan responsif saat resize, maximize, dan restore;
+- tombol `Proses Otomatis` tetap terlihat pada ukuran window yang didukung;
 - satu foto KTP yang representatif dapat diproses;
 - popup loading tampil selama proses;
 - hasil perspective/crop sesuai baseline;
