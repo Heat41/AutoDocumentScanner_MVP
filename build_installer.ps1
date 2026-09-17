@@ -83,12 +83,9 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $GeneratedIss = Join-Path $BuildDir "AutoDocumentScanner.iss"
 $Template = Get-Content $TemplateFile -Raw
 
-$SourceForIss = $PackageDir.Replace("\", "\\")
-$OutputForIss = $ReleaseRoot.Replace("\", "\\")
-
 $Generated = $Template.Replace("@@VERSION@@", $Version)
-$Generated = $Generated.Replace("@@SOURCE_DIR@@", $SourceForIss)
-$Generated = $Generated.Replace("@@OUTPUT_DIR@@", $OutputForIss)
+$Generated = $Generated.Replace("@@SOURCE_DIR@@", $PackageDir)
+$Generated = $Generated.Replace("@@OUTPUT_DIR@@", $ReleaseRoot)
 Set-Content -Path $GeneratedIss -Value $Generated -Encoding UTF8
 
 $InstallerName = "AutoDocumentScanner-v$Version-Setup.exe"
