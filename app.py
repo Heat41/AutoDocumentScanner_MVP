@@ -116,13 +116,13 @@ def main():
     parser.add_argument(
         "--ui",
         action="store_true",
-        help="Buka antarmuka desktop minimal.",
+        help="Buka antarmuka desktop final.",
     )
 
     args = parser.parse_args()
 
     if args.ui:
-        from ui_safe import main as run_ui
+        from ui_final import main as run_ui
 
         run_ui()
         return
