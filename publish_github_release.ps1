@@ -54,6 +54,27 @@ Lalu buka PowerShell baru dan jalankan:
 
 $Gh = $GhCommand.Source
 
+function Test-GitHubReleaseExists {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseTag
+    )
+
+    # gh menulis "release not found" ke STDERR dan mengembalikan exit code 1.
+    # Dengan $ErrorActionPreference = Stop, Windows PowerShell dapat mengubah
+    # STDERR native command menjadi terminating error sebelum exit code sempat
+    # diperiksa. Turunkan ErrorActionPreference hanya selama probe ini.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Gh release view $ReleaseTag --repo $Repo 1>$null 2>$null
+        return ($LASTEXITCODE -eq 0)
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+}
+
 Write-Host "======================================"
 Write-Host " AutoDocumentScanner - GitHub Release"
 Write-Host "======================================"
@@ -68,8 +89,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "`n[2/3] Membuat / memperbarui GitHub Release"
-& $Gh release view $Tag --repo $Repo *> $null
-$ReleaseExists = ($LASTEXITCODE -eq 0)
+$ReleaseExists = Test-GitHubReleaseExists -ReleaseTag $Tag
 
 if ($ReleaseExists) {
     Write-Host "Release $Tag sudah ada. Memperbarui notes dan asset..."
@@ -92,7 +112,7 @@ if ($ReleaseExists) {
     }
 }
 else {
-    Write-Host "Membuat release baru $Tag..."
+    Write-Host "Release $Tag belum ada. Membuat release baru..."
 
     & $Gh release create $Tag @Assets `
         --repo $Repo `
