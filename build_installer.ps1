@@ -20,6 +20,13 @@ if (-not (Test-Path $TemplateFile)) {
     throw "Template installer tidak ditemukan: $TemplateFile"
 }
 
+Write-Host "Menyiapkan logo aplikasi..."
+python .\branding.py
+$LogoIco = Join-Path $Root "assets\logo.ico"
+if (-not (Test-Path -LiteralPath $LogoIco -PathType Leaf)) {
+    throw "Logo installer tidak berhasil dibuat: $LogoIco"
+}
+
 $PackageName = "AutoDocumentScanner-v$Version-windows-x64"
 $PackageDir = Join-Path $ReleaseRoot $PackageName
 $PackageExe = Join-Path $PackageDir "AutoDocumentScanner.exe"
@@ -104,8 +111,10 @@ $BuildDir = Join-Path $Root "build\installer"
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 
 $GeneratedIss = Join-Path $BuildDir "AutoDocumentScanner.iss"
-$Template = Get-Content $TemplateFile -Raw
+$InstallerIcon = Join-Path $BuildDir "logo.ico"
+Copy-Item -LiteralPath $LogoIco -Destination $InstallerIcon -Force
 
+$Template = Get-Content $TemplateFile -Raw
 $Generated = $Template.Replace("@@VERSION@@", $Version)
 $Generated = $Generated.Replace("@@SOURCE_DIR@@", $PackageDir)
 $Generated = $Generated.Replace("@@OUTPUT_DIR@@", $ReleaseRoot)
@@ -128,6 +137,7 @@ Write-Host "======================================"
 Write-Host "Version : $Version"
 Write-Host "Compiler: $Compiler"
 Write-Host "Source  : $PackageDir"
+Write-Host "Logo    : $InstallerIcon"
 
 & $Compiler $GeneratedIss
 if ($LASTEXITCODE -ne 0) {
