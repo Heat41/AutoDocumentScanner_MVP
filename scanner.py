@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from perspective_engine import AutoPerspectiveEngine
+from robustness_engine import RobustPerspectiveEngine
 
 
 class AutoDocumentScanner:
@@ -18,7 +18,7 @@ class AutoDocumentScanner:
         self.ktp_aspect_ratio = ktp_aspect_ratio
         self.ktp_edge_trim = ktp_edge_trim
 
-        self.perspective_engine = AutoPerspectiveEngine(
+        self.perspective_engine = RobustPerspectiveEngine(
             target_ratio=ktp_aspect_ratio,
             detection_height=detection_height,
         )
