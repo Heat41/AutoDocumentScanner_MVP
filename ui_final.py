@@ -118,6 +118,10 @@ class FinalScannerUI(SafeScannerUI):
     def _build_ui(self):
         self.batch_text = tk.StringVar(value="Belum ada file")
         self.selected_text = tk.StringVar(value="Tidak ada file dipilih")
+        self._loading_window = None
+        self._loading_progress = None
+        self._loading_detail_var = None
+        self._loading_watch_id = None
 
         root = ttk.Frame(self, padding=22)
         root.pack(fill="both", expand=True)
@@ -370,6 +374,170 @@ class FinalScannerUI(SafeScannerUI):
         if total == 1:
             return "1 file siap diproses"
         return f"{total} file siap diproses"
+
+    @staticmethod
+    def _loading_detail(status_text, total):
+        status_text = str(status_text or "").strip()
+        if status_text.startswith("Memproses"):
+            return status_text
+
+        total = int(total or 0)
+        if total == 1:
+            return "Menyiapkan 1 file..."
+        if total > 1:
+            return f"Menyiapkan {total} file..."
+        return "Menyiapkan proses..."
+
+    def _show_loading_popup(self):
+        self._hide_loading_popup()
+
+        window = tk.Toplevel(self)
+        self._loading_window = window
+        window.title("Sedang Memproses")
+        window.configure(bg=self.CARD)
+        window.resizable(False, False)
+        window.transient(self)
+        window.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        container = tk.Frame(
+            window,
+            bg=self.CARD,
+            padx=30,
+            pady=26,
+        )
+        container.pack(fill="both", expand=True)
+
+        tk.Label(
+            container,
+            text="Memproses dokumen",
+            bg=self.CARD,
+            fg=self.TEXT,
+            font=("Segoe UI Semibold", 13),
+        ).pack(anchor="w")
+
+        self._loading_detail_var = tk.StringVar(
+            value=self._loading_detail(
+                self.status_text.get(),
+                len(self.files),
+            )
+        )
+
+        tk.Label(
+            container,
+            textvariable=self._loading_detail_var,
+            bg=self.CARD,
+            fg=self.MUTED,
+            font=("Segoe UI", 9),
+            justify="left",
+            anchor="w",
+            wraplength=330,
+        ).pack(fill="x", pady=(6, 16))
+
+        self._loading_progress = ttk.Progressbar(
+            container,
+            mode="indeterminate",
+            length=330,
+        )
+        self._loading_progress.pack(fill="x")
+        self._loading_progress.start(12)
+
+        tk.Label(
+            container,
+            text="Mohon tunggu sampai proses selesai.",
+            bg=self.CARD,
+            fg=self.MUTED,
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(12, 0))
+
+        window.update_idletasks()
+        popup_width = window.winfo_width()
+        popup_height = window.winfo_height()
+        x = self.winfo_rootx() + max(
+            (self.winfo_width() - popup_width) // 2,
+            0,
+        )
+        y = self.winfo_rooty() + max(
+            (self.winfo_height() - popup_height) // 2,
+            0,
+        )
+        window.geometry(f"+{x}+{y}")
+        window.lift()
+
+    def _hide_loading_popup(self):
+        if self._loading_watch_id is not None:
+            try:
+                self.after_cancel(self._loading_watch_id)
+            except tk.TclError:
+                pass
+            self._loading_watch_id = None
+
+        if self._loading_progress is not None:
+            try:
+                self._loading_progress.stop()
+            except tk.TclError:
+                pass
+            self._loading_progress = None
+
+        if self._loading_window is not None:
+            try:
+                if self._loading_window.winfo_exists():
+                    self._loading_window.destroy()
+            except tk.TclError:
+                pass
+            self._loading_window = None
+
+        self._loading_detail_var = None
+
+    def _watch_loading_popup(self):
+        window = self._loading_window
+        if window is None:
+            return
+
+        try:
+            if not window.winfo_exists():
+                self._loading_window = None
+                return
+
+            if self._loading_detail_var is not None:
+                self._loading_detail_var.set(
+                    self._loading_detail(
+                        self.status_text.get(),
+                        len(self.files),
+                    )
+                )
+
+            if str(self.process_button.cget("state")) == "normal":
+                self._hide_loading_popup()
+                return
+
+            self._loading_watch_id = self.after(
+                120,
+                self._watch_loading_popup,
+            )
+        except tk.TclError:
+            self._hide_loading_popup()
+
+    def process_files(self):
+        if not self.files:
+            return super().process_files()
+
+        self._show_loading_popup()
+
+        try:
+            result = super().process_files()
+        except Exception:
+            self._hide_loading_popup()
+            raise
+
+        if str(self.process_button.cget("state")) == "disabled":
+            self._loading_watch_id = self.after(
+                120,
+                self._watch_loading_popup,
+            )
+        else:
+            self._hide_loading_popup()
+
+        return result
 
     def _set_files(self, paths):
         super()._set_files(paths)
