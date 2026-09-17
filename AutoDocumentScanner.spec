@@ -7,13 +7,17 @@ from PyInstaller.utils.hooks import collect_data_files
 # KTP orientation detection. Bundle cv2 package data explicitly so the frozen
 # app does not depend on a system OpenCV installation.
 cv2_datas = collect_data_files("cv2")
+brand_datas = [
+    ("assets/logo.png", "assets"),
+    ("assets/logo.ico", "assets"),
+]
 
 
 a = Analysis(
     ["desktop_launcher.py"],
     pathex=[],
     binaries=[],
-    datas=cv2_datas,
+    datas=cv2_datas + brand_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -36,6 +40,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    icon="assets/logo.ico",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
