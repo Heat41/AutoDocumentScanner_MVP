@@ -11,4 +11,7 @@ output/*
 
 build/
 dist/
+release/
+*.zip
+*.sha256.txt
 *.log
