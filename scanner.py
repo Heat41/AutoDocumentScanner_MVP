@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from final_validation import FinalScanValidator
 from quality_check import DocumentQualityChecker
 from robustness_engine import RobustPerspectiveEngine
 
@@ -26,10 +27,14 @@ class AutoDocumentScanner:
         self.quality_checker = DocumentQualityChecker(
             target_ratio=ktp_aspect_ratio,
         )
+        self.final_validator = FinalScanValidator(
+            target_ratio=ktp_aspect_ratio,
+        )
 
         self.last_detection = {}
         self.last_corners = None
         self.last_quality = {}
+        self.last_validation = {}
 
     @staticmethod
     def _detect_face_score(image):
@@ -382,6 +387,7 @@ class AutoDocumentScanner:
             metadata or {}
         )
         self.last_corners = corners
+        self.last_validation = {}
 
         if corrected is None:
             self.last_quality = {
@@ -391,12 +397,38 @@ class AutoDocumentScanner:
                     "batas KTP tidak terdeteksi"
                 ],
             }
-            self.last_detection[
-                "quality"
-            ] = self.last_quality
+            self.last_validation = {
+                "status": "review",
+                "hard_valid": False,
+                "warnings": [
+                    "perspective engine tidak menghasilkan output"
+                ],
+            }
+            self.last_detection["quality"] = self.last_quality
+            self.last_detection["validation"] = self.last_validation
 
             raise RuntimeError(
                 "Batas KTP tidak berhasil dideteksi otomatis."
+            )
+
+        corner_validation = self.final_validator.validate_corners(
+            image.shape,
+            corners,
+        )
+
+        if not corner_validation.get("hard_valid", False):
+            self.last_validation = {
+                "status": "review",
+                "hard_valid": False,
+                "warnings": list(
+                    corner_validation.get("warnings") or []
+                ),
+                "corner": corner_validation,
+            }
+            self.last_detection["validation"] = self.last_validation
+
+            raise RuntimeError(
+                "Geometri empat sudut gagal validasi akhir."
             )
 
         result = corrected
@@ -430,16 +462,33 @@ class AutoDocumentScanner:
             result
         )
 
-        # Quality check sengaja dilakukan sebelum opsi grayscale sehingga
-        # kualitas geometri/cahaya dinilai dari output warna hasil pipeline.
-        # Hasil quality check tidak mengubah gambar dan tidak membatalkan save.
+        # Quality check dilakukan sebelum opsi grayscale agar geometri/cahaya
+        # dinilai dari output warna hasil pipeline. Quality gate tidak mengubah
+        # gambar dan tidak otomatis menggagalkan output.
         self.last_quality = self.quality_checker.assess(
             result,
             detection_metadata=self.last_detection,
         )
-        self.last_detection[
-            "quality"
-        ] = self.last_quality
+        self.last_detection["quality"] = self.last_quality
+
+        output_validation = self.final_validator.validate_output(
+            result,
+            detection_metadata=self.last_detection,
+            quality=self.last_quality,
+        )
+        self.last_validation = self.final_validator.combine(
+            corner_validation,
+            output_validation,
+        )
+        self.last_detection["validation"] = self.last_validation
+
+        # Hanya kondisi yang secara geometri mustahil/korup yang dihentikan.
+        # Warning kualitas tetap boleh disimpan agar baseline tidak menjadi
+        # terlalu agresif menolak foto yang masih layak.
+        if not self.last_validation.get("hard_valid", False):
+            raise RuntimeError(
+                "Hasil scan gagal validasi geometri akhir."
+            )
 
         result = self.apply_output_mode(
             result,
