@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from quality_check import DocumentQualityChecker
 from robustness_engine import RobustPerspectiveEngine
 
 
@@ -22,9 +23,13 @@ class AutoDocumentScanner:
             target_ratio=ktp_aspect_ratio,
             detection_height=detection_height,
         )
+        self.quality_checker = DocumentQualityChecker(
+            target_ratio=ktp_aspect_ratio,
+        )
 
         self.last_detection = {}
         self.last_corners = None
+        self.last_quality = {}
 
     @staticmethod
     def _detect_face_score(image):
@@ -373,10 +378,23 @@ class AutoDocumentScanner:
             )
         )
 
-        self.last_detection = metadata
+        self.last_detection = dict(
+            metadata or {}
+        )
         self.last_corners = corners
 
         if corrected is None:
+            self.last_quality = {
+                "status": "review",
+                "score": 0.0,
+                "warnings": [
+                    "batas KTP tidak terdeteksi"
+                ],
+            }
+            self.last_detection[
+                "quality"
+            ] = self.last_quality
+
             raise RuntimeError(
                 "Batas KTP tidak berhasil dideteksi otomatis."
             )
@@ -411,6 +429,17 @@ class AutoDocumentScanner:
         result = self.enhance(
             result
         )
+
+        # Quality check sengaja dilakukan sebelum opsi grayscale sehingga
+        # kualitas geometri/cahaya dinilai dari output warna hasil pipeline.
+        # Hasil quality check tidak mengubah gambar dan tidak membatalkan save.
+        self.last_quality = self.quality_checker.assess(
+            result,
+            detection_metadata=self.last_detection,
+        )
+        self.last_detection[
+            "quality"
+        ] = self.last_quality
 
         result = self.apply_output_mode(
             result,
