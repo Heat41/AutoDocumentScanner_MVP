@@ -16,6 +16,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 OutputDir=@@OUTPUT_DIR@@
 OutputBaseFilename=AutoDocumentScanner-v{#MyAppVersion}-Setup
+SetupIconFile=logo.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
