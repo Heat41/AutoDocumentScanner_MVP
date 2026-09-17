@@ -162,17 +162,19 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
         )
 
     def test_red_background_perspective(self):
+        destination = np.array(
+            [
+                [280, 95],
+                [690, 135],
+                [735, 610],
+                [245, 575],
+            ],
+            dtype=np.float32,
+        )
+
         image = self._place_card(
             background=(55, 65, 145),
-            destination=np.array(
-                [
-                    [280, 95],
-                    [690, 135],
-                    [735, 610],
-                    [245, 575],
-                ],
-                dtype=np.float32,
-            ),
+            destination=destination,
         )
 
         corrected, corners, _ = self.engine.correct(
@@ -182,12 +184,41 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
         self.assertIsNotNone(corners)
         self.assertIsNotNone(corrected)
 
-        h, w = corrected.shape[:2]
-        ratio = max(w, h) / max(min(w, h), 1)
+        # Perspective engine bertugas menemukan empat corner fisik kartu.
+        # Rasio final KTP dinormalisasi sesudah homography di scanner.py,
+        # sehingga raw warp tidak wajib langsung berasio 1.586 pada foto
+        # dengan foreshortening/perspektif ekstrem.
+        detected = self.engine.order_points(
+            corners
+        )
+        expected = self.engine.order_points(
+            destination
+        )
+
+        mean_error = float(
+            np.mean(
+                np.linalg.norm(
+                    detected - expected,
+                    axis=1,
+                )
+            )
+        )
+
+        image_diagonal = float(
+            np.hypot(
+                image.shape[1],
+                image.shape[0],
+            )
+        )
+
+        normalized_error = (
+            mean_error
+            / max(image_diagonal, 1.0)
+        )
 
         self.assertLess(
-            abs(ratio - self.engine.target_ratio),
-            0.55,
+            normalized_error,
+            0.08,
         )
 
     def test_detection_variants_keep_geometry(self):
