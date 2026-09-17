@@ -21,6 +21,22 @@ class FinalScannerUI(SafeScannerUI):
     SOFT = "#ECEFF1"
     ACCENT = "#3E4954"
 
+    @staticmethod
+    def _responsive_window_size(screen_width, screen_height):
+        """Keep the initial window inside the usable area on smaller PCs.
+
+        Tk geometry describes the client area while Windows still needs room
+        for the title bar/taskbar. Reserving vertical space prevents the
+        bottom action footer from ending up below the visible desktop on
+        common 1366x768 displays and non-default display scaling.
+        """
+        screen_width = max(int(screen_width or 0), 1)
+        screen_height = max(int(screen_height or 0), 1)
+
+        width = min(1180, max(900, screen_width - 80))
+        height = min(760, max(620, screen_height - 120))
+        return width, height
+
     def _configure_style(self):
         style = ttk.Style(self)
 
@@ -31,8 +47,16 @@ class FinalScannerUI(SafeScannerUI):
 
         self.configure(bg=self.BG)
         self.title("Auto Document Scanner")
-        self.geometry("1180x760")
-        self.minsize(1000, 680)
+
+        width, height = self._responsive_window_size(
+            self.winfo_screenwidth(),
+            self.winfo_screenheight(),
+        )
+        self.geometry(f"{width}x{height}")
+        self.minsize(
+            min(1000, width),
+            min(620, height),
+        )
 
         style.configure(
             "TFrame",
@@ -175,6 +199,12 @@ class FinalScannerUI(SafeScannerUI):
             pady=(0, 16),
         )
 
+        # Reserve the action footer before the expandable body. With Tk pack,
+        # packing the expandable preview first can leave too little vertical
+        # space for widgets packed afterwards on short/scaled displays.
+        footer = ttk.Frame(root)
+        footer.pack(side="bottom", fill="x", pady=(12, 0))
+
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
 
@@ -288,9 +318,6 @@ class FinalScannerUI(SafeScannerUI):
             previews,
             "Hasil Scanner",
         )
-
-        footer = ttk.Frame(root)
-        footer.pack(fill="x", pady=(14, 0))
 
         info = ttk.Frame(footer)
         info.pack(side="left", fill="x", expand=True)
