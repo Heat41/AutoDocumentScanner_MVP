@@ -6,6 +6,7 @@ import numpy as np
 from final_validation import FinalScanValidator
 from quality_check import DocumentQualityChecker
 from robustness_engine import RobustPerspectiveEngine
+from safe_output import atomic_imwrite
 
 
 class AutoDocumentScanner:
@@ -496,20 +497,9 @@ class AutoDocumentScanner:
         )
 
         if output_path:
-            output_path = Path(
-                output_path
-            )
-            output_path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            if not cv2.imwrite(
-                str(output_path),
+            atomic_imwrite(
+                output_path,
                 result,
-            ):
-                raise RuntimeError(
-                    f"Gagal menyimpan hasil: {output_path}"
-                )
+            )
 
         return result, corners
