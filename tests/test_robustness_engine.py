@@ -112,6 +112,57 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
 
         return canvas
 
+    def _assert_detected_near(
+        self,
+        image,
+        expected,
+        max_normalized_error=0.10,
+    ):
+        corrected, corners, metadata = self.engine.correct(
+            image
+        )
+
+        self.assertIsNotNone(corners)
+        self.assertIsNotNone(corrected)
+
+        detected = self.engine.order_points(
+            corners
+        )
+        expected = self.engine.order_points(
+            expected
+        )
+
+        mean_error = float(
+            np.mean(
+                np.linalg.norm(
+                    detected - expected,
+                    axis=1,
+                )
+            )
+        )
+
+        image_diagonal = float(
+            np.hypot(
+                image.shape[1],
+                image.shape[0],
+            )
+        )
+
+        normalized_error = (
+            mean_error
+            / max(image_diagonal, 1.0)
+        )
+
+        self.assertLess(
+            normalized_error,
+            max_normalized_error,
+        )
+
+        self.assertIn(
+            "robustness_mode",
+            metadata,
+        )
+
     def test_high_confidence_baseline_is_locked(self):
         image = self._place_card(
             background=(85, 85, 85),
@@ -177,48 +228,161 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
             destination=destination,
         )
 
-        corrected, corners, _ = self.engine.correct(
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.08,
+        )
+
+    def test_small_card_in_large_frame(self):
+        destination = np.array(
+            [
+                [345, 245],
+                [620, 232],
+                [635, 412],
+                [330, 425],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(78, 82, 86),
+            destination=destination,
+        )
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.12,
+        )
+
+    def test_card_near_frame_edge(self):
+        destination = np.array(
+            [
+                [18, 72],
+                [650, 42],
+                [700, 478],
+                [8, 520],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(105, 102, 98),
+            destination=destination,
+        )
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.11,
+        )
+
+    def test_mild_blur_still_detects_card(self):
+        destination = np.array(
+            [
+                [155, 150],
+                [775, 118],
+                [810, 535],
+                [118, 570],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(90, 90, 90),
+            destination=destination,
+        )
+
+        image = cv2.GaussianBlur(
+            image,
+            (7, 7),
+            1.6,
+        )
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.12,
+        )
+
+    def test_shadow_gradient_still_detects_card(self):
+        destination = np.array(
+            [
+                [170, 125],
+                [765, 100],
+                [805, 535],
+                [125, 565],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(95, 95, 95),
+            destination=destination,
+        ).astype(np.float32)
+
+        h, w = image.shape[:2]
+        gradient = np.linspace(
+            0.48,
+            1.0,
+            w,
+            dtype=np.float32,
+        )[None, :, None]
+
+        image = np.clip(
+            image * gradient,
+            0,
+            255,
+        ).astype(np.uint8)
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.12,
+        )
+
+    def test_glare_band_still_produces_candidate(self):
+        destination = np.array(
+            [
+                [175, 145],
+                [770, 112],
+                [808, 535],
+                [125, 575],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(82, 82, 82),
+            destination=destination,
+        )
+
+        overlay = image.copy()
+        cv2.rectangle(
+            overlay,
+            (410, 90),
+            (520, 640),
+            (245, 245, 245),
+            -1,
+        )
+        image = cv2.addWeighted(
+            image,
+            0.72,
+            overlay,
+            0.28,
+            0,
+        )
+
+        corrected, corners, metadata = self.engine.correct(
             image
         )
 
         self.assertIsNotNone(corners)
         self.assertIsNotNone(corrected)
-
-        # Perspective engine bertugas menemukan empat corner fisik kartu.
-        # Rasio final KTP dinormalisasi sesudah homography di scanner.py,
-        # sehingga raw warp tidak wajib langsung berasio 1.586 pada foto
-        # dengan foreshortening/perspektif ekstrem.
-        detected = self.engine.order_points(
-            corners
-        )
-        expected = self.engine.order_points(
-            destination
-        )
-
-        mean_error = float(
-            np.mean(
-                np.linalg.norm(
-                    detected - expected,
-                    axis=1,
-                )
-            )
-        )
-
-        image_diagonal = float(
-            np.hypot(
-                image.shape[1],
-                image.shape[0],
-            )
-        )
-
-        normalized_error = (
-            mean_error
-            / max(image_diagonal, 1.0)
-        )
-
-        self.assertLess(
-            normalized_error,
-            0.08,
+        self.assertIn(
+            "robustness_mode",
+            metadata,
         )
 
     def test_detection_variants_keep_geometry(self):
