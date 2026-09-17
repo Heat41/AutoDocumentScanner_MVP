@@ -46,21 +46,40 @@ foreach ($RuntimeName in @("input", "output")) {
 
 $Compiler = $null
 
-if ($env:INNO_SETUP_COMPILER -and (Test-Path $env:INNO_SETUP_COMPILER)) {
-    $Compiler = $env:INNO_SETUP_COMPILER
+# 1) Lokasi custom dari environment variable.
+if (
+    $env:INNO_SETUP_COMPILER -and
+    (Test-Path -LiteralPath $env:INNO_SETUP_COMPILER -PathType Leaf)
+) {
+    $Compiler = (Resolve-Path -LiteralPath $env:INNO_SETUP_COMPILER).Path
 }
 
+# 2) Lokasi instalasi standar Inno Setup 6.
+# Gunakan foreach, bukan indexing hasil pipeline, karena satu hasil pipeline
+# PowerShell dapat menjadi scalar string dan $value[0] akan menghasilkan 'C'.
 if (-not $Compiler) {
-    $Candidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
-    ) | Where-Object { $_ -and (Test-Path $_) }
+    $CandidatePaths = @()
 
-    if ($Candidates.Count -gt 0) {
-        $Compiler = $Candidates[0]
+    if (${env:ProgramFiles(x86)}) {
+        $CandidatePaths += Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+    }
+
+    if ($env:ProgramFiles) {
+        $CandidatePaths += Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"
+    }
+
+    foreach ($Candidate in $CandidatePaths) {
+        if (
+            $Candidate -and
+            (Test-Path -LiteralPath $Candidate -PathType Leaf)
+        ) {
+            $Compiler = (Resolve-Path -LiteralPath $Candidate).Path
+            break
+        }
     }
 }
 
+# 3) Fallback bila ISCC.exe sudah ada di PATH.
 if (-not $Compiler) {
     $Command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
     if ($Command) {
@@ -75,6 +94,10 @@ Install Inno Setup 6 terlebih dahulu, lalu jalankan script ini lagi.
 Jika ISCC.exe berada di lokasi custom, set environment variable:
   `$env:INNO_SETUP_COMPILER = 'C:\path\to\ISCC.exe'
 "@
+}
+
+if (-not (Test-Path -LiteralPath $Compiler -PathType Leaf)) {
+    throw "Compiler Inno Setup tidak valid: $Compiler"
 }
 
 $BuildDir = Join-Path $Root "build\installer"
