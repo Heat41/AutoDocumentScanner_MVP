@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -5,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from branding import ensure_brand_assets, source_root
+from branding import LOGO_SHA256, ensure_brand_assets, source_root
 
 
 class TestBranding(unittest.TestCase):
@@ -15,19 +16,23 @@ class TestBranding(unittest.TestCase):
             assets = root / "assets"
             assets.mkdir(parents=True, exist_ok=True)
 
-            shutil.copyfile(
-                source_root() / "assets" / "logo_source.b64",
-                assets / "logo_source.b64",
+            shutil.copytree(
+                source_root() / "assets" / "logo_source",
+                assets / "logo_source",
             )
 
             paths = ensure_brand_assets(root)
 
             self.assertTrue(paths["png"].exists())
             self.assertTrue(paths["ico"].exists())
+            self.assertEqual(
+                hashlib.sha256(paths["png"].read_bytes()).hexdigest(),
+                LOGO_SHA256,
+            )
 
             with Image.open(paths["png"]) as image:
                 self.assertEqual(image.format, "PNG")
-                self.assertEqual(image.size, (192, 192))
+                self.assertEqual(image.size, (256, 256))
 
             with Image.open(paths["ico"]) as image:
                 self.assertEqual(image.format, "ICO")
@@ -44,6 +49,7 @@ class TestBranding(unittest.TestCase):
 
         self.assertIn('icon="assets/logo.ico"', spec)
         self.assertIn('("assets/logo.png", "assets")', spec)
+        self.assertIn('("assets/logo.ico", "assets")', spec)
         self.assertIn("SetupIconFile=logo.ico", installer)
 
 
