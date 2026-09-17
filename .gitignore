@@ -8,3 +8,7 @@ output/*
 
 !input/.gitkeep
 !output/.gitkeep
+
+build/
+dist/
+*.log
