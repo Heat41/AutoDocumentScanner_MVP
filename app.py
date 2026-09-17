@@ -122,7 +122,7 @@ def main():
     args = parser.parse_args()
 
     if args.ui:
-        from ui_textured import main as run_ui
+        from ui_responsive import main as run_ui
 
         run_ui()
         return
