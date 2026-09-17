@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from branding import brand_asset_paths
 from ui_final import FinalScannerUI
 
 
@@ -25,6 +26,34 @@ class TexturedScannerUI(FinalScannerUI):
     TEXTURE_LIGHT = "#F7F9FA"
     TEXTURE_MID = "#E8ECEF"
     TEXTURE_DARK = "#DCE2E6"
+
+    def __init__(self):
+        super().__init__()
+        self._brand_icon_photo = None
+        self._apply_branding()
+
+    def _apply_branding(self):
+        """Apply the official logo without changing scanner behavior."""
+        try:
+            assets = brand_asset_paths()
+        except Exception:
+            return
+
+        ico_path = assets.get("ico")
+        png_path = assets.get("png")
+
+        if ico_path is not None:
+            try:
+                self.iconbitmap(default=str(ico_path))
+            except tk.TclError:
+                pass
+
+        if png_path is not None:
+            try:
+                self._brand_icon_photo = tk.PhotoImage(file=str(png_path))
+                self.iconphoto(True, self._brand_icon_photo)
+            except tk.TclError:
+                self._brand_icon_photo = None
 
     def _configure_style(self):
         # Keep every functional style/geometry from the final UI, then apply
