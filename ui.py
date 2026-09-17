@@ -3,7 +3,6 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-import cv2
 from PIL import Image, ImageDraw, ImageTk
 
 from scanner import AutoDocumentScanner
@@ -23,29 +22,30 @@ class ScannerUI(tk.Tk):
         super().__init__()
 
         self.title("Auto Document Scanner")
-        self.geometry("1040x690")
-        self.minsize(920, 620)
-
-        self.configure(
-            bg="#F3F4F5"
-        )
+        self.geometry("1040x710")
+        self.minsize(920, 640)
+        self.configure(bg="#F3F4F5")
 
         self.scanner = AutoDocumentScanner()
         self.files = []
         self.output_dir = Path("output")
 
-        self.output_mode = tk.StringVar(
-            value="color"
-        )
+        self.output_mode = tk.StringVar(value="color")
         self.status_text = tk.StringVar(
             value="Pilih foto KTP untuk memulai."
+        )
+        self.quality_text = tk.StringVar(
+            value="Kualitas: -"
+        )
+        self.quality_detail_text = tk.StringVar(
+            value=""
         )
 
         self._original_photo = None
         self._result_photo = None
-
         self._corners_by_file = {}
         self._metadata_by_file = {}
+        self._output_by_file = {}
 
         self._configure_style()
         self._build_ui()
@@ -91,6 +91,12 @@ class ScannerUI(tk.Tk):
             font=("Segoe UI", 9),
         )
         style.configure(
+            "Quality.TLabel",
+            background="#F3F4F5",
+            foreground="#3F454C",
+            font=("Segoe UI Semibold", 9),
+        )
+        style.configure(
             "TButton",
             font=("Segoe UI", 10),
             padding=(14, 8),
@@ -106,24 +112,16 @@ class ScannerUI(tk.Tk):
             self,
             padding=24,
         )
-        root.pack(
-            fill="both",
-            expand=True,
-        )
+        root.pack(fill="both", expand=True)
 
         header = ttk.Frame(root)
-        header.pack(
-            fill="x",
-            pady=(0, 18),
-        )
+        header.pack(fill="x", pady=(0, 18))
 
         ttk.Label(
             header,
             text="Auto Document Scanner",
             style="Header.TLabel",
-        ).pack(
-            anchor="w",
-        )
+        ).pack(anchor="w")
 
         ttk.Label(
             header,
@@ -132,93 +130,61 @@ class ScannerUI(tk.Tk):
                 "Output default tetap berwarna."
             ),
             style="Muted.TLabel",
-        ).pack(
-            anchor="w",
-            pady=(4, 0),
-        )
+        ).pack(anchor="w", pady=(4, 0))
 
         toolbar = ttk.Frame(root)
-        toolbar.pack(
-            fill="x",
-            pady=(0, 14),
-        )
+        toolbar.pack(fill="x", pady=(0, 14))
 
         ttk.Button(
             toolbar,
             text="Pilih Foto",
             command=self.choose_files,
-        ).pack(
-            side="left",
-        )
+        ).pack(side="left")
 
         ttk.Button(
             toolbar,
             text="Pilih Folder",
             command=self.choose_folder,
-        ).pack(
-            side="left",
-            padx=(8, 0),
-        )
+        ).pack(side="left", padx=(8, 0))
 
         ttk.Button(
             toolbar,
             text="Folder Output",
             command=self.choose_output,
-        ).pack(
-            side="left",
-            padx=(8, 0),
-        )
+        ).pack(side="left", padx=(8, 0))
 
-        mode_frame = ttk.Frame(
-            toolbar
-        )
-        mode_frame.pack(
-            side="right",
-        )
+        mode_frame = ttk.Frame(toolbar)
+        mode_frame.pack(side="right")
 
         ttk.Radiobutton(
             mode_frame,
             text="Warna",
             variable=self.output_mode,
             value="color",
-        ).pack(
-            side="left",
-        )
+        ).pack(side="left")
 
         ttk.Radiobutton(
             mode_frame,
             text="Grayscale",
             variable=self.output_mode,
             value="grayscale",
-        ).pack(
-            side="left",
-            padx=(10, 0),
-        )
+        ).pack(side="left", padx=(10, 0))
 
         content = ttk.Frame(root)
-        content.pack(
-            fill="both",
-            expand=True,
-        )
+        content.pack(fill="both", expand=True)
 
         left = ttk.Frame(
             content,
             style="Card.TFrame",
             padding=14,
         )
-        left.pack(
-            side="left",
-            fill="y",
-        )
+        left.pack(side="left", fill="y")
 
         ttk.Label(
             left,
             text="File",
             style="CardLabel.TLabel",
-        ).pack(
-            anchor="w",
-            pady=(0, 8),
-        )
+        ).pack(anchor="w", pady=(0, 8))
 
         self.listbox = tk.Listbox(
             left,
@@ -232,18 +198,13 @@ class ScannerUI(tk.Tk):
             activestyle="none",
             font=("Segoe UI", 9),
         )
-        self.listbox.pack(
-            fill="both",
-            expand=True,
-        )
+        self.listbox.pack(fill="both", expand=True)
         self.listbox.bind(
             "<<ListboxSelect>>",
             self._on_select,
         )
 
-        preview_area = ttk.Frame(
-            content
-        )
+        preview_area = ttk.Frame(content)
         preview_area.pack(
             side="left",
             fill="both",
@@ -251,13 +212,8 @@ class ScannerUI(tk.Tk):
             padx=(14, 0),
         )
 
-        previews = ttk.Frame(
-            preview_area
-        )
-        previews.pack(
-            fill="both",
-            expand=True,
-        )
+        previews = ttk.Frame(preview_area)
+        previews.pack(fill="both", expand=True)
 
         self.original_label = self._preview_card(
             previews,
@@ -268,23 +224,40 @@ class ScannerUI(tk.Tk):
             "Hasil",
         )
 
-        bottom = ttk.Frame(
-            root
-        )
-        bottom.pack(
-            fill="x",
-            pady=(14, 0),
-        )
+        bottom = ttk.Frame(root)
+        bottom.pack(fill="x", pady=(14, 0))
 
-        ttk.Label(
-            bottom,
-            textvariable=self.status_text,
-            style="Muted.TLabel",
-        ).pack(
+        info = ttk.Frame(bottom)
+        info.pack(
             side="left",
             fill="x",
             expand=True,
         )
+
+        ttk.Label(
+            info,
+            textvariable=self.status_text,
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+
+        quality_row = ttk.Frame(info)
+        quality_row.pack(
+            anchor="w",
+            fill="x",
+            pady=(3, 0),
+        )
+
+        ttk.Label(
+            quality_row,
+            textvariable=self.quality_text,
+            style="Quality.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            quality_row,
+            textvariable=self.quality_detail_text,
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
 
         self.process_button = ttk.Button(
             bottom,
@@ -292,15 +265,9 @@ class ScannerUI(tk.Tk):
             style="Accent.TButton",
             command=self.process_files,
         )
-        self.process_button.pack(
-            side="right",
-        )
+        self.process_button.pack(side="right")
 
-    def _preview_card(
-        self,
-        parent,
-        title,
-    ):
+    def _preview_card(self, parent, title):
         frame = ttk.Frame(
             parent,
             style="Card.TFrame",
@@ -319,10 +286,7 @@ class ScannerUI(tk.Tk):
             frame,
             text=title,
             style="CardLabel.TLabel",
-        ).pack(
-            anchor="w",
-            pady=(0, 8),
-        )
+        ).pack(anchor="w", pady=(0, 8))
 
         label = tk.Label(
             frame,
@@ -332,11 +296,7 @@ class ScannerUI(tk.Tk):
             bd=0,
             font=("Segoe UI", 9),
         )
-        label.pack(
-            fill="both",
-            expand=True,
-        )
-
+        label.pack(fill="both", expand=True)
         return label
 
     def choose_files(self):
@@ -372,7 +332,6 @@ class ScannerUI(tk.Tk):
                 in SUPPORTED_EXTENSIONS
             )
         )
-
         self._set_files(paths)
 
     def choose_output(self):
@@ -388,10 +347,7 @@ class ScannerUI(tk.Tk):
 
     def _set_files(self, paths):
         self.files = list(paths)
-        self.listbox.delete(
-            0,
-            tk.END,
-        )
+        self.listbox.delete(0, tk.END)
 
         for path in self.files:
             self.listbox.insert(
@@ -399,11 +355,12 @@ class ScannerUI(tk.Tk):
                 path.name,
             )
 
+        self.quality_text.set("Kualitas: -")
+        self.quality_detail_text.set("")
+
         if self.files:
             self.listbox.selection_set(0)
-            self._show_original(
-                self.files[0]
-            )
+            self._show_selected(0)
 
         self.status_text.set(
             f"{len(self.files)} file dipilih."
@@ -411,52 +368,57 @@ class ScannerUI(tk.Tk):
 
     def _on_select(self, _event=None):
         selection = self.listbox.curselection()
-
         if not selection:
             return
 
-        index = selection[0]
-        self._show_original(
-            self.files[index]
+        self._show_selected(selection[0])
+
+    def _show_selected(self, index):
+        if not (0 <= index < len(self.files)):
+            return
+
+        path = self.files[index]
+        self._show_original(path)
+
+        output = self._output_by_file.get(
+            str(path)
         )
 
-        output = (
-            self.output_dir
-            / f"{self.files[index].stem}_scanned.jpg"
-        )
+        if output is None:
+            default_output = (
+                self.output_dir
+                / f"{path.stem}_scanned.jpg"
+            )
+            if default_output.exists():
+                output = default_output
 
-        if output.exists():
-            self._show_result(
-                output
+        if output and Path(output).exists():
+            self._show_result(output)
+        else:
+            self._result_photo = None
+            self.result_label.configure(
+                image="",
+                text="Belum diproses",
             )
 
     @staticmethod
     def _load_preview(path):
         image = Image.open(path).convert("RGB")
-        image.thumbnail(
-            (390, 430)
-        )
-
-        return ImageTk.PhotoImage(
-            image
-        )
+        image.thumbnail((390, 430))
+        return ImageTk.PhotoImage(image)
 
     @staticmethod
     def _load_preview_with_corners(path, corners):
         image = Image.open(path).convert("RGB")
-
         original_width, original_height = image.size
 
-        image.thumbnail(
-            (390, 430)
-        )
+        image.thumbnail((390, 430))
 
         preview_width, preview_height = image.size
         scale_x = preview_width / max(original_width, 1)
         scale_y = preview_height / max(original_height, 1)
 
         draw = ImageDraw.Draw(image)
-
         scaled = [
             (
                 float(point[0]) * scale_x,
@@ -465,7 +427,6 @@ class ScannerUI(tk.Tk):
             for point in corners
         ]
 
-        # Garis dibuat netral tetapi tetap terlihat jelas.
         line_color = (82, 92, 102)
         point_fill = (245, 247, 249)
         point_outline = (55, 62, 70)
@@ -482,7 +443,6 @@ class ScannerUI(tk.Tk):
 
             for label, (x, y) in zip(labels, scaled):
                 radius = 6
-
                 draw.ellipse(
                     (
                         x - radius,
@@ -494,22 +454,61 @@ class ScannerUI(tk.Tk):
                     outline=point_outline,
                     width=2,
                 )
-
                 draw.text(
                     (x + 8, y - 8),
                     label,
                     fill=point_outline,
                 )
 
-        return ImageTk.PhotoImage(
-            image
+        return ImageTk.PhotoImage(image)
+
+    @staticmethod
+    def _quality_summary(metadata):
+        quality = (metadata or {}).get("quality") or {}
+
+        if not quality:
+            return "Kualitas: -", ""
+
+        status = str(
+            quality.get("status", "review")
+        ).lower()
+        score = float(
+            quality.get("score", 0.0) or 0.0
+        )
+        warnings = list(
+            quality.get("warnings") or []
+        )
+
+        labels = {
+            "pass": "Baik",
+            "warning": "Perlu diperhatikan",
+            "review": "Perlu ditinjau",
+        }
+        label = labels.get(status, "Perlu ditinjau")
+
+        detail_parts = [
+            f"score {score:.2f}"
+        ]
+
+        if warnings:
+            detail_parts.append(
+                "; ".join(warnings[:2])
+            )
+
+            if len(warnings) > 2:
+                detail_parts.append(
+                    f"+{len(warnings) - 2} lainnya"
+                )
+
+        return (
+            f"Kualitas: {label}",
+            " | ".join(detail_parts),
         )
 
     def _show_original(self, path):
         try:
-            corners = self._corners_by_file.get(
-                str(Path(path))
-            )
+            key = str(Path(path))
+            corners = self._corners_by_file.get(key)
 
             if corners is not None:
                 self._original_photo = (
@@ -519,8 +518,8 @@ class ScannerUI(tk.Tk):
                     )
                 )
             else:
-                self._original_photo = (
-                    self._load_preview(path)
+                self._original_photo = self._load_preview(
+                    path
                 )
 
             self.original_label.configure(
@@ -528,9 +527,7 @@ class ScannerUI(tk.Tk):
                 text="",
             )
 
-            metadata = self._metadata_by_file.get(
-                str(Path(path))
-            )
+            metadata = self._metadata_by_file.get(key)
 
             if metadata:
                 self.status_text.set(
@@ -540,17 +537,26 @@ class ScannerUI(tk.Tk):
                     f"score {metadata.get('score', 0):.3f}"
                 )
 
+                quality_text, detail_text = (
+                    self._quality_summary(metadata)
+                )
+                self.quality_text.set(quality_text)
+                self.quality_detail_text.set(detail_text)
+            else:
+                self.quality_text.set("Kualitas: -")
+                self.quality_detail_text.set("")
+
         except Exception:
             self.original_label.configure(
                 image="",
                 text="Preview tidak tersedia",
             )
+            self.quality_text.set("Kualitas: -")
+            self.quality_detail_text.set("")
 
     def _show_result(self, path):
         try:
-            self._result_photo = (
-                self._load_preview(path)
-            )
+            self._result_photo = self._load_preview(path)
             self.result_label.configure(
                 image=self._result_photo,
                 text="",
@@ -569,12 +575,10 @@ class ScannerUI(tk.Tk):
             )
             return
 
-        self.process_button.configure(
-            state="disabled"
-        )
-        self.status_text.set(
-            "Memproses..."
-        )
+        self.process_button.configure(state="disabled")
+        self.status_text.set("Memproses...")
+        self.quality_text.set("Kualitas: memeriksa...")
+        self.quality_detail_text.set("")
 
         mode = self.output_mode.get()
 
@@ -587,7 +591,7 @@ class ScannerUI(tk.Tk):
     def _process_worker(self, output_mode):
         success = 0
         failed = 0
-        last_output = None
+        errors = []
 
         self.output_dir.mkdir(
             parents=True,
@@ -620,62 +624,51 @@ class ScannerUI(tk.Tk):
                     output_mode=output_mode,
                 )
 
-                self._corners_by_file[
-                    str(input_path)
-                ] = corners.copy()
-
-                self._metadata_by_file[
-                    str(input_path)
-                ] = dict(
+                key = str(input_path)
+                self._corners_by_file[key] = corners.copy()
+                self._metadata_by_file[key] = dict(
                     self.scanner.last_detection
                     or {}
                 )
-
+                self._output_by_file[key] = output_path
                 success += 1
-                last_output = output_path
 
-            except Exception:
+            except Exception as exc:
                 failed += 1
+                errors.append(
+                    f"{input_path.name}: {exc}"
+                )
 
         def finish():
-            self.process_button.configure(
-                state="normal"
-            )
+            self.process_button.configure(state="normal")
+
+            selection = self.listbox.curselection()
+            if selection:
+                self._show_selected(selection[0])
+            elif self.files:
+                self._show_selected(len(self.files) - 1)
+
             self.status_text.set(
                 f"Selesai — berhasil {success}, gagal {failed}."
             )
 
-            if last_output:
-                self._show_result(
-                    last_output
-                )
-
-            selection = self.listbox.curselection()
-
-            if selection:
-                self._show_original(
-                    self.files[selection[0]]
-                )
-            elif self.files:
-                self._show_original(
-                    self.files[-1]
-                )
-
             if failed:
+                detail = "\n".join(errors[:5])
+                if len(errors) > 5:
+                    detail += (
+                        f"\n... dan {len(errors) - 5} lainnya."
+                    )
+
                 messagebox.showwarning(
                     "Proses selesai",
                     (
                         f"Berhasil: {success}\n"
                         f"Gagal: {failed}\n\n"
-                        "File gagal dapat diuji kembali "
-                        "setelah engine disempurnakan."
+                        f"{detail}"
                     ),
                 )
 
-        self.after(
-            0,
-            finish,
-        )
+        self.after(0, finish)
 
 
 def main():
