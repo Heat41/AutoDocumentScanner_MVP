@@ -159,3 +159,28 @@
 - [ ] Run full project regression on Windows: `python -m unittest discover -s tests -v`.
 - [ ] Verify Stage 2A KTP image/PDF and Stage 2B manual-document smoke behavior still open normally.
 - [ ] Commit runtime guard changes.
+
+
+## Implementation checkpoint — 2026-09-18
+
+Completed in branch `feature/stage2c-ktp-storage`:
+
+- KTP identity model and final-storage validation.
+- SQLite schema version 1.
+- One-NIK primary record invariant.
+- ACTIVE/SUPERSEDED revision history.
+- UUID-based media folders.
+- Required corrected KTP image + optional face image.
+- KTP storage orchestration and persistence after reopen.
+- `data/` excluded from Git.
+- SQLite connections explicitly closed.
+
+Isolated Stage 2C verification:
+- 22 tests executed.
+- 22 passed.
+- ResourceWarning elevated to error during verification.
+- 0 Stage 2C test failures.
+
+Pending:
+- Full Windows repository regression.
+- Existing Stage 2A/2B UI smoke UAT on the project PC.
