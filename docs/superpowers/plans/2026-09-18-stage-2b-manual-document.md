@@ -37,10 +37,10 @@
 - `rotate_image_and_reset(image, direction: str) -> tuple[np.ndarray, np.ndarray]`
 
 **TDD:**
-- [ ] Write tests for default point order/placement, bounds clamping, warp output, and 90-degree rotation.
-- [ ] Run `python -m unittest tests.test_manual_document -v` and verify RED because the module is missing.
-- [ ] Implement the minimum code using `AutoPerspectiveEngine.warp`.
-- [ ] Verify GREEN.
+- [x] Write tests for default point order/placement, bounds clamping, warp output, and 90-degree rotation.
+- [x] Run `python -m unittest tests.test_manual_document -v` and verify RED because the module is missing.
+- [x] Implement the minimum code using `AutoPerspectiveEngine.warp`.
+- [x] Verify GREEN.
 
 ---
 
@@ -61,9 +61,9 @@
 - `ManualDocumentSession.corrected_images() -> list[np.ndarray]`
 
 **TDD:**
-- [ ] Write state-transition tests.
-- [ ] Verify RED.
-- [ ] Implement minimum state model.
+- [x] Write state-transition tests.
+- [x] Verify RED.
+- [x] Implement minimum state model.
 - [ ] Verify GREEN.
 
 ---
@@ -85,9 +85,9 @@
 - Image output uses `*_corrected.jpg` naming and existing atomic image write semantics.
 
 **TDD:**
-- [ ] Add failing two-page PDF and multi-image output tests.
+- [x] Add failing two-page PDF and multi-image output tests.
 - [ ] Verify RED.
-- [ ] Implement minimum output functions.
+- [x] Implement minimum output functions.
 - [ ] Verify GREEN.
 
 ---
@@ -104,9 +104,9 @@
 - `canvas_to_image(point, image_size, display_size, offset) -> tuple[float, float]`
 
 **TDD:**
-- [ ] Test fit behavior and round-trip coordinate transforms.
+- [x] Test fit behavior and round-trip coordinate transforms.
 - [ ] Verify RED.
-- [ ] Implement helpers.
+- [x] Implement helpers.
 - [ ] Verify GREEN.
 
 ---
@@ -128,10 +128,10 @@
 - PDF export is enabled only when all pages have corrected results.
 
 **TDD:**
-- [ ] Add headless smoke tests for page inheritance, navigation constants, and helper contracts.
+- [x] Add headless smoke tests for page inheritance, navigation constants, and helper contracts.
 - [ ] Verify RED.
-- [ ] Implement page and navigation wrapper.
-- [ ] Verify GREEN for Stage 2 tests.
+- [x] Implement page and navigation wrapper.
+- [x] Verify GREEN for Stage 2 tests.
 
 ---
 
@@ -147,4 +147,11 @@
 - [ ] `.\build_windows.ps1` after UAT.
 
 **Diff guard:**
-- [ ] Confirm locked legacy scanner/UI files remain unchanged.
+- [x] Confirm locked legacy scanner/UI files remain unchanged.
+
+
+## Implementation checkpoint — 2026-09-18
+
+- Isolated headless Stage 2B verification: 34 tests, 0 failures.
+- Branch: `feature/stage2b-manual-document`.
+- Full Windows repository regression and packaged UAT remain intentionally pending on the project PC.
