@@ -60,7 +60,7 @@ class TestAtomicImageOutput(unittest.TestCase):
             original_bytes = output.read_bytes()
 
             with patch(
-                "safe_output.cv2.imwrite",
+                "autodocscanner.output.safe.cv2.imwrite",
                 return_value=False,
             ):
                 with self.assertRaises(RuntimeError):
