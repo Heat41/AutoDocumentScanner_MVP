@@ -62,6 +62,18 @@ class TestStage2UiContract(unittest.TestCase):
             )
         )
 
+    def test_top_navigation_items_are_ordered(self):
+        self.assertEqual(
+            Stage2ScannerUI.NAVIGATION_ITEMS,
+            (
+                ("Auto Koreksi KTP", "auto_ktp"),
+                (
+                    "Koreksi Dokumen Manual",
+                    "manual_document",
+                ),
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
