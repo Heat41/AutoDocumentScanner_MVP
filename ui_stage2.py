@@ -5,6 +5,7 @@ from tkinter import messagebox, ttk
 
 from output_manager import build_output_path
 from stage2_processing import process_ktp_output
+from ui_manual_document import ManualDocumentPage
 from ui_responsive import ResponsiveScannerUI
 
 
@@ -12,9 +13,14 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     """Stage 2 shell that adds output format without changing KTP detection."""
 
     DEFAULT_OUTPUT_FORMAT = "image"
+    AUTO_KTP_PAGE = "auto_ktp"
+    MANUAL_DOCUMENT_PAGE = "manual_document"
 
     def __init__(self):
         super().__init__()
+
+        self._ktp_page = self._locate_ktp_page()
+        self._active_stage2_page = self.AUTO_KTP_PAGE
 
         self.output_format = tk.StringVar(
             master=self,
@@ -25,6 +31,68 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
         self._pdf_preview_by_output = {}
         self._install_output_format_controls()
+        self._install_manual_document_page()
+
+    def _locate_ktp_page(self):
+        for child in self.winfo_children():
+            if isinstance(child, ttk.Frame):
+                return child
+
+        raise RuntimeError(
+            "Root halaman Auto Koreksi KTP tidak ditemukan."
+        )
+
+    def _install_manual_document_page(self):
+        self._manual_document_page = ManualDocumentPage(
+            self,
+            on_back=self.show_auto_ktp,
+            output_dir=self.output_dir,
+        )
+
+        self._manual_document_button = ttk.Button(
+            self._responsive_sidebar,
+            text="Koreksi Dokumen Manual",
+            command=self.show_manual_document,
+        )
+        self._manual_document_button.pack(
+            side="bottom",
+            fill="x",
+            pady=(10, 0),
+        )
+
+    def show_manual_document(self):
+        self._ktp_page.pack_forget()
+        self._manual_document_page.pack(
+            fill="both",
+            expand=True,
+        )
+        self._active_stage2_page = self.MANUAL_DOCUMENT_PAGE
+        self.title(
+            "Auto Document Scanner — Koreksi Dokumen Manual"
+        )
+
+    def show_auto_ktp(self):
+        self._manual_document_page.pack_forget()
+        self._ktp_page.pack(
+            fill="both",
+            expand=True,
+        )
+        self._active_stage2_page = self.AUTO_KTP_PAGE
+        self.title("Auto Document Scanner")
+
+    def _refresh_resized_preview(self):
+        if (
+            getattr(
+                self,
+                "_active_stage2_page",
+                self.AUTO_KTP_PAGE,
+            )
+            != self.AUTO_KTP_PAGE
+        ):
+            self._responsive_after_id = None
+            return
+
+        return super()._refresh_resized_preview()
 
     @staticmethod
     def _is_pdf_path(path):
