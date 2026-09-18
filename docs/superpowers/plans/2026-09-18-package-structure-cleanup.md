@@ -95,3 +95,28 @@ autodocscanner/
 - Run full regression.
 - Run import smoke checks.
 - Build Windows package only after regression is green.
+
+
+## Implementation checkpoint — 2026-09-18
+
+Completed:
+- Production source moved into `autodocscanner/` domain packages.
+- Legacy root Python source modules removed.
+- UI inheritance chain preserved under `autodocscanner/ui/`.
+- KTP storage moved under `autodocscanner/ktp/`.
+- Manual-document code moved under `autodocscanner/documents/`.
+- Output/service/core modules categorized.
+- Branding moved to `autodocscanner/support/` and build scripts updated.
+- Tests categorized by domain.
+- Package-structure regression guard added.
+- `docs/PROJECT_STRUCTURE.md` added.
+
+Audit:
+- GitHub recognizes core changes primarily as renames with import-path edits.
+- Scanner/perspective/storage algorithms were not intentionally changed.
+- Branding source-root resolution was updated only to account for its new package location.
+
+Pending:
+- Full Windows regression in IDE.
+- Desktop UI smoke test across Auto KTP, Manual Document, and Tracking KTP.
+- Windows build smoke test after regression is green.
