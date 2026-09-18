@@ -1,8 +1,8 @@
 from pathlib import Path
 import argparse
 
-from batch_runner import BatchScanRunner
-from scanner import AutoDocumentScanner
+from autodocscanner.services.batch import BatchScanRunner
+from autodocscanner.core.scanner import AutoDocumentScanner
 
 
 INPUT_DIR = Path("input")
@@ -122,7 +122,7 @@ def main():
     args = parser.parse_args()
 
     if args.ui:
-        from ui_stage2 import main as run_ui
+        from autodocscanner.ui.stage2 import main as run_ui
 
         run_ui()
         return
