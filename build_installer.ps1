@@ -21,7 +21,7 @@ if (-not (Test-Path $TemplateFile)) {
 }
 
 Write-Host "Menyiapkan logo aplikasi..."
-python .\branding.py
+python -m autodocscanner.support.branding
 $LogoIco = Join-Path $Root "assets\logo.ico"
 if (-not (Test-Path -LiteralPath $LogoIco -PathType Leaf)) {
     throw "Logo installer tidak berhasil dibuat: $LogoIco"
