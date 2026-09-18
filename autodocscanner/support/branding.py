@@ -25,7 +25,7 @@ ICON_SIZES = (
 
 
 def source_root():
-    return Path(__file__).resolve().parent
+    return Path(__file__).resolve().parents[2]
 
 
 def runtime_root():
