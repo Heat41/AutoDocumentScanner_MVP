@@ -6,6 +6,7 @@ from tkinter import messagebox, ttk
 from output_manager import build_output_path
 from stage2_processing import process_ktp_output
 from ui_manual_document import ManualDocumentPage
+from ui_tracking_ktp import TrackingKtpPage
 from ui_responsive import ResponsiveScannerUI
 
 
@@ -15,9 +16,11 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     DEFAULT_OUTPUT_FORMAT = "image"
     AUTO_KTP_PAGE = "auto_ktp"
     MANUAL_DOCUMENT_PAGE = "manual_document"
+    TRACKING_KTP_PAGE = "tracking_ktp"
     NAVIGATION_ITEMS = (
         ("Auto Koreksi KTP", AUTO_KTP_PAGE),
         ("Koreksi Dokumen Manual", MANUAL_DOCUMENT_PAGE),
+        ("Tracking Data KTP", TRACKING_KTP_PAGE),
     )
 
     def __init__(self):
@@ -36,6 +39,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         self._pdf_preview_by_output = {}
         self._install_output_format_controls()
         self._install_manual_document_page()
+        self._install_tracking_ktp_page()
         self._install_top_navigation()
         self._update_navigation_state()
 
@@ -53,6 +57,11 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             self,
             on_back=None,
             output_dir=self.output_dir,
+        )
+
+    def _install_tracking_ktp_page(self):
+        self._tracking_ktp_page = TrackingKtpPage(
+            self
         )
 
     def _install_top_navigation(self):
@@ -84,14 +93,21 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
         self._navigation_buttons = {}
 
-        for label, page_name in self.NAVIGATION_ITEMS:
-            command = (
-                self.show_auto_ktp
-                if page_name == self.AUTO_KTP_PAGE
-                else self.show_manual_document
-            )
+        commands = {
+            self.AUTO_KTP_PAGE:
+                self.show_auto_ktp,
+            self.MANUAL_DOCUMENT_PAGE:
+                self.show_manual_document,
+            self.TRACKING_KTP_PAGE:
+                self.show_tracking_ktp,
+        }
 
+        for label, page_name in self.NAVIGATION_ITEMS:
             button = ttk.Button(
+                nav_card,
+                text=label,
+                command=commands[page_name],
+            )
                 nav_card,
                 text=label,
                 command=command,
@@ -124,8 +140,13 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     style="TButton"
                 )
 
-    def show_manual_document(self):
+    def _hide_stage2_pages(self):
         self._ktp_page.pack_forget()
+        self._manual_document_page.pack_forget()
+        self._tracking_ktp_page.pack_forget()
+
+    def show_manual_document(self):
+        self._hide_stage2_pages()
         self._manual_document_page.pack(
             fill="both",
             expand=True,
@@ -136,8 +157,20 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             "Auto Document Scanner — Koreksi Dokumen Manual"
         )
 
+    def show_tracking_ktp(self):
+        self._hide_stage2_pages()
+        self._tracking_ktp_page.pack(
+            fill="both",
+            expand=True,
+        )
+        self._active_stage2_page = self.TRACKING_KTP_PAGE
+        self._update_navigation_state()
+        self.title(
+            "Auto Document Scanner — Tracking Data KTP"
+        )
+
     def show_auto_ktp(self):
-        self._manual_document_page.pack_forget()
+        self._hide_stage2_pages()
         self._ktp_page.pack(
             fill="both",
             expand=True,
