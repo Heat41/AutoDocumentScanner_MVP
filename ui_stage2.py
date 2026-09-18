@@ -108,10 +108,6 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 text=label,
                 command=commands[page_name],
             )
-                nav_card,
-                text=label,
-                command=command,
-            )
             button.pack(
                 side="left",
                 padx=(0, 8),
