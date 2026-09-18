@@ -18,3 +18,5 @@ release/
 *.zip
 *.sha256.txt
 *.log
+
+data/
