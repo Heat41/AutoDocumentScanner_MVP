@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,7 +66,7 @@ class KtpDatabase:
             exist_ok=True,
         )
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -162,10 +163,12 @@ class KtpDatabase:
                     f"{existing['value']}."
                 )
 
+            connection.commit()
+
     def schema_version(self):
         self.initialize()
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             row = connection.execute(
                 """
                 SELECT value
@@ -198,7 +201,7 @@ class KtpDatabase:
         nik = normalize_nik(nik)
         self.initialize()
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             row = connection.execute(
                 """
                 SELECT *
@@ -221,7 +224,7 @@ class KtpDatabase:
         nik = normalize_nik(nik)
         self.initialize()
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             row = connection.execute(
                 """
                 SELECT rev.*
@@ -244,7 +247,7 @@ class KtpDatabase:
         nik = normalize_nik(nik)
         self.initialize()
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute(
                 """
                 SELECT rev.*
