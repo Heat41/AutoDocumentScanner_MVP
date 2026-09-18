@@ -60,3 +60,18 @@
 **Behavior:**
 - Export layout/extraction public interfaces.
 - Full repository regression must remain green.
+
+
+## Implementation checkpoint — 2026-09-18
+
+Completed on `main`:
+- Normalized 17-field KTP layout.
+- Safe normalized-to-pixel conversion.
+- Independent field crops.
+- Portrait crop exposed as `face_image`.
+- Stable extraction result contract.
+- Public KTP package exports.
+
+Audit:
+- No scanner, perspective-engine, storage-schema, or UI files changed in this slice.
+- Full Windows regression is pending.
