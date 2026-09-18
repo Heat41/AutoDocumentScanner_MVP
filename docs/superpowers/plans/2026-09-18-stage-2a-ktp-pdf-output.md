@@ -4,7 +4,7 @@
 
 **Goal:** Add PDF output for corrected KTP images without changing the existing auto-perspective scanner behavior.
 
-**Architecture:** Keep `scanner.py` responsible for producing the corrected image and existing image output. Introduce a focused `output_manager.py` for format naming and PDF serialization. The UI gains a separate output-format choice (Image/PDF), while color/grayscale remains independent. PDF serialization converts BGR to RGB and writes a single-page PDF at 72 DPI so the PDF media box matches the corrected image pixel dimensions without A4 padding.
+**Architecture:** The locked scanner and existing UI hierarchy remain untouched. `output_manager.py` owns output naming and atomic PDF serialization, `stage2_processing.py` routes one corrected KTP result to the existing JPG path or the new PDF path, and `ui_stage2.py` wraps `ResponsiveScannerUI` to add the Gambar/PDF choice. Entry points launch the wrapper while the original scanner/UI layers remain available for rollback.
 
 **Tech Stack:** Python 3, OpenCV, NumPy, Pillow, Tkinter, unittest.
 
@@ -13,127 +13,104 @@
 ## Global Constraints
 
 - Do not change automatic KTP corner detection or perspective-correction behavior.
-- Default visual output remains color.
+- Default visual mode remains color.
+- Default output format remains image.
 - PDF must not place the KTP on A4.
-- PDF output must preserve corrected KTP image dimensions/aspect ratio without resampling.
-- Existing image-output behavior must remain available.
+- PDF output uses the corrected image dimensions/aspect ratio without cropping or A4 padding.
+- Existing JPG-output path remains available and continues to be written by `scanner.scan`.
 - Stage 2A must not implement document-manual-correction, OCR tracking, database, or WP Client API work.
 
 ---
 
-### Task 1: Output Manager contract and PDF writer
+### Task 1: Output Manager
 
 **Files:**
 - Create: `output_manager.py`
 - Create: `tests/test_output_manager.py`
 
 **Interfaces:**
-- Produces: `output_suffix(output_format: str) -> str`
-- Produces: `build_output_path(output_dir, input_path, output_format: str) -> Path`
-- Produces: `save_pdf(output_path, image) -> Path`
+- `output_suffix(output_format: str) -> str`
+- `build_output_path(output_dir, input_path, output_format: str) -> Path`
+- `save_pdf(output_path, image) -> Path`
 
-- [ ] **Step 1: Write failing tests**
+- [x] Write failing output-manager tests.
+- [x] Verify RED: module missing.
+- [x] Implement atomic single-page PDF output using Pillow at 72 DPI.
+- [x] Verify GREEN: six output-manager tests pass in isolated TDD sandbox.
 
-Test exact naming for image/PDF, rejection of unsupported formats, PDF file creation, and PDF page dimensions matching image width/height at 72 DPI.
-
-- [ ] **Step 2: Run test and verify RED**
-
-Run: `python -m unittest tests.test_output_manager -v`
-
-Expected: FAIL because `output_manager` does not exist.
-
-- [ ] **Step 3: Implement minimal output manager**
-
-Use Pillow only (already in requirements). Convert OpenCV BGR arrays to RGB; grayscale arrays to RGB safely. Save via a temporary file in the target directory and `os.replace` to preserve atomic-write semantics. Use `resolution=72.0` so a W x H image yields a W x H point PDF page.
-
-- [ ] **Step 4: Run output-manager tests and verify GREEN**
-
-Run: `python -m unittest tests.test_output_manager -v`
-
-Expected: PASS.
-
-- [ ] **Step 5: Run existing output/scanner regression tests**
-
-Run:
-`python -m unittest tests.test_perspective_engine tests.test_batch_runner -v`
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-Commit message: `feat: add atomic PDF output manager`
-
----
-
-### Task 2: UI output format selection
+### Task 2: Stage 2 Output Processing
 
 **Files:**
-- Modify: `ui.py`
-- Modify: `ui_final.py` only if presentation layer requires placement adjustment
-- Create: `tests/test_ui_output_format.py`
+- Create: `stage2_processing.py`
+- Create: `tests/test_stage2_processing.py`
 
 **Interfaces:**
-- Consumes: `build_output_path(...)`, `save_pdf(...)`
-- UI state: `self.output_format` values `image` or `pdf`
+- `process_ktp_output(scanner, input_path, output_dir, output_mode="color", output_format="image") -> dict`
 
-- [ ] **Step 1: Write failing UI-independent tests**
+**Behavior:**
+- Image: preserve existing `scanner.scan(..., output_path=...jpg)` path.
+- PDF: call `scanner.scan(..., output_path=None)`, atomically save PDF, and generate compressed in-memory JPEG preview bytes.
+- Always forward `mode="ktp"` and the selected color/grayscale mode.
 
-Test a small pure helper or static contract used by the UI to map `image` and `pdf` to destination paths. Do not instantiate Tk in headless tests.
+- [x] Write failing processing tests.
+- [x] Verify RED: module missing.
+- [x] Implement routing.
+- [x] Verify GREEN together with output-manager tests.
 
-- [ ] **Step 2: Run test and verify RED**
-
-Run: `python -m unittest tests.test_ui_output_format -v`
-
-Expected: FAIL because the UI format contract is not wired.
-
-- [ ] **Step 3: Add format selector**
-
-Add a distinct output-format variable with default `image`. Keep the existing `output_mode` color/grayscale variable unchanged. Present `Gambar` and `PDF` as a separate choice.
-
-- [ ] **Step 4: Wire processing**
-
-For image: retain current `scanner.scan(..., output_path=jpg)` path.
-
-For PDF: call `scanner.scan(..., output_path=None)`, then `save_pdf(pdf_path, result)`. Store the generated PDF path separately from preview requirements; retain an in-memory/image preview or a temporary preview strategy rather than asking Pillow/Tk to render PDF.
-
-- [ ] **Step 5: Verify tests**
-
-Run:
-`python -m unittest tests.test_ui_output_format tests.test_output_manager tests.test_perspective_engine tests.test_batch_runner tests.test_ui_responsive -v`
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-Commit message: `feat: add KTP image or PDF output choice`
-
----
-
-### Task 3: Full regression and packaging guard
+### Task 3: Isolated Stage 2 UI Wrapper
 
 **Files:**
-- Modify tests only if an existing packaging test requires explicit inclusion of `output_manager.py`.
-- Modify packaging spec/script only if it enumerates source modules explicitly.
+- Create: `ui_stage2.py`
+- Create: `tests/test_ui_stage2.py`
+- Modify: `app.py`
+- Modify: `desktop_launcher.py`
 
-**Interfaces:**
-- No new runtime behavior.
+**Architecture:**
+- `Stage2ScannerUI(ResponsiveScannerUI)` keeps all old UI/scanner files unchanged.
+- Add separate `Gambar` / `PDF` controls.
+- Capture the format on the main thread before processing starts.
+- Reuse the existing safe failure state.
+- Render PDF results from compressed in-memory preview bytes instead of requiring a PDF renderer.
 
-- [ ] **Step 1: Run full test suite**
+- [x] Write failing wrapper smoke tests.
+- [x] Verify RED: wrapper module missing.
+- [x] Implement wrapper.
+- [x] Verify 11 Stage 2A tests + Python compile in isolated sandbox.
+- [x] Point source and packaged desktop entry points to `ui_stage2`.
 
-Run: `python -m unittest discover -s tests -v`
+### Task 4: Regression and Packaging Guard
 
-Expected: all tests PASS.
+**Files inspected:**
+- `AutoDocumentScanner.spec`
+- `build_windows.ps1`
+- `release_windows.ps1`
+- `build_installer.ps1`
 
-- [ ] **Step 2: Verify imports**
+**Findings:**
+- PyInstaller starts from `desktop_launcher.py` with `hiddenimports=[]`; no manual module list needs updating.
+- `build_windows.ps1` runs `python -m unittest discover -s tests -v` before PyInstaller.
+- Release and installer scripts package the already-built runtime and require no Stage 2A source-module changes.
 
-Run: `python -c "import app, scanner, output_manager, ui_responsive"`
+- [x] Confirm diff leaves `scanner.py`, `perspective_engine.py`, `ui.py`, `ui_safe.py`, `ui_final.py`, and `ui_responsive.py` untouched.
+- [x] Run Stage 2A isolated tests: 11 tests, 0 failures.
+- [ ] Run full repository regression on Windows project checkout.
+- [ ] Run `build_windows.ps1`.
+- [ ] UAT generated JPG and PDF in packaged executable.
 
-Expected: exits 0.
+## Windows verification commands
 
-- [ ] **Step 3: Build/package smoke check**
+```powershell
+cd D:\AutoDocumentScanner
+git fetch origin
+git switch feature/stage2a-pdf-output
+git pull origin feature/stage2a-pdf-output
 
-Use the repository's existing build scripts/spec without changing installer behavior except including the new module when necessary.
+python -m unittest discover -s tests -v
+python .\app.py --ui
+```
 
-- [ ] **Step 4: Commit any packaging-only change**
+For packaging verification after UAT:
 
-Commit message: `build: include Stage 2A output manager`
+```powershell
+.\build_windows.ps1
+```
