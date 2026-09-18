@@ -17,7 +17,7 @@ Write-Host "`n[3/7] Install build dependency"
 python -m pip install -r requirements-build.txt
 
 Write-Host "`n[4/7] Generate branding assets"
-python .\branding.py
+python -m autodocscanner.support.branding
 
 $LogoPng = Join-Path $Root "assets\logo.png"
 $LogoIco = Join-Path $Root "assets\logo.ico"
