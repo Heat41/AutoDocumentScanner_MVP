@@ -1,0 +1,1 @@
+"""AutoDocumentScanner application package."""
