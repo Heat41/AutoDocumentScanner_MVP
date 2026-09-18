@@ -62,6 +62,12 @@ class TestStage2UiContract(unittest.TestCase):
             )
         )
 
+    def test_tracking_ktp_is_a_named_stage2_page(self):
+        self.assertEqual(
+            Stage2ScannerUI.TRACKING_KTP_PAGE,
+            "tracking_ktp",
+        )
+
     def test_top_navigation_items_are_ordered(self):
         self.assertEqual(
             Stage2ScannerUI.NAVIGATION_ITEMS,
@@ -71,7 +77,21 @@ class TestStage2UiContract(unittest.TestCase):
                     "Koreksi Dokumen Manual",
                     "manual_document",
                 ),
+                (
+                    "Tracking Data KTP",
+                    "tracking_ktp",
+                ),
             ),
+        )
+
+    def test_tracking_navigation_method_is_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    Stage2ScannerUI,
+                    "show_tracking_ktp",
+                )
+            )
         )
 
 
