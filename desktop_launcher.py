@@ -38,7 +38,7 @@ def main():
 
     # Import only after the runtime directory is prepared. The responsive
     # shell changes layout only; the locked scanner pipeline stays unchanged.
-    from ui_responsive import main as run_ui
+    from ui_stage2 import main as run_ui
 
     run_ui()
 
