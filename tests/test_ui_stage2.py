@@ -32,6 +32,36 @@ class TestStage2UiContract(unittest.TestCase):
             )
         )
 
+    def test_manual_document_is_a_named_stage2_page(self):
+        self.assertEqual(
+            Stage2ScannerUI.MANUAL_DOCUMENT_PAGE,
+            "manual_document",
+        )
+
+    def test_auto_ktp_is_a_named_stage2_page(self):
+        self.assertEqual(
+            Stage2ScannerUI.AUTO_KTP_PAGE,
+            "auto_ktp",
+        )
+
+    def test_navigation_methods_are_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    Stage2ScannerUI,
+                    "show_manual_document",
+                )
+            )
+        )
+        self.assertTrue(
+            callable(
+                getattr(
+                    Stage2ScannerUI,
+                    "show_auto_ktp",
+                )
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
