@@ -10,7 +10,7 @@ from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
 )
 from autodocscanner.ktp.layout import (
-    KTP_VALUE_BOXES,
+    build_anchor_aligned_value_boxes,
     crop_normalized,
     normalize_ktp_for_tracking,
 )
@@ -48,6 +48,7 @@ class KtpTrackingResult:
     identity: dict
     review_fields: list[str]
     debug_tracking_image: np.ndarray | None = None
+    debug_roi_boxes: dict | None = None
 
     @property
     def ready_for_review(self):
@@ -352,6 +353,7 @@ def extract_tracking_data(
     )
 
     anchor_candidates = {}
+    label_anchors = {}
     document_candidates = {}
     document_confidence = 0.0
     layout_words = []
@@ -386,6 +388,11 @@ def extract_tracking_data(
                     )
                 )
 
+            label_anchors = (
+                locate_label_anchors(
+                    layout_words
+                )
+            )
             anchor_candidates = (
                 extract_anchor_candidates(
                     layout_words
@@ -418,6 +425,13 @@ def extract_tracking_data(
             document_candidates = {}
             document_confidence = 0.0
 
+    roi_boxes = (
+        build_anchor_aligned_value_boxes(
+            image_height=tracking_image.shape[0],
+            anchors=label_anchors,
+        )
+    )
+
     fields = {}
     review_fields = []
 
@@ -429,7 +443,7 @@ def extract_tracking_data(
 
         value_image = crop_normalized(
             tracking_image,
-            KTP_VALUE_BOXES[
+            roi_boxes[
                 name
             ],
         )
@@ -595,4 +609,5 @@ def extract_tracking_data(
         debug_tracking_image=(
             tracking_image.copy()
         ),
+        debug_roi_boxes=roi_boxes,
     )
