@@ -5,9 +5,10 @@ from autodocscanner.ktp.tracking import (
 )
 
 
-def correct_tracking_input(
+def process_tracking_input(
     scanner,
     input_path,
+    backend=None,
 ):
     input_path = Path(
         input_path
@@ -22,51 +23,15 @@ def correct_tracking_input(
         )
     )
 
+    tracking = extract_tracking_data(
+        corrected_image,
+        backend=backend,
+    )
+
     return {
         "corrected_image": (
             corrected_image
         ),
         "corners": corners,
-    }
-
-
-def track_corrected_ktp(
-    corrected_image,
-    backend=None,
-):
-    return extract_tracking_data(
-        corrected_image,
-        backend=backend,
-    )
-
-
-def process_tracking_input(
-    scanner,
-    input_path,
-    backend=None,
-):
-    corrected = correct_tracking_input(
-        scanner,
-        input_path,
-    )
-
-    tracking = track_corrected_ktp(
-        corrected[
-            "corrected_image"
-        ],
-        backend=backend,
-    )
-
-    return {
-        "corrected_image": (
-            corrected[
-                "corrected_image"
-            ]
-        ),
-        "corners": (
-            corrected[
-                "corners"
-            ]
-        ),
         "tracking": tracking,
     }
