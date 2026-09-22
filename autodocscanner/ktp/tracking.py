@@ -4,6 +4,7 @@ import numpy as np
 
 from autodocscanner.ktp.anchors import (
     extract_anchor_candidates,
+    locate_label_anchors,
 )
 from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
@@ -20,6 +21,9 @@ from autodocscanner.ktp.ocr import (
 from autodocscanner.ktp.parsing import (
     parse_field,
     parse_ktp_document,
+)
+from autodocscanner.ktp.registration import (
+    register_ktp_to_template,
 )
 
 
@@ -340,10 +344,6 @@ def extract_tracking_data(
         )
     )
 
-    extraction = extract_ktp_regions(
-        tracking_image
-    )
-
     backend = (
         backend
         if backend is not None
@@ -353,21 +353,49 @@ def extract_tracking_data(
     anchor_candidates = {}
     document_candidates = {}
     document_confidence = 0.0
+    layout_words = []
 
     if hasattr(
         backend,
         "read_layout",
     ):
         try:
-            anchor_candidates = (
-                extract_anchor_candidates(
+            layout_words = (
+                backend.read_layout(
+                    tracking_image
+                )
+            )
+
+            registration = (
+                register_ktp_to_template(
+                    tracking_image,
+                    locate_label_anchors(
+                        layout_words
+                    ),
+                )
+            )
+
+            if registration.applied:
+                tracking_image = (
+                    registration.image
+                )
+                layout_words = (
                     backend.read_layout(
                         tracking_image
                     )
                 )
+
+            anchor_candidates = (
+                extract_anchor_candidates(
+                    layout_words
+                )
             )
         except Exception:
             anchor_candidates = {}
+
+    extraction = extract_ktp_regions(
+        tracking_image
+    )
 
     if hasattr(
         backend,
