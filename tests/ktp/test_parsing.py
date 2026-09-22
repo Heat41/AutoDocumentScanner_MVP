@@ -7,6 +7,7 @@ from autodocscanner.ktp.parsing import (
     parse_nik,
     parse_rt_rw,
     parse_ttl,
+    parse_ktp_document,
 )
 
 
@@ -66,6 +67,53 @@ class TestKtpParsing(unittest.TestCase):
         self.assertEqual(
             parse_field("nama", "NAMA: CONTOH"),
             "CONTOH",
+        )
+
+    def test_parse_ktp_document_extracts_labeled_lines(self):
+        text = """
+PROVINSI CONTOH
+KOTA CONTOH
+NIK : 1234567890123456
+Nama : NAMA CONTOH
+Tempat/Tgl Lahir : KOTA CONTOH, 02-03-1990
+Jenis kelamin : LAKI-LAKI
+Alamat : JALAN CONTOH
+RT/RW : 001/002
+Kel/Desa : DESA CONTOH
+Kecamatan : KECAMATAN CONTOH
+Agama : ISLAM
+Status Perkawinan : KAWIN
+Pekerjaan : KARYAWAN
+Kewarganegaraan : WNI
+Berlaku Hingga : SEUMUR HIDUP
+"""
+        result = parse_ktp_document(text)
+
+        self.assertEqual(
+            result["provinsi"],
+            "PROVINSI CONTOH",
+        )
+        self.assertEqual(
+            result["kabupaten_kota"],
+            "KOTA CONTOH",
+        )
+        self.assertEqual(
+            result["nama"],
+            "NAMA CONTOH",
+        )
+        self.assertEqual(
+            result["rt_rw"],
+            "001/002",
+        )
+
+    def test_parse_ktp_document_ignores_unknown_lines(self):
+        result = parse_ktp_document(
+            "TEKS ACAK\nNama : NAMA CONTOH\n"
+        )
+
+        self.assertEqual(
+            result,
+            {"nama": "NAMA CONTOH"},
         )
 
 
