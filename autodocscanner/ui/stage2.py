@@ -61,7 +61,8 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
     def _install_tracking_ktp_page(self):
         self._tracking_ktp_page = TrackingKtpPage(
-            self
+            self,
+            scanner=self.scanner,
         )
 
     def _install_top_navigation(self):
