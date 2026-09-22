@@ -4,6 +4,7 @@ import numpy as np
 
 from autodocscanner.ktp.layout import (
     KTP_FIELD_BOXES,
+    KTP_VALUE_BOXES,
     NormalizedBox,
     crop_normalized,
     normalized_to_pixel_box,
@@ -36,6 +37,12 @@ class TestKtpLayout(unittest.TestCase):
         self.assertEqual(
             set(KTP_FIELD_BOXES),
             EXPECTED_FIELDS,
+        )
+
+    def test_value_layout_contains_all_text_fields(self):
+        self.assertEqual(
+            set(KTP_VALUE_BOXES),
+            EXPECTED_FIELDS - {"foto"},
         )
 
     def test_all_boxes_are_normalized_and_non_empty(self):
