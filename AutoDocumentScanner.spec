@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files
 
 
@@ -12,12 +14,30 @@ brand_datas = [
     ("assets/logo.ico", "assets"),
 ]
 
+detector_model = Path(
+    "models/ktp_field_detector/ktp_fields.onnx"
+)
+detector_datas = (
+    [
+        (
+            str(detector_model),
+            "models/ktp_field_detector",
+        )
+    ]
+    if detector_model.is_file()
+    else []
+)
+
 
 a = Analysis(
     ["desktop_launcher.py"],
     pathex=[],
     binaries=[],
-    datas=cv2_datas + brand_datas,
+    datas=(
+        cv2_datas
+        + brand_datas
+        + detector_datas
+    ),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
