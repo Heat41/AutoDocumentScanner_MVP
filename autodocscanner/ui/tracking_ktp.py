@@ -7,9 +7,8 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 from PIL import Image, ImageTk
 
-from autodocscanner.services.ktp_tracking import (
-    correct_tracking_input,
-    track_corrected_ktp,
+from autodocscanner.ktp.tracking import (
+    extract_tracking_data,
 )
 from autodocscanner.services.pdf_preview import (
     build_tracking_report_pdf,
@@ -1048,10 +1047,12 @@ class TrackingKtpPage(ttk.Frame):
         input_path,
     ):
         try:
-            corrected = (
-                correct_tracking_input(
-                    self.scanner,
+            corrected_image, corners = (
+                self.scanner.scan(
                     input_path,
+                    output_path=None,
+                    mode="ktp",
+                    output_mode="color",
                 )
             )
         except Exception as exc:
@@ -1065,6 +1066,11 @@ class TrackingKtpPage(ttk.Frame):
                 pass
             return
 
+        corrected = {
+            "corrected_image": corrected_image,
+            "corners": corners,
+        }
+
         try:
             self.after(
                 0,
@@ -1075,24 +1081,12 @@ class TrackingKtpPage(ttk.Frame):
             return
 
         try:
-            tracking = (
-                track_corrected_ktp(
-                    corrected[
-                        "corrected_image"
-                    ],
-                )
+            tracking = extract_tracking_data(
+                corrected_image
             )
             result = {
-                "corrected_image": (
-                    corrected[
-                        "corrected_image"
-                    ]
-                ),
-                "corners": (
-                    corrected[
-                        "corners"
-                    ]
-                ),
+                "corrected_image": corrected_image,
+                "corners": corners,
                 "tracking": tracking,
             }
         except Exception as exc:
