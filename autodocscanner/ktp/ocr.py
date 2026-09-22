@@ -190,6 +190,47 @@ def preprocess_field(
     return clahe.apply(enlarged)
 
 
+def preprocess_field_otsu(
+    image,
+):
+    _validate_image(image)
+    gray = _to_gray(image)
+
+    height, width = gray.shape[:2]
+    target_height = max(
+        48,
+        height * 3,
+    )
+    scale = (
+        target_height
+        / max(height, 1)
+    )
+    target_width = max(
+        2,
+        int(round(width * scale)),
+    )
+
+    enlarged = cv2.resize(
+        gray,
+        (target_width, target_height),
+        interpolation=cv2.INTER_CUBIC,
+    )
+    blurred = cv2.GaussianBlur(
+        enlarged,
+        (3, 3),
+        0,
+    )
+
+    _threshold, binary = cv2.threshold(
+        blurred,
+        0,
+        255,
+        cv2.THRESH_BINARY
+        + cv2.THRESH_OTSU,
+    )
+    return binary
+
+
 class TesseractBackend:
     def __init__(
         self,
@@ -630,3 +671,62 @@ def read_field_ocr(
         return fallback
 
     return primary
+
+
+def read_field_ocr_candidates(
+    image,
+    field_name,
+    backend=None,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
+    prepared_images = (
+        preprocess_field(
+            image,
+            field_name,
+            fallback=False,
+        ),
+        preprocess_field(
+            image,
+            field_name,
+            fallback=True,
+        ),
+        preprocess_field_otsu(
+            image,
+        ),
+    )
+
+    results = []
+
+    for index, prepared in enumerate(
+        prepared_images
+    ):
+        text, confidence = backend.read(
+            prepared,
+            field_name,
+        )
+        results.append(
+            OcrReadResult(
+                raw_text=str(
+                    text or ""
+                ).strip(),
+                confidence=max(
+                    0.0,
+                    min(
+                        100.0,
+                        float(
+                            confidence or 0.0
+                        ),
+                    ),
+                ),
+                used_fallback=(
+                    index > 0
+                ),
+            )
+        )
+
+    return results
