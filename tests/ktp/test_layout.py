@@ -197,6 +197,14 @@ class TestKtpLayout(unittest.TestCase):
             sorted(centers),
         )
 
+    def test_text_value_regions_are_single_row_height(self):
+        for name, box in KTP_VALUE_BOXES.items():
+            with self.subTest(name=name):
+                self.assertLessEqual(
+                    box.y2 - box.y1,
+                    0.045,
+                )
+
     def test_main_value_regions_keep_full_value_column(self):
         self.assertLessEqual(
             KTP_VALUE_BOXES["nik"].x1,
