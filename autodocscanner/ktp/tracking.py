@@ -134,6 +134,69 @@ def _build_identity(
     return identity
 
 
+def _looks_clean_text(value):
+    text = str(
+        value or ""
+    ).strip()
+
+    if not text:
+        return False
+
+    visible = [
+        char
+        for char in text
+        if not char.isspace()
+    ]
+
+    if not visible:
+        return False
+
+    alnum_count = sum(
+        1
+        for char in visible
+        if char.isalnum()
+    )
+
+    return (
+        alnum_count >= 2
+        and (
+            alnum_count
+            / max(
+                len(visible),
+                1,
+            )
+        )
+        >= 0.55
+    )
+
+
+def _candidate_is_valid(
+    field_name,
+    raw_text,
+):
+    parsed = parse_field(
+        field_name,
+        raw_text,
+    )
+
+    if not _parsed_value_complete(
+        field_name,
+        parsed,
+    ):
+        return False
+
+    if field_name in (
+        "nik",
+        "ttl",
+        "rt_rw",
+    ):
+        return True
+
+    return _looks_clean_text(
+        raw_text
+    )
+
+
 def extract_tracking_data(
     corrected_image,
     backend=None,
