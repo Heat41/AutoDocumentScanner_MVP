@@ -95,6 +95,61 @@ KTP_FIELD_BOXES = {
     ),
 }
 
+# Value-only OCR regions for the canonical corrected KTP.
+# These start to the right of the printed field labels so OCR sees
+# mostly the value instead of label + value + background noise.
+KTP_VALUE_BOXES = {
+    "provinsi": NormalizedBox(
+        0.18, 0.030, 0.78, 0.105
+    ),
+    "kabupaten_kota": NormalizedBox(
+        0.16, 0.095, 0.80, 0.165
+    ),
+    "nik": NormalizedBox(
+        0.30, 0.165, 0.73, 0.255
+    ),
+    "nama": NormalizedBox(
+        0.30, 0.255, 0.72, 0.325
+    ),
+    "ttl": NormalizedBox(
+        0.30, 0.315, 0.73, 0.385
+    ),
+    "jenis_kelamin": NormalizedBox(
+        0.30, 0.375, 0.50, 0.445
+    ),
+    "golongan_darah": NormalizedBox(
+        0.58, 0.375, 0.72, 0.445
+    ),
+    "alamat": NormalizedBox(
+        0.30, 0.435, 0.72, 0.510
+    ),
+    "rt_rw": NormalizedBox(
+        0.30, 0.495, 0.50, 0.565
+    ),
+    "kelurahan_desa": NormalizedBox(
+        0.30, 0.545, 0.72, 0.615
+    ),
+    "kecamatan": NormalizedBox(
+        0.30, 0.595, 0.72, 0.665
+    ),
+    "agama": NormalizedBox(
+        0.30, 0.650, 0.58, 0.720
+    ),
+    "status_perkawinan": NormalizedBox(
+        0.30, 0.700, 0.72, 0.770
+    ),
+    "pekerjaan": NormalizedBox(
+        0.30, 0.750, 0.72, 0.825
+    ),
+    "kewarganegaraan": NormalizedBox(
+        0.30, 0.805, 0.72, 0.875
+    ),
+    "berlaku_hingga": NormalizedBox(
+        0.30, 0.855, 0.72, 0.930
+    ),
+}
+
+
 
 def normalized_to_pixel_box(
     box,
