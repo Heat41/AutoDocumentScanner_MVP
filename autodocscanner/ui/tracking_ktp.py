@@ -10,6 +10,9 @@ from PIL import Image, ImageTk
 from autodocscanner.ktp.tracking import (
     extract_tracking_data,
 )
+from autodocscanner.ktp.roi_debug import (
+    build_roi_overlay,
+)
 from autodocscanner.services.pdf_preview import (
     build_tracking_report_pdf,
 )
@@ -107,6 +110,9 @@ class TrackingKtpPage(ttk.Frame):
         self._last_tracking = None
         self._preview_photo = None
         self._face_photo = None
+        self._corrected_preview_image = None
+        self._tracking_debug_image = None
+        self._roi_overlay_visible = False
         self._review_vars = {}
         self._review_markers = {}
 
@@ -452,14 +458,39 @@ class TrackingKtpPage(ttk.Frame):
             weight=1,
         )
 
-        ttk.Label(
+        preview_header = ttk.Frame(
             card,
+        )
+        preview_header.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+        )
+        preview_header.columnconfigure(
+            0,
+            weight=1,
+        )
+
+        ttk.Label(
+            preview_header,
             text="Preview KTP",
             style="CardLabel.TLabel",
         ).grid(
             row=0,
             column=0,
             sticky="w",
+        )
+
+        self.roi_button = ttk.Button(
+            preview_header,
+            text="Tampilkan ROI",
+            command=self.toggle_roi_overlay,
+            state="disabled",
+        )
+        self.roi_button.grid(
+            row=0,
+            column=1,
+            sticky="e",
         )
 
         self.preview_label = tk.Label(
@@ -846,6 +877,13 @@ class TrackingKtpPage(ttk.Frame):
     def _clear_result(self):
         self._last_tracking = None
         self._face_photo = None
+        self._corrected_preview_image = None
+        self._tracking_debug_image = None
+        self._roi_overlay_visible = False
+        self.roi_button.configure(
+            text="Tampilkan ROI",
+            state="disabled",
+        )
         self.preview_pdf_button.configure(
             state="disabled",
         )
@@ -960,6 +998,43 @@ class TrackingKtpPage(ttk.Frame):
         self.face_label.configure(
             image=photo,
             text="",
+        )
+
+    def toggle_roi_overlay(self):
+        if (
+            self._corrected_preview_image is None
+            or self._tracking_debug_image is None
+        ):
+            return
+
+        self._roi_overlay_visible = (
+            not self._roi_overlay_visible
+        )
+
+        if self._roi_overlay_visible:
+            preview = build_roi_overlay(
+                self._tracking_debug_image
+            )
+            self.roi_button.configure(
+                text="Sembunyikan ROI",
+            )
+            self.status_text.set(
+                "Mode Kalibrasi ROI aktif — kotak menunjukkan area yang benar-benar dibaca OCR."
+            )
+        else:
+            preview = (
+                self._corrected_preview_image
+            )
+            self.roi_button.configure(
+                text="Tampilkan ROI",
+            )
+            self.status_text.set(
+                "Mode Kalibrasi ROI nonaktif."
+            )
+
+        self._set_preview_image(
+            preview,
+            target="ktp",
         )
 
     def current_review_values(self):
@@ -1113,10 +1188,13 @@ class TrackingKtpPage(ttk.Frame):
         self,
         corrected,
     ):
-        self._set_preview_image(
+        self._corrected_preview_image = (
             corrected[
                 "corrected_image"
-            ],
+            ].copy()
+        )
+        self._set_preview_image(
+            self._corrected_preview_image,
             target="ktp",
         )
         self.status_text.set(
@@ -1200,15 +1278,34 @@ class TrackingKtpPage(ttk.Frame):
                 )
             )
 
-        self._set_preview_image(
+        self._corrected_preview_image = (
             result[
                 "corrected_image"
-            ],
+            ].copy()
+        )
+        self._tracking_debug_image = (
+            tracking.debug_tracking_image.copy()
+            if tracking.debug_tracking_image is not None
+            else None
+        )
+        self._roi_overlay_visible = False
+
+        self._set_preview_image(
+            self._corrected_preview_image,
             target="ktp",
         )
         self._set_preview_image(
             tracking.face_image,
             target="face",
+        )
+
+        self.roi_button.configure(
+            text="Tampilkan ROI",
+            state=(
+                "normal"
+                if self._tracking_debug_image is not None
+                else "disabled"
+            ),
         )
 
         self.review_summary.configure(
