@@ -85,6 +85,18 @@ class TestKtpTracking(unittest.TestCase):
             result.identity["jenis_kelamin"],
             "LAKI-LAKI",
         )
+        self.assertEqual(
+            result.identity["golongan_darah"],
+            "O",
+        )
+        self.assertEqual(
+            result.identity["status_perkawinan"],
+            "KAWIN",
+        )
+        self.assertEqual(
+            result.identity["berlaku_hingga"],
+            "SEUMUR HIDUP",
+        )
 
     def test_foto_is_not_sent_to_ocr(self):
         backend = MappingBackend()
