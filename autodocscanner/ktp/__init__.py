@@ -14,6 +14,7 @@ from autodocscanner.ktp.layout import (
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
     TesseractBackend,
+    preprocess_document,
     preprocess_field,
     read_field_ocr,
 )
@@ -21,6 +22,7 @@ from autodocscanner.ktp.parsing import (
     clean_text,
     parse_field,
     parse_gender,
+    parse_ktp_document,
     parse_nik,
     parse_rt_rw,
     parse_ttl,
@@ -47,9 +49,11 @@ __all__ = (
     "normalized_to_pixel_box",
     "parse_field",
     "parse_gender",
+    "parse_ktp_document",
     "parse_nik",
     "parse_rt_rw",
     "parse_ttl",
+    "preprocess_document",
     "preprocess_field",
     "read_field_ocr",
 )
