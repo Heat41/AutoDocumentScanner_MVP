@@ -162,3 +162,155 @@ def build_roi_overlay(
         )
 
     return overlay
+
+
+
+def build_detection_overlay(
+    image,
+    detections,
+):
+    if (
+        not isinstance(
+            image,
+            np.ndarray,
+        )
+        or image.size == 0
+    ):
+        raise ValueError(
+            "image detection overlay tidak boleh kosong."
+        )
+
+    if image.ndim == 2:
+        overlay = cv2.cvtColor(
+            image,
+            cv2.COLOR_GRAY2BGR,
+        )
+    elif (
+        image.ndim == 3
+        and image.shape[2] == 3
+    ):
+        overlay = image.copy()
+    elif (
+        image.ndim == 3
+        and image.shape[2] == 4
+    ):
+        overlay = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGRA2BGR,
+        )
+    else:
+        raise ValueError(
+            "Format image detection overlay tidak didukung."
+        )
+
+    height, width = (
+        overlay.shape[:2]
+    )
+
+    for detection in detections or []:
+        try:
+            x1, y1, x2, y2 = [
+                int(round(value))
+                for value in detection.bbox
+            ]
+            confidence = float(
+                detection.confidence
+            )
+            class_name = str(
+                detection.class_name
+            ).upper()
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ):
+            continue
+
+        x1 = max(
+            0,
+            min(width - 1, x1),
+        )
+        y1 = max(
+            0,
+            min(height - 1, y1),
+        )
+        x2 = max(
+            x1 + 1,
+            min(width, x2),
+        )
+        y2 = max(
+            y1 + 1,
+            min(height, y2),
+        )
+
+        color = (
+            30,
+            220,
+            255,
+        )
+
+        cv2.rectangle(
+            overlay,
+            (x1, y1),
+            (x2, y2),
+            color,
+            2,
+        )
+
+        label = (
+            f"{class_name} "
+            f"{confidence * 100:.0f}%"
+        )
+
+        (
+            text_width,
+            text_height,
+        ), baseline = cv2.getTextSize(
+            label,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.38,
+            1,
+        )
+
+        label_top = max(
+            0,
+            y1 - text_height - 8,
+        )
+        label_right = min(
+            width,
+            x1 + text_width + 8,
+        )
+
+        cv2.rectangle(
+            overlay,
+            (x1, label_top),
+            (
+                label_right,
+                y1,
+            ),
+            color,
+            -1,
+        )
+
+        cv2.putText(
+            overlay,
+            label,
+            (
+                x1 + 4,
+                max(
+                    text_height + 1,
+                    y1 - 4,
+                ),
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.38,
+            (
+                0,
+                0,
+                0,
+            ),
+            1,
+            cv2.LINE_AA,
+        )
+
+    return overlay
