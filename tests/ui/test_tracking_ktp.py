@@ -125,6 +125,16 @@ class TestTrackingKtpPageContract(unittest.TestCase):
             "Kosong",
         )
 
+    def test_pdf_preview_method_is_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    TrackingKtpPage,
+                    "preview_pdf",
+                )
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
