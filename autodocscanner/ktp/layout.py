@@ -174,6 +174,126 @@ KTP_VALUE_BOXES = {
 }
 
 
+def build_anchor_aligned_value_boxes(
+    image_height,
+    anchors,
+):
+    height = max(
+        int(image_height or 0),
+        1,
+    )
+    anchors = dict(
+        anchors or {}
+    )
+    result = dict(
+        KTP_VALUE_BOXES
+    )
+
+    for name, box in (
+        KTP_VALUE_BOXES.items()
+    ):
+        anchor = anchors.get(
+            name
+        )
+
+        if anchor is None:
+            continue
+
+        try:
+            _x, anchor_y, confidence = (
+                anchor
+            )
+            confidence = float(
+                confidence
+            )
+            anchor_y = float(
+                anchor_y
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            continue
+
+        if confidence < 20.0:
+            continue
+
+        center_y = max(
+            0.0,
+            min(
+                1.0,
+                anchor_y / height,
+            ),
+        )
+        half_height = min(
+            0.022,
+            max(
+                0.016,
+                (
+                    box.y2
+                    - box.y1
+                )
+                / 2.0,
+            ),
+        )
+
+        y1 = max(
+            0.0,
+            center_y - half_height,
+        )
+        y2 = min(
+            1.0,
+            center_y + half_height,
+        )
+
+        if y2 - y1 < 0.020:
+            continue
+
+        result[name] = NormalizedBox(
+            box.x1,
+            y1,
+            box.x2,
+            y2,
+        )
+
+    if (
+        "jenis_kelamin"
+        in anchors
+        and "golongan_darah"
+        not in anchors
+    ):
+        gender = result[
+            "jenis_kelamin"
+        ]
+        blood = result[
+            "golongan_darah"
+        ]
+        center_y = (
+            gender.y1
+            + gender.y2
+        ) / 2.0
+        half_height = (
+            blood.y2
+            - blood.y1
+        ) / 2.0
+        result[
+            "golongan_darah"
+        ] = NormalizedBox(
+            blood.x1,
+            max(
+                0.0,
+                center_y - half_height,
+            ),
+            blood.x2,
+            min(
+                1.0,
+                center_y + half_height,
+            ),
+        )
+
+    return result
+
+
 def normalized_to_pixel_box(
     box,
     image_width,
