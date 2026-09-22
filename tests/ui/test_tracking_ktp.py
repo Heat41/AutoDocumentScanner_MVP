@@ -145,6 +145,16 @@ class TestTrackingKtpPageContract(unittest.TestCase):
             )
         )
 
+    def test_detector_sample_export_method_is_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    TrackingKtpPage,
+                    "save_detector_sample",
+                )
+            )
+        )
+
     def test_current_review_values_method_is_exposed(self):
         self.assertTrue(
             callable(
