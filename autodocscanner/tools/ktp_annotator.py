@@ -13,6 +13,10 @@ from autodocscanner.core.scanner import (
 from autodocscanner.ktp.annotation_preprocess import (
     prepare_annotation_image,
 )
+from autodocscanner.ktp.annotation_template import (
+    load_annotation_seed,
+    save_annotation_template_if_missing,
+)
 from autodocscanner.ktp.annotation import (
     Annotation,
     read_yolo_annotations,
@@ -40,6 +44,14 @@ LABEL_DIR = (
 CANONICAL_DIR = (
     DATASET_ROOT
     / "canonical"
+)
+TEMPLATE_DIR = (
+    DATASET_ROOT
+    / "templates"
+)
+TEMPLATE_LABEL_PATH = (
+    TEMPLATE_DIR
+    / "default.txt"
 )
 
 
@@ -454,18 +466,37 @@ class KtpFieldAnnotator(tk.Tk):
             label_candidates[0],
         )
 
-        self.annotations = (
-            read_yolo_annotations(
-                label_path,
-                image_width=image.width,
-                image_height=image.height,
-            )
+        seed = load_annotation_seed(
+            own_label_path=label_path,
+            template_label_path=(
+                TEMPLATE_LABEL_PATH
+            ),
+            image_width=image.width,
+            image_height=image.height,
         )
+        self.annotations = list(
+            seed.annotations
+        )
+
+        if seed.source == "image":
+            source_text = (
+                "anotasi file ini dimuat"
+            )
+        elif seed.source == "template":
+            source_text = (
+                "template awal diterapkan — "
+                "sesuaikan box yang meleset"
+            )
+        else:
+            source_text = (
+                "belum ada template"
+            )
 
         self.status_text.set(
             (
                 f"Canonical aktif: {self.image_path.name} — "
-                f"{len(self.annotations)} box."
+                f"{len(self.annotations)} box; "
+                f"{source_text}."
             )
         )
         self._refresh_list()
@@ -947,6 +978,15 @@ class KtpFieldAnnotator(tk.Tk):
                 image_width=self.image.width,
                 image_height=self.image.height,
             )
+
+            template_created = (
+                save_annotation_template_if_missing(
+                    TEMPLATE_LABEL_PATH,
+                    self.annotations,
+                    image_width=self.image.width,
+                    image_height=self.image.height,
+                )
+            )
         except Exception as exc:
             messagebox.showerror(
                 "Simpan anotasi gagal",
@@ -954,10 +994,17 @@ class KtpFieldAnnotator(tk.Tk):
             )
             return
 
+        template_note = (
+            " | Template awal dibuat"
+            if template_created
+            else ""
+        )
+
         self.status_text.set(
             (
                 f"Tersimpan: {len(self.annotations)} box → "
                 f"{label_target}"
+                f"{template_note}"
             )
         )
         messagebox.showinfo(
@@ -965,6 +1012,11 @@ class KtpFieldAnnotator(tk.Tk):
             (
                 f"Image: {image_target}\n"
                 f"Label: {label_target}"
+                + (
+                    "\nTemplate awal detector dibuat otomatis."
+                    if template_created
+                    else ""
+                )
             ),
         )
 
