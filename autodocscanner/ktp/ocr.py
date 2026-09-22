@@ -63,6 +63,54 @@ def _to_gray(image):
     )
 
 
+def preprocess_document(
+    image,
+    fallback=False,
+):
+    _validate_image(image)
+    gray = _to_gray(image)
+
+    height, width = gray.shape[:2]
+    target_width = max(
+        1600,
+        width * 2,
+    )
+    scale = (
+        target_width
+        / max(width, 1)
+    )
+    target_height = max(
+        2,
+        int(round(height * scale)),
+    )
+
+    enlarged = cv2.resize(
+        gray,
+        (target_width, target_height),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+    if fallback:
+        return cv2.adaptiveThreshold(
+            cv2.GaussianBlur(
+                enlarged,
+                (3, 3),
+                0,
+            ),
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            11,
+        )
+
+    clahe = cv2.createCLAHE(
+        clipLimit=1.8,
+        tileGridSize=(8, 8),
+    )
+    return clahe.apply(enlarged)
+
+
 def preprocess_field(
     image,
     field_name,
@@ -176,6 +224,115 @@ class TesseractBackend:
             )
 
         return " ".join(parts)
+
+    def read_document(
+        self,
+        image,
+    ):
+        pytesseract = self._module()
+        self._configure_executable(
+            pytesseract
+        )
+
+        prepared = preprocess_document(
+            image,
+            fallback=False,
+        )
+
+        try:
+            data = (
+                pytesseract.image_to_data(
+                    prepared,
+                    lang=self.language,
+                    config="--psm 6",
+                    output_type=(
+                        pytesseract.Output.DICT
+                    ),
+                )
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Tesseract OCR dokumen gagal dijalankan."
+            ) from exc
+
+        lines = {}
+        confidences = []
+
+        count = len(
+            data.get(
+                "text",
+                [],
+            )
+        )
+
+        for index in range(count):
+            value = str(
+                data["text"][
+                    index
+                ]
+                or ""
+            ).strip()
+
+            if not value:
+                continue
+
+            key = (
+                data.get(
+                    "block_num",
+                    [0] * count,
+                )[index],
+                data.get(
+                    "par_num",
+                    [0] * count,
+                )[index],
+                data.get(
+                    "line_num",
+                    [0] * count,
+                )[index],
+            )
+
+            lines.setdefault(
+                key,
+                [],
+            ).append(
+                value
+            )
+
+            try:
+                confidence = float(
+                    data.get(
+                        "conf",
+                        [-1] * count,
+                    )[index]
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                confidence = -1
+
+            if confidence >= 0:
+                confidences.append(
+                    confidence
+                )
+
+        text = "\n".join(
+            " ".join(words)
+            for words in lines.values()
+            if words
+        ).strip()
+
+        confidence = (
+            sum(confidences)
+            / len(confidences)
+            if confidences
+            else 0.0
+        )
+
+        return (
+            text,
+            float(confidence),
+        )
 
     def read(
         self,
