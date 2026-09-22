@@ -1,0 +1,17 @@
+provinsi
+kabupaten_kota
+nik
+nama
+ttl
+jenis_kelamin
+golongan_darah
+alamat
+rt_rw
+kelurahan_desa
+kecamatan
+agama
+status_perkawinan
+pekerjaan
+kewarganegaraan
+berlaku_hingga
+foto
