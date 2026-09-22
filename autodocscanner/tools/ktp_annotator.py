@@ -14,6 +14,7 @@ from autodocscanner.ktp.annotation_preprocess import (
     prepare_annotation_image,
 )
 from autodocscanner.ktp.annotation_template import (
+    bootstrap_annotation_template,
     load_annotation_seed,
     save_annotation_template_if_missing,
 )
@@ -464,6 +465,11 @@ class KtpFieldAnnotator(tk.Tk):
                 if candidate.is_file()
             ),
             label_candidates[0],
+        )
+
+        bootstrap_annotation_template(
+            TEMPLATE_LABEL_PATH,
+            LABEL_DIR,
         )
 
         seed = load_annotation_seed(
