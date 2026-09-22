@@ -56,6 +56,18 @@ class TestKtpParsing(unittest.TestCase):
             "1234567890123456",
         )
 
+    def test_generic_field_preserves_value_that_starts_with_field_word(self):
+        self.assertEqual(
+            parse_field("nama", "NAMA CONTOH"),
+            "NAMA CONTOH",
+        )
+
+    def test_generic_field_strips_explicit_label_separator(self):
+        self.assertEqual(
+            parse_field("nama", "NAMA: CONTOH"),
+            "CONTOH",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
