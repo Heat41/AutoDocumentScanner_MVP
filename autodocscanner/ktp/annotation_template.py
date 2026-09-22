@@ -109,14 +109,31 @@ def bootstrap_annotation_template(
     if not label_dir.is_dir():
         return False
 
+    all_candidates = [
+        path
+        for path in label_dir.glob(
+            "*.txt"
+        )
+        if path.is_file()
+        and path.stat().st_size > 0
+    ]
+
+    canonical_candidates = [
+        path
+        for path in all_candidates
+        if path.stem.endswith(
+            "_canonical"
+        )
+        and not path.stem.endswith(
+            "_canonical_canonical"
+        )
+    ]
+
     candidates = sorted(
         (
-            path
-            for path in label_dir.glob(
-                "*.txt"
-            )
-            if path.is_file()
-            and path.stat().st_size > 0
+            canonical_candidates
+            if canonical_candidates
+            else all_candidates
         ),
         key=lambda path: (
             path.stat().st_mtime,
