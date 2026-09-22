@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -8,6 +9,9 @@ from PIL import Image, ImageTk
 
 from autodocscanner.services.ktp_tracking import (
     process_tracking_input,
+)
+from autodocscanner.services.pdf_preview import (
+    build_ktp_preview_pdf,
 )
 
 
@@ -361,11 +365,24 @@ class TrackingKtpPage(ttk.Frame):
             pady=(8, 0),
         )
 
+        self.preview_pdf_button = ttk.Button(
+            card,
+            text="Preview PDF",
+            command=self.preview_pdf,
+            state="disabled",
+        )
+        self.preview_pdf_button.grid(
+            row=4,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
         ttk.Separator(
             card,
             orient="horizontal",
         ).grid(
-            row=4,
+            row=5,
             column=0,
             sticky="ew",
             pady=14,
@@ -383,7 +400,7 @@ class TrackingKtpPage(ttk.Frame):
             wraplength=180,
             justify="left",
         ).grid(
-            row=5,
+            row=6,
             column=0,
             sticky="nw",
         )
@@ -398,14 +415,14 @@ class TrackingKtpPage(ttk.Frame):
             wraplength=180,
             justify="left",
         ).grid(
-            row=6,
+            row=7,
             column=0,
             sticky="sw",
             pady=(18, 0),
         )
 
         card.rowconfigure(
-            6,
+            7,
             weight=1,
         )
 
@@ -814,6 +831,9 @@ class TrackingKtpPage(ttk.Frame):
         self.process_button.configure(
             state="normal",
         )
+        self.preview_pdf_button.configure(
+            state="normal",
+        )
 
         self._clear_result()
         self._show_source_preview(
@@ -823,6 +843,9 @@ class TrackingKtpPage(ttk.Frame):
     def _clear_result(self):
         self._last_tracking = None
         self._face_photo = None
+        self.preview_pdf_button.configure(
+            state="disabled",
+        )
 
         self.face_label.configure(
             image="",
@@ -935,6 +958,41 @@ class TrackingKtpPage(ttk.Frame):
             image=photo,
             text="",
         )
+
+    def preview_pdf(self):
+        tracking = self._last_tracking
+
+        if tracking is None:
+            return
+
+        try:
+            stem = (
+                self.input_path.stem
+                if self.input_path is not None
+                else "ktp_preview"
+            )
+            pdf_path = build_ktp_preview_pdf(
+                tracking.corrected_image,
+                stem=f"{stem}_preview",
+            )
+
+            if os.name != "nt":
+                raise RuntimeError(
+                    "Preview PDF otomatis saat ini hanya didukung di Windows."
+                )
+
+            os.startfile(
+                str(pdf_path)
+            )
+            self.status_text.set(
+                f"Preview PDF dibuka: {pdf_path.name}"
+            )
+
+        except Exception as exc:
+            messagebox.showerror(
+                "Preview PDF gagal",
+                str(exc),
+            )
 
     def process_selected(self):
         if (
