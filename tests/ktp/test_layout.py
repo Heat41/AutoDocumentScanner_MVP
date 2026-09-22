@@ -197,9 +197,13 @@ class TestKtpLayout(unittest.TestCase):
             sorted(centers),
         )
 
-    def test_main_value_regions_start_to_right_of_labels(self):
+    def test_main_value_regions_keep_full_value_column(self):
+        self.assertLessEqual(
+            KTP_VALUE_BOXES["nik"].x1,
+            0.23,
+        )
+
         for name in (
-            "nik",
             "nama",
             "ttl",
             "alamat",
@@ -211,7 +215,11 @@ class TestKtpLayout(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertGreaterEqual(
                     KTP_VALUE_BOXES[name].x1,
-                    0.35,
+                    0.23,
+                )
+                self.assertLessEqual(
+                    KTP_VALUE_BOXES[name].x1,
+                    0.26,
                 )
 
 
