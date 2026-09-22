@@ -1,10 +1,15 @@
 from pathlib import Path
 import shutil
 import tkinter as tk
+
+import cv2
 from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
+from autodocscanner.core.scanner import (
+    AutoDocumentScanner,
+)
 from autodocscanner.ktp.annotation import (
     Annotation,
     read_yolo_annotations,
@@ -12,6 +17,9 @@ from autodocscanner.ktp.annotation import (
 )
 from autodocscanner.ktp.field_detection import (
     FIELD_CLASSES,
+)
+from autodocscanner.ktp.layout import (
+    normalize_ktp_for_tracking,
 )
 
 
@@ -29,13 +37,21 @@ LABEL_DIR = (
     / "labels"
     / "train"
 )
+CANONICAL_DIR = (
+    DATASET_ROOT
+    / "canonical"
+)
 
 
 class KtpFieldAnnotator(tk.Tk):
     CANVAS_WIDTH = 900
     CANVAS_HEIGHT = 600
 
-    def __init__(self):
+    def __init__(
+        self,
+        initial_path=None,
+        scanner=None,
+    ):
         super().__init__()
         self.title(
             "KTP Field Detector — Annotation Tool"
@@ -57,17 +73,34 @@ class KtpFieldAnnotator(tk.Tk):
         self.annotations = []
         self.drag_start = None
         self.preview_rect = None
+        self.scanner = (
+            scanner
+            if scanner is not None
+            else AutoDocumentScanner()
+        )
+        self.initial_path = (
+            Path(initial_path)
+            if initial_path
+            else None
+        )
 
         self.selected_class = tk.StringVar(
             value=FIELD_CLASSES[0]
         )
         self.status_text = tk.StringVar(
             value=(
-                "Buka corrected/canonical KTP lalu gambar bounding box pada VALUE field."
+                "Buka foto mentah atau canonical KTP. Foto mentah akan Auto Perspective otomatis sebelum anotasi."
             )
         )
 
         self._build_ui()
+
+        if self.initial_path is not None:
+            self.after(
+                50,
+                self._open_path,
+                self.initial_path,
+            )
 
     def _build_ui(self):
         root = ttk.Frame(
@@ -89,7 +122,7 @@ class KtpFieldAnnotator(tk.Tk):
 
         ttk.Button(
             toolbar,
-            text="Buka KTP",
+            text="Buka Foto / KTP",
             command=self.open_image,
         ).pack(
             side="left"
@@ -234,7 +267,7 @@ class KtpFieldAnnotator(tk.Tk):
 
     def open_image(self):
         selected = filedialog.askopenfilename(
-            title="Pilih corrected/canonical KTP",
+            title="Pilih foto mentah atau corrected KTP",
             filetypes=[
                 (
                     "Gambar",
@@ -250,21 +283,85 @@ class KtpFieldAnnotator(tk.Tk):
         if not selected:
             return
 
-        try:
-            image = Image.open(
-                selected
-            ).convert(
-                "RGB"
+        self._open_path(
+            Path(selected)
+        )
+
+    def _canonical_target(
+        self,
+        source_path,
+    ):
+        CANONICAL_DIR.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return (
+            CANONICAL_DIR
+            / (
+                source_path.stem
+                + "_canonical.png"
             )
-        except Exception as exc:
-            messagebox.showerror(
-                "Gagal membuka gambar",
-                str(exc),
+        )
+
+    def _prepare_canonical(
+        self,
+        source_path,
+    ):
+        source_path = Path(
+            source_path
+        )
+
+        if not source_path.is_file():
+            raise FileNotFoundError(
+                f"File tidak ditemukan: {source_path}"
             )
-            return
+
+        corrected, _corners = (
+            self.scanner.scan(
+                source_path,
+                output_path=None,
+                mode="ktp",
+                output_mode="color",
+            )
+        )
+
+        canonical = (
+            normalize_ktp_for_tracking(
+                corrected
+            )
+        )
+
+        target = (
+            self._canonical_target(
+                source_path
+            )
+        )
+
+        ok = cv2.imwrite(
+            str(target),
+            canonical,
+        )
+
+        if not ok:
+            raise RuntimeError(
+                "OpenCV gagal menyimpan canonical KTP untuk anotasi."
+            )
+
+        return target
+
+    def _load_canonical_image(
+        self,
+        canonical_path,
+    ):
+        image = Image.open(
+            canonical_path
+        ).convert(
+            "RGB"
+        )
 
         self.image_path = Path(
-            selected
+            canonical_path
         )
         self.image = image
 
@@ -284,10 +381,46 @@ class KtpFieldAnnotator(tk.Tk):
         )
 
         self.status_text.set(
-            f"Aktif: {self.image_path.name} — {len(self.annotations)} box."
+            (
+                f"Canonical aktif: {self.image_path.name} — "
+                f"{len(self.annotations)} box."
+            )
         )
         self._refresh_list()
         self._draw()
+
+    def _open_path(
+        self,
+        source_path,
+    ):
+        source_path = Path(
+            source_path
+        )
+
+        try:
+            self.status_text.set(
+                "Menjalankan Auto Perspective KTP..."
+            )
+            self.update_idletasks()
+
+            canonical_path = (
+                self._prepare_canonical(
+                    source_path
+                )
+            )
+
+            self._load_canonical_image(
+                canonical_path
+            )
+
+        except Exception as exc:
+            messagebox.showerror(
+                "Persiapan KTP gagal",
+                str(exc),
+            )
+            self.status_text.set(
+                "KTP gagal dipersiapkan untuk anotasi."
+            )
 
     def _canvas_resized(
         self,
@@ -754,8 +887,12 @@ class KtpFieldAnnotator(tk.Tk):
         )
 
 
-def main():
-    app = KtpFieldAnnotator()
+def main(
+    initial_path=None,
+):
+    app = KtpFieldAnnotator(
+        initial_path=initial_path
+    )
     app.mainloop()
 
 
