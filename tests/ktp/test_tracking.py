@@ -217,7 +217,7 @@ class TestKtpTracking(unittest.TestCase):
             )
         )
 
-    def test_full_document_candidate_can_replace_bad_bbox_candidate(self):
+    def test_full_document_candidate_only_replaces_invalid_bbox_candidate(self):
         class HybridBackend:
             def read_document(
                 self,
@@ -267,10 +267,10 @@ class TestKtpTracking(unittest.TestCase):
         )
         self.assertEqual(
             result.identity["alamat"],
-            "JALAN DOKUMEN",
+            "JALAN CONTOH 1",
         )
 
-    def test_label_anchor_candidate_has_priority(self):
+    def test_label_anchor_does_not_override_valid_bbox_candidate(self):
         class AnchorBackend:
             def read_layout(
                 self,
@@ -335,6 +335,84 @@ class TestKtpTracking(unittest.TestCase):
         result = extract_tracking_data(
             self.image,
             backend=AnchorBackend(),
+        )
+
+        self.assertEqual(
+            result.identity["nama"],
+            "NAMA CONTOH",
+        )
+
+
+    def test_label_anchor_is_used_when_bbox_candidate_is_invalid(self):
+        class AnchorFallbackBackend:
+            def read_layout(
+                self,
+                image,
+            ):
+                return [
+                    OcrWord(
+                        text="Nama",
+                        confidence=92.0,
+                        left=10,
+                        top=30,
+                        width=45,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text=":",
+                        confidence=90.0,
+                        left=60,
+                        top=30,
+                        width=10,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text="NAMA",
+                        confidence=94.0,
+                        left=80,
+                        top=30,
+                        width=50,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text="ANCHOR",
+                        confidence=94.0,
+                        left=140,
+                        top=30,
+                        width=70,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                ]
+
+            def read(
+                self,
+                image,
+                field_name,
+            ):
+                if field_name == "nama":
+                    return (
+                        "%%%___",
+                        88.0,
+                    )
+                return RESPONSES[
+                    field_name
+                ]
+
+        result = extract_tracking_data(
+            self.image,
+            backend=AnchorFallbackBackend(),
         )
 
         self.assertEqual(
