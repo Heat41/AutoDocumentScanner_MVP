@@ -208,6 +208,32 @@ def extract_tracking_data(
         corrected_image
     )
 
+    document_candidates = {}
+    document_confidence = 0.0
+
+    if (
+        backend is not None
+        and hasattr(
+            backend,
+            "read_document",
+        )
+    ):
+        try:
+            (
+                document_text,
+                document_confidence,
+            ) = backend.read_document(
+                corrected_image
+            )
+            document_candidates = (
+                parse_ktp_document(
+                    document_text
+                )
+            )
+        except Exception:
+            document_candidates = {}
+            document_confidence = 0.0
+
     fields = {}
     review_fields = []
 
