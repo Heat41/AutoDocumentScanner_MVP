@@ -124,52 +124,52 @@ KTP_FIELD_BOXES = {
 # mostly the value instead of label + value + background noise.
 KTP_VALUE_BOXES = {
     "provinsi": NormalizedBox(
-        0.18, 0.025, 0.82, 0.075
+        0.18, 0.030, 0.82, 0.068
     ),
     "kabupaten_kota": NormalizedBox(
-        0.18, 0.075, 0.82, 0.125
+        0.18, 0.078, 0.82, 0.118
     ),
     "nik": NormalizedBox(
-        0.220, 0.150, 0.76, 0.220
+        0.220, 0.162, 0.76, 0.206
     ),
     "nama": NormalizedBox(
-        0.245, 0.235, 0.74, 0.305
+        0.245, 0.246, 0.74, 0.286
     ),
     "ttl": NormalizedBox(
-        0.245, 0.285, 0.74, 0.355
+        0.245, 0.296, 0.74, 0.336
     ),
     "jenis_kelamin": NormalizedBox(
-        0.245, 0.335, 0.54, 0.405
+        0.245, 0.346, 0.54, 0.386
     ),
     "golongan_darah": NormalizedBox(
-        0.585, 0.345, 0.73, 0.395
+        0.585, 0.346, 0.73, 0.386
     ),
     "alamat": NormalizedBox(
-        0.245, 0.385, 0.74, 0.455
+        0.245, 0.396, 0.74, 0.436
     ),
     "rt_rw": NormalizedBox(
-        0.245, 0.435, 0.54, 0.505
+        0.245, 0.446, 0.54, 0.486
     ),
     "kelurahan_desa": NormalizedBox(
-        0.245, 0.475, 0.74, 0.545
+        0.245, 0.486, 0.74, 0.526
     ),
     "kecamatan": NormalizedBox(
-        0.245, 0.515, 0.74, 0.585
+        0.245, 0.526, 0.74, 0.566
     ),
     "agama": NormalizedBox(
-        0.245, 0.555, 0.62, 0.625
+        0.245, 0.566, 0.62, 0.606
     ),
     "status_perkawinan": NormalizedBox(
-        0.245, 0.595, 0.74, 0.665
+        0.245, 0.606, 0.74, 0.646
     ),
     "pekerjaan": NormalizedBox(
-        0.245, 0.635, 0.76, 0.710
+        0.245, 0.646, 0.76, 0.686
     ),
     "kewarganegaraan": NormalizedBox(
-        0.245, 0.680, 0.62, 0.750
+        0.245, 0.686, 0.62, 0.726
     ),
     "berlaku_hingga": NormalizedBox(
-        0.245, 0.720, 0.70, 0.795
+        0.245, 0.726, 0.70, 0.766
     ),
 }
 
