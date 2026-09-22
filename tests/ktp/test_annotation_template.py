@@ -6,6 +6,7 @@ from autodocscanner.ktp.annotation import (
     Annotation,
 )
 from autodocscanner.ktp.annotation_template import (
+    bootstrap_annotation_template,
     load_annotation_seed,
     save_annotation_template_if_missing,
 )
@@ -128,6 +129,36 @@ class TestAnnotationTemplate(unittest.TestCase):
             self.assertEqual(
                 result.annotations[0].class_name,
                 "nama",
+            )
+
+    def test_existing_saved_label_bootstraps_missing_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labels = root / "labels"
+            labels.mkdir()
+            saved = labels / "first.txt"
+            saved.write_text(
+                "3 0.500000 0.500000 0.200000 0.100000\n",
+                encoding="utf-8",
+            )
+            template = root / "templates" / "default.txt"
+
+            created = bootstrap_annotation_template(
+                template,
+                labels,
+            )
+
+            self.assertTrue(created)
+            self.assertTrue(
+                template.is_file()
+            )
+            self.assertEqual(
+                template.read_text(
+                    encoding="utf-8"
+                ),
+                saved.read_text(
+                    encoding="utf-8"
+                ),
             )
 
     def test_template_seeds_unlabeled_image(self):
