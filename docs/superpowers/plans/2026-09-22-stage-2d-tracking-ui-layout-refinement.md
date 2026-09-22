@@ -63,3 +63,24 @@
 - Improve corrected KTP and face preview sizing.
 - Keep worker/process behavior unchanged.
 - Full regression and UI smoke.
+
+
+## Implementation checkpoint — 2026-09-22
+
+Completed on `main`:
+- Primary Tracking page changed to responsive grid layout.
+- Column proportions locked to compact controls / medium preview / wide review.
+- Review form grouped into Identitas Utama, Alamat, and Data Lainnya.
+- Normal fields no longer display repetitive OK markers.
+- Review markers use `Periksa`; empty flagged values use `Kosong`.
+- Corrected KTP preview enlarged.
+- Face preview presented as a dedicated visual section.
+- Existing OCR/scanner/tracking behavior preserved.
+
+Audit:
+- Only Tracking UI, its tests, and this plan changed.
+- Scanner, OCR, parsing, tracking service, and storage files were not modified.
+
+Pending:
+- Full regression.
+- Windows UI smoke on normal and resized/maximized windows.
