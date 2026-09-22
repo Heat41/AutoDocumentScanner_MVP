@@ -135,6 +135,16 @@ class TestTrackingKtpPageContract(unittest.TestCase):
             )
         )
 
+    def test_roi_calibration_toggle_is_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    TrackingKtpPage,
+                    "toggle_roi_overlay",
+                )
+            )
+        )
+
     def test_current_review_values_method_is_exposed(self):
         self.assertTrue(
             callable(
