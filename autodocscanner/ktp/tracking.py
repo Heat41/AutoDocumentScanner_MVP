@@ -11,6 +11,7 @@ from autodocscanner.ktp.extraction import (
 from autodocscanner.ktp.layout import (
     KTP_VALUE_BOXES,
     crop_normalized,
+    normalize_ktp_for_tracking,
 )
 from autodocscanner.ktp.ocr import (
     TesseractBackend,
@@ -333,8 +334,14 @@ def extract_tracking_data(
         CONFIDENCE_THRESHOLD
     ),
 ):
+    tracking_image = (
+        normalize_ktp_for_tracking(
+            corrected_image
+        )
+    )
+
     extraction = extract_ktp_regions(
-        corrected_image
+        tracking_image
     )
 
     backend = (
@@ -355,7 +362,7 @@ def extract_tracking_data(
             anchor_candidates = (
                 extract_anchor_candidates(
                     backend.read_layout(
-                        corrected_image
+                        tracking_image
                     )
                 )
             )
@@ -371,7 +378,7 @@ def extract_tracking_data(
                 document_text,
                 document_confidence,
             ) = backend.read_document(
-                corrected_image
+                tracking_image
             )
             document_candidates = (
                 parse_ktp_document(
@@ -392,7 +399,7 @@ def extract_tracking_data(
             continue
 
         value_image = crop_normalized(
-            corrected_image,
+            tracking_image,
             KTP_VALUE_BOXES[
                 name
             ],
@@ -544,7 +551,7 @@ def extract_tracking_data(
 
     return KtpTrackingResult(
         corrected_image=(
-            extraction.source_image.copy()
+            corrected_image.copy()
         ),
         face_image=(
             extraction.face_image.copy()
