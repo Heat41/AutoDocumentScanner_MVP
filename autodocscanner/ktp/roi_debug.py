@@ -103,42 +103,59 @@ def build_roi_overlay(
             2,
         )
 
-        label = (
-            f"{index}. "
-            f"{ROI_LABELS.get(name, name.upper())}"
+        label = str(index)
+        label_x = max(
+            3,
+            x1 - 22,
+        )
+        label_y = min(
+            height - 4,
+            max(
+                14,
+                int(
+                    round(
+                        (y1 + y2) / 2
+                    )
+                )
+                + 5,
+            ),
         )
 
-        text_y = max(
-            14,
-            y1 - 4,
-        )
-
-        cv2.putText(
+        cv2.circle(
             overlay,
-            label,
             (
-                x1,
-                text_y,
+                label_x + 6,
+                label_y - 5,
             ),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.38,
+            8,
             (
                 0,
                 0,
                 0,
             ),
-            2,
+            -1,
+            cv2.LINE_AA,
+        )
+        cv2.circle(
+            overlay,
+            (
+                label_x + 6,
+                label_y - 5,
+            ),
+            7,
+            color,
+            1,
             cv2.LINE_AA,
         )
         cv2.putText(
             overlay,
             label,
             (
-                x1,
-                text_y,
+                label_x + 2,
+                label_y - 1,
             ),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.38,
+            0.34,
             color,
             1,
             cv2.LINE_AA,
