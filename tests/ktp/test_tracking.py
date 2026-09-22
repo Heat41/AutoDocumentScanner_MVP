@@ -313,6 +313,56 @@ class TestKtpTracking(unittest.TestCase):
             "NAMA ANCHOR",
         )
 
+    def test_symbol_heavy_garbage_is_rejected_instead_of_autofilled(self):
+        responses = dict(RESPONSES)
+        responses["alamat"] = (
+            "Q__ / A GE ET AE DE ST EE ____",
+            88.0,
+        )
+
+        result = extract_tracking_data(
+            self.image,
+            backend=MappingBackend(
+                responses
+            ),
+        )
+
+        self.assertEqual(
+            result.identity["alamat"],
+            "",
+        )
+        self.assertIn(
+            "alamat",
+            result.review_fields,
+        )
+
+    def test_invalid_enum_like_values_are_rejected(self):
+        responses = dict(RESPONSES)
+        responses["agama"] = (
+            "E;; %___",
+            91.0,
+        )
+        responses["kewarganegaraan"] = (
+            "R Y | N B SE",
+            90.0,
+        )
+
+        result = extract_tracking_data(
+            self.image,
+            backend=MappingBackend(
+                responses
+            ),
+        )
+
+        self.assertEqual(
+            result.identity["agama"],
+            "",
+        )
+        self.assertEqual(
+            result.identity["kewarganegaraan"],
+            "",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
