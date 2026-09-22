@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from math import ceil, floor
 
+import cv2
 import numpy as np
 
 
@@ -36,6 +37,29 @@ class NormalizedBox:
                 "Normalized box harus "
                 "memiliki area positif."
             )
+
+
+KTP_CANONICAL_WIDTH = 856
+KTP_CANONICAL_HEIGHT = 540
+
+
+def normalize_ktp_for_tracking(image):
+    if (
+        not isinstance(image, np.ndarray)
+        or image.size == 0
+    ):
+        raise ValueError(
+            "image KTP harus berupa numpy array yang tidak kosong."
+        )
+
+    return cv2.resize(
+        image,
+        (
+            KTP_CANONICAL_WIDTH,
+            KTP_CANONICAL_HEIGHT,
+        ),
+        interpolation=cv2.INTER_CUBIC,
+    )
 
 
 # Baseline layout for the canonical, landscape KTP image produced by
@@ -100,55 +124,54 @@ KTP_FIELD_BOXES = {
 # mostly the value instead of label + value + background noise.
 KTP_VALUE_BOXES = {
     "provinsi": NormalizedBox(
-        0.18, 0.030, 0.78, 0.105
+        0.18, 0.030, 0.80, 0.095
     ),
     "kabupaten_kota": NormalizedBox(
-        0.16, 0.095, 0.80, 0.165
+        0.18, 0.085, 0.80, 0.150
     ),
     "nik": NormalizedBox(
-        0.30, 0.165, 0.73, 0.255
+        0.245, 0.155, 0.73, 0.225
     ),
     "nama": NormalizedBox(
-        0.30, 0.255, 0.72, 0.325
+        0.245, 0.245, 0.72, 0.310
     ),
     "ttl": NormalizedBox(
-        0.30, 0.315, 0.73, 0.385
+        0.245, 0.305, 0.73, 0.370
     ),
     "jenis_kelamin": NormalizedBox(
-        0.30, 0.375, 0.50, 0.445
+        0.245, 0.365, 0.50, 0.430
     ),
     "golongan_darah": NormalizedBox(
-        0.58, 0.375, 0.72, 0.445
+        0.550, 0.365, 0.73, 0.430
     ),
     "alamat": NormalizedBox(
-        0.30, 0.435, 0.72, 0.510
+        0.245, 0.425, 0.73, 0.495
     ),
     "rt_rw": NormalizedBox(
-        0.30, 0.495, 0.50, 0.565
+        0.245, 0.485, 0.50, 0.550
     ),
     "kelurahan_desa": NormalizedBox(
-        0.30, 0.545, 0.72, 0.615
+        0.245, 0.535, 0.73, 0.600
     ),
     "kecamatan": NormalizedBox(
-        0.30, 0.595, 0.72, 0.665
+        0.245, 0.585, 0.73, 0.650
     ),
     "agama": NormalizedBox(
-        0.30, 0.650, 0.58, 0.720
+        0.245, 0.635, 0.58, 0.700
     ),
     "status_perkawinan": NormalizedBox(
-        0.30, 0.700, 0.72, 0.770
+        0.245, 0.685, 0.73, 0.750
     ),
     "pekerjaan": NormalizedBox(
-        0.30, 0.750, 0.72, 0.825
+        0.245, 0.735, 0.73, 0.805
     ),
     "kewarganegaraan": NormalizedBox(
-        0.30, 0.805, 0.72, 0.875
+        0.245, 0.785, 0.62, 0.855
     ),
     "berlaku_hingga": NormalizedBox(
-        0.30, 0.855, 0.72, 0.930
+        0.245, 0.835, 0.68, 0.910
     ),
 }
-
 
 
 def normalized_to_pixel_box(
