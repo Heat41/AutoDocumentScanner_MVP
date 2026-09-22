@@ -973,8 +973,11 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         if target == "ktp":
+            # Match the Auto Koreksi KTP preview contract: keep the
+            # entire card visible inside the preview panel without
+            # clipping/zooming when the Tracking column is narrower.
             pil_image.thumbnail(
-                (620, 380),
+                (390, 430),
                 Image.Resampling.LANCZOS,
             )
             photo = ImageTk.PhotoImage(
