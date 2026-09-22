@@ -19,25 +19,43 @@ class TrackingKtpPage(ttk.Frame):
         "Review Tracking",
     )
 
-    REVIEW_FIELDS = (
-        "nik",
-        "nama",
-        "tempat_lahir",
-        "tanggal_lahir",
-        "jenis_kelamin",
-        "golongan_darah",
-        "alamat",
-        "rt",
-        "rw",
-        "kelurahan_desa",
-        "kecamatan",
-        "kabupaten_kota",
-        "provinsi",
-        "agama",
-        "status_perkawinan",
-        "pekerjaan",
-        "kewarganegaraan",
-        "berlaku_hingga",
+    COLUMN_WEIGHTS = (
+        1,
+        3,
+        4,
+    )
+
+    REVIEW_GROUPS = {
+        "Identitas Utama": (
+            "nik",
+            "nama",
+            "tempat_lahir",
+            "tanggal_lahir",
+            "jenis_kelamin",
+            "golongan_darah",
+        ),
+        "Alamat": (
+            "alamat",
+            "rt",
+            "rw",
+            "kelurahan_desa",
+            "kecamatan",
+            "kabupaten_kota",
+            "provinsi",
+        ),
+        "Data Lainnya": (
+            "agama",
+            "status_perkawinan",
+            "pekerjaan",
+            "kewarganegaraan",
+            "berlaku_hingga",
+        ),
+    }
+
+    REVIEW_FIELDS = tuple(
+        field_name
+        for fields in REVIEW_GROUPS.values()
+        for field_name in fields
     )
 
     FIELD_LABELS = {
@@ -78,6 +96,7 @@ class TrackingKtpPage(ttk.Frame):
             parent,
             padding=18,
         )
+
         self.scanner = scanner
         self.input_path = None
         self._worker_running = False
@@ -138,13 +157,30 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         if count == 0:
-            return (
-                "Hasil OCR siap direview."
-            )
+            return "Hasil OCR siap direview."
 
         return (
             f"{count} field perlu diperiksa."
         )
+
+    @staticmethod
+    def field_status_text(
+        value,
+        needs_review,
+    ):
+        if not str(
+            value or ""
+        ).strip():
+            return (
+                "Kosong"
+                if needs_review
+                else ""
+            )
+
+        if needs_review:
+            return "Periksa"
+
+        return ""
 
     @staticmethod
     def _expanded_review_fields(
@@ -176,9 +212,20 @@ class TrackingKtpPage(ttk.Frame):
         return result
 
     def _build_ui(self):
+        self.columnconfigure(
+            0,
+            weight=1,
+        )
+        self.rowconfigure(
+            1,
+            weight=1,
+        )
+
         header = ttk.Frame(self)
-        header.pack(
-            fill="x",
+        header.grid(
+            row=0,
+            column=0,
+            sticky="ew",
             pady=(0, 14),
         )
 
@@ -201,59 +248,91 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         content = ttk.Frame(self)
-        content.pack(
-            fill="both",
-            expand=True,
+        content.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+        )
+
+        for index, weight in enumerate(
+            self.COLUMN_WEIGHTS
+        ):
+            content.columnconfigure(
+                index,
+                weight=weight,
+                uniform="tracking-columns",
+            )
+
+        content.rowconfigure(
+            0,
+            weight=1,
         )
 
         self._build_input_card(
-            content
+            content,
+            column=0,
         )
         self._build_preview_card(
-            content
+            content,
+            column=1,
         )
         self._build_review_card(
-            content
+            content,
+            column=2,
         )
 
         ttk.Label(
             self,
             textvariable=self.status_text,
             style="Subheader.TLabel",
-        ).pack(
-            fill="x",
+        ).grid(
+            row=2,
+            column=0,
+            sticky="ew",
             pady=(10, 0),
         )
 
     def _build_input_card(
         self,
         parent,
+        column,
     ):
         card = ttk.Frame(
             parent,
             style="Card.TFrame",
             padding=14,
         )
-        card.pack(
-            side="left",
-            fill="y",
+        card.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
             padx=(0, 7),
+        )
+        card.columnconfigure(
+            0,
+            weight=1,
         )
 
         ttk.Label(
             card,
             text="Input KTP",
             style="CardLabel.TLabel",
-        ).pack(anchor="w")
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
 
         ttk.Label(
             card,
             textvariable=self.selected_text,
             style="CardMuted.TLabel",
-            wraplength=210,
+            wraplength=180,
             justify="left",
-        ).pack(
-            anchor="w",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="ew",
             pady=(6, 12),
         )
 
@@ -262,8 +341,10 @@ class TrackingKtpPage(ttk.Frame):
             text="Pilih Foto KTP",
             command=self.choose_input,
         )
-        self.select_button.pack(
-            fill="x",
+        self.select_button.grid(
+            row=2,
+            column=0,
+            sticky="ew",
         )
 
         self.process_button = ttk.Button(
@@ -273,51 +354,99 @@ class TrackingKtpPage(ttk.Frame):
             command=self.process_selected,
             state="disabled",
         )
-        self.process_button.pack(
-            fill="x",
+        self.process_button.grid(
+            row=3,
+            column=0,
+            sticky="ew",
             pady=(8, 0),
         )
 
         ttk.Separator(
             card,
             orient="horizontal",
-        ).pack(
-            fill="x",
+        ).grid(
+            row=4,
+            column=0,
+            sticky="ew",
             pady=14,
         )
 
         ttk.Label(
             card,
             text=(
-                "Proses menggunakan pipeline Auto Koreksi KTP "
-                "yang sama, kemudian OCR dijalankan per field."
+                "Pipeline:
+"
+                "Auto Koreksi KTP
+"
+                "→ OCR per field
+"
+                "→ Review manual"
             ),
             style="CardMuted.TLabel",
-            wraplength=210,
+            wraplength=180,
             justify="left",
-        ).pack(anchor="w")
+        ).grid(
+            row=5,
+            column=0,
+            sticky="nw",
+        )
+
+        ttk.Label(
+            card,
+            text=(
+                "Tombol Rekam akan aktif "
+                "setelah tahap review final."
+            ),
+            style="CardMuted.TLabel",
+            wraplength=180,
+            justify="left",
+        ).grid(
+            row=6,
+            column=0,
+            sticky="sw",
+            pady=(18, 0),
+        )
+
+        card.rowconfigure(
+            6,
+            weight=1,
+        )
 
     def _build_preview_card(
         self,
         parent,
+        column,
     ):
         card = ttk.Frame(
             parent,
             style="Card.TFrame",
             padding=14,
         )
-        card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        card.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
             padx=7,
+        )
+
+        card.columnconfigure(
+            0,
+            weight=1,
+        )
+        card.rowconfigure(
+            1,
+            weight=1,
         )
 
         ttk.Label(
             card,
             text="Preview KTP",
             style="CardLabel.TLabel",
-        ).pack(anchor="w")
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
 
         self.preview_label = tk.Label(
             card,
@@ -327,17 +456,37 @@ class TrackingKtpPage(ttk.Frame):
             bd=0,
             font=("Segoe UI", 9),
         )
-        self.preview_label.pack(
-            fill="both",
-            expand=True,
-            pady=(8, 8),
+        self.preview_label.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            pady=(8, 12),
+        )
+
+        face_header = ttk.Frame(
+            card,
+        )
+        face_header.grid(
+            row=2,
+            column=0,
+            sticky="ew",
         )
 
         ttk.Label(
-            card,
-            text="Foto Wajah",
+            face_header,
+            text="Foto Wajah Terdeteksi",
             style="CardLabel.TLabel",
-        ).pack(anchor="w")
+        ).pack(
+            side="left",
+        )
+
+        ttk.Label(
+            face_header,
+            text="hasil crop bbox foto",
+            style="CardMuted.TLabel",
+        ).pack(
+            side="right",
+        )
 
         self.face_label = tk.Label(
             card,
@@ -346,75 +495,134 @@ class TrackingKtpPage(ttk.Frame):
             fg="#737D85",
             bd=0,
             font=("Segoe UI", 9),
-            height=6,
+            height=7,
         )
-        self.face_label.pack(
-            fill="x",
+        self.face_label.grid(
+            row=3,
+            column=0,
+            sticky="ew",
             pady=(6, 0),
         )
 
     def _build_review_card(
         self,
         parent,
+        column,
     ):
         card = ttk.Frame(
             parent,
             style="Card.TFrame",
             padding=14,
         )
-        card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        card.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
             padx=(7, 0),
         )
 
+        card.columnconfigure(
+            0,
+            weight=1,
+        )
+        card.rowconfigure(
+            2,
+            weight=1,
+        )
+
+        title_row = ttk.Frame(card)
+        title_row.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+        )
+        title_row.columnconfigure(
+            0,
+            weight=1,
+        )
+
         ttk.Label(
-            card,
+            title_row,
             text="Review Tracking",
             style="CardLabel.TLabel",
-        ).pack(anchor="w")
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
 
         self.review_summary = ttk.Label(
-            card,
+            title_row,
             text="Belum ada hasil OCR.",
             style="CardMuted.TLabel",
         )
-        self.review_summary.pack(
-            anchor="w",
-            pady=(4, 8),
+        self.review_summary.grid(
+            row=0,
+            column=1,
+            sticky="e",
+        )
+
+        ttk.Separator(
+            card,
+            orient="horizontal",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(9, 8),
+        )
+
+        form_shell = ttk.Frame(
+            card,
+            style="Card.TFrame",
+        )
+        form_shell.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+        )
+        form_shell.columnconfigure(
+            0,
+            weight=1,
+        )
+        form_shell.rowconfigure(
+            0,
+            weight=1,
         )
 
         canvas = tk.Canvas(
-            card,
+            form_shell,
             highlightthickness=0,
             bd=0,
             bg="#FCFDFD",
         )
         scrollbar = ttk.Scrollbar(
-            card,
+            form_shell,
             orient="vertical",
             command=canvas.yview,
         )
+
         canvas.configure(
-            yscrollcommand=(
-                scrollbar.set
-            )
+            yscrollcommand=scrollbar.set,
         )
 
-        scrollbar.pack(
-            side="right",
-            fill="y",
+        canvas.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
         )
-        canvas.pack(
-            fill="both",
-            expand=True,
+        scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+            padx=(5, 0),
         )
 
         form = ttk.Frame(
             canvas,
             style="Card.TFrame",
         )
+
         window_id = canvas.create_window(
             (0, 0),
             window=form,
@@ -445,93 +653,123 @@ class TrackingKtpPage(ttk.Frame):
             stretch_form,
         )
 
-        for row, name in enumerate(
-            self.REVIEW_FIELDS
-        ):
-            ttk.Label(
+        row = 0
+
+        for (
+            group_title,
+            group_fields,
+        ) in self.REVIEW_GROUPS.items():
+            group_label = ttk.Label(
                 form,
-                text=self.FIELD_LABELS[
-                    name
-                ],
-                style="CardMuted.TLabel",
-            ).grid(
+                text=group_title,
+                style="CardLabel.TLabel",
+            )
+            group_label.grid(
                 row=row,
                 column=0,
+                columnspan=3,
                 sticky="w",
-                padx=(0, 8),
-                pady=3,
+                pady=(10 if row else 0, 5),
             )
+            row += 1
 
-            variable = tk.StringVar(
-                master=self,
-                value="",
-            )
-            entry = ttk.Entry(
-                form,
-                textvariable=variable,
-                width=31,
-            )
-            entry.grid(
-                row=row,
-                column=1,
-                sticky="ew",
-                pady=3,
-            )
+            for name in group_fields:
+                ttk.Label(
+                    form,
+                    text=self.FIELD_LABELS[
+                        name
+                    ],
+                    style="CardMuted.TLabel",
+                ).grid(
+                    row=row,
+                    column=0,
+                    sticky="w",
+                    padx=(0, 8),
+                    pady=4,
+                )
 
-            marker = ttk.Label(
-                form,
-                text="",
-                style="CardMuted.TLabel",
-            )
-            marker.grid(
-                row=row,
-                column=2,
-                sticky="w",
-                padx=(7, 0),
-                pady=3,
-            )
+                variable = tk.StringVar(
+                    master=self,
+                    value="",
+                )
 
-            self._review_vars[
-                name
-            ] = variable
-            self._review_markers[
-                name
-            ] = marker
+                entry = ttk.Entry(
+                    form,
+                    textvariable=variable,
+                )
+                entry.grid(
+                    row=row,
+                    column=1,
+                    sticky="ew",
+                    pady=4,
+                )
+
+                marker = ttk.Label(
+                    form,
+                    text="",
+                    style="CardMuted.TLabel",
+                    width=8,
+                    anchor="w",
+                )
+                marker.grid(
+                    row=row,
+                    column=2,
+                    sticky="w",
+                    padx=(8, 0),
+                    pady=4,
+                )
+
+                self._review_vars[
+                    name
+                ] = variable
+                self._review_markers[
+                    name
+                ] = marker
+
+                row += 1
 
         form.columnconfigure(
             1,
             weight=1,
         )
 
-        ttk.Separator(
-            card,
-            orient="horizontal",
-        ).pack(
-            fill="x",
-            pady=10,
+        footer = ttk.Frame(card)
+        footer.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            pady=(10, 0),
         )
-
-        self.record_button = ttk.Button(
-            card,
-            text="Rekam Data KTP",
-            state="disabled",
-        )
-        self.record_button.pack(
-            anchor="e",
+        footer.columnconfigure(
+            0,
+            weight=1,
         )
 
         ttk.Label(
-            card,
+            footer,
             text=(
-                "Perekaman database diaktifkan pada Stage 2F "
-                "setelah review dan validasi final."
+                "Periksa hanya field yang ditandai. "
+                "Field lain tetap dapat diedit."
             ),
             style="CardMuted.TLabel",
-            wraplength=300,
-            justify="right",
-        ).pack(
-            anchor="e",
-            pady=(5, 0),
+            wraplength=360,
+            justify="left",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+
+        self.record_button = ttk.Button(
+            footer,
+            text="Rekam Data KTP",
+            state="disabled",
+        )
+        self.record_button.grid(
+            row=0,
+            column=1,
+            sticky="e",
+            padx=(10, 0),
         )
 
     def choose_input(self):
@@ -588,10 +826,12 @@ class TrackingKtpPage(ttk.Frame):
     def _clear_result(self):
         self._last_tracking = None
         self._face_photo = None
+
         self.face_label.configure(
             image="",
             text="Belum tersedia",
         )
+
         self.review_summary.configure(
             text="Belum ada hasil OCR.",
         )
@@ -613,6 +853,7 @@ class TrackingKtpPage(ttk.Frame):
         image = cv2.imread(
             str(path)
         )
+
         if image is None:
             self.preview_label.configure(
                 image="",
@@ -672,7 +913,7 @@ class TrackingKtpPage(ttk.Frame):
 
         if target == "ktp":
             pil_image.thumbnail(
-                (520, 330),
+                (620, 380),
                 Image.Resampling.LANCZOS,
             )
             photo = ImageTk.PhotoImage(
@@ -686,7 +927,7 @@ class TrackingKtpPage(ttk.Frame):
             return
 
         pil_image.thumbnail(
-            (170, 150),
+            (190, 155),
             Image.Resampling.LANCZOS,
         )
         photo = ImageTk.PhotoImage(
@@ -769,6 +1010,7 @@ class TrackingKtpPage(ttk.Frame):
         message,
     ):
         self._worker_running = False
+
         self.select_button.configure(
             state="normal",
         )
@@ -779,6 +1021,7 @@ class TrackingKtpPage(ttk.Frame):
                 else "disabled"
             ),
         )
+
         self.status_text.set(
             "Tracking KTP gagal."
         )
@@ -805,6 +1048,7 @@ class TrackingKtpPage(ttk.Frame):
                 tracking
             )
         )
+
         review_identity_fields = (
             self._expanded_review_fields(
                 tracking.review_fields
@@ -812,22 +1056,26 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         for name in self.REVIEW_FIELDS:
+            value = values.get(
+                name,
+                "",
+            )
+
             self._review_vars[
                 name
             ].set(
-                values.get(
-                    name,
-                    "",
-                )
+                value
             )
+
             self._review_markers[
                 name
             ].configure(
-                text=(
-                    "⚠ Periksa"
-                    if name
-                    in review_identity_fields
-                    else "✓"
+                text=self.field_status_text(
+                    value=value,
+                    needs_review=(
+                        name
+                        in review_identity_fields
+                    ),
                 )
             )
 
@@ -842,13 +1090,10 @@ class TrackingKtpPage(ttk.Frame):
             target="face",
         )
 
-        summary = (
-            self.review_status_text(
-                tracking.review_fields
-            )
-        )
         self.review_summary.configure(
-            text=summary,
+            text=self.review_status_text(
+                tracking.review_fields
+            ),
         )
         self.status_text.set(
             "Tracking selesai. Periksa dan koreksi field OCR bila diperlukan."
