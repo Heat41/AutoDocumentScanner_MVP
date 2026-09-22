@@ -112,6 +112,7 @@ class TrackingKtpPage(ttk.Frame):
         self._face_photo = None
         self._corrected_preview_image = None
         self._tracking_debug_image = None
+        self._tracking_debug_boxes = None
         self._roi_overlay_visible = False
         self._review_vars = {}
         self._review_markers = {}
@@ -879,6 +880,7 @@ class TrackingKtpPage(ttk.Frame):
         self._face_photo = None
         self._corrected_preview_image = None
         self._tracking_debug_image = None
+        self._tracking_debug_boxes = None
         self._roi_overlay_visible = False
         self.roi_button.configure(
             text="Tampilkan ROI",
@@ -1016,7 +1018,8 @@ class TrackingKtpPage(ttk.Frame):
 
         if self._roi_overlay_visible:
             preview = build_roi_overlay(
-                self._tracking_debug_image
+                self._tracking_debug_image,
+                boxes=self._tracking_debug_boxes,
             )
             self.roi_button.configure(
                 text="Sembunyikan ROI",
@@ -1289,6 +1292,13 @@ class TrackingKtpPage(ttk.Frame):
         self._tracking_debug_image = (
             tracking.debug_tracking_image.copy()
             if tracking.debug_tracking_image is not None
+            else None
+        )
+        self._tracking_debug_boxes = (
+            dict(
+                tracking.debug_roi_boxes
+            )
+            if tracking.debug_roi_boxes is not None
             else None
         )
         self._roi_overlay_visible = False
