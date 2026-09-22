@@ -752,28 +752,45 @@ def read_field_ocr_candidates(
     for index, prepared in enumerate(
         prepared_images
     ):
-        text, confidence = backend.read(
-            prepared,
-            field_name,
-        )
-        results.append(
-            OcrReadResult(
-                raw_text=str(
-                    text or ""
-                ).strip(),
-                confidence=max(
-                    0.0,
-                    min(
-                        100.0,
-                        float(
-                            confidence or 0.0
+        if hasattr(
+            backend,
+            "read_candidates",
+        ):
+            raw_candidates = (
+                backend.read_candidates(
+                    prepared,
+                    field_name,
+                )
+            )
+        else:
+            raw_candidates = [
+                backend.read(
+                    prepared,
+                    field_name,
+                )
+            ]
+
+        for text, confidence in (
+            raw_candidates
+        ):
+            results.append(
+                OcrReadResult(
+                    raw_text=str(
+                        text or ""
+                    ).strip(),
+                    confidence=max(
+                        0.0,
+                        min(
+                            100.0,
+                            float(
+                                confidence or 0.0
+                            ),
                         ),
                     ),
-                ),
-                used_fallback=(
-                    index > 0
-                ),
+                    used_fallback=(
+                        index > 0
+                    ),
+                )
             )
-        )
 
     return results
