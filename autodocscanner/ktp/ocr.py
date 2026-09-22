@@ -309,6 +309,27 @@ class TesseractBackend:
             fallback=False,
         )
 
+        source_height, source_width = (
+            image.shape[:2]
+        )
+        prepared_height, prepared_width = (
+            prepared.shape[:2]
+        )
+        scale_x = (
+            source_width
+            / max(
+                prepared_width,
+                1,
+            )
+        )
+        scale_y = (
+            source_height
+            / max(
+                prepared_height,
+                1,
+            )
+        )
+
         try:
             data = (
                 pytesseract.image_to_data(
@@ -363,28 +384,54 @@ class TesseractBackend:
                     text=text,
                     confidence=confidence,
                     left=int(
-                        data.get(
-                            "left",
-                            [0] * count,
-                        )[index]
+                        round(
+                            int(
+                                data.get(
+                                    "left",
+                                    [0] * count,
+                                )[index]
+                            )
+                            * scale_x
+                        )
                     ),
                     top=int(
-                        data.get(
-                            "top",
-                            [0] * count,
-                        )[index]
+                        round(
+                            int(
+                                data.get(
+                                    "top",
+                                    [0] * count,
+                                )[index]
+                            )
+                            * scale_y
+                        )
                     ),
-                    width=int(
-                        data.get(
-                            "width",
-                            [0] * count,
-                        )[index]
+                    width=max(
+                        1,
+                        int(
+                            round(
+                                int(
+                                    data.get(
+                                        "width",
+                                        [0] * count,
+                                    )[index]
+                                )
+                                * scale_x
+                            )
+                        ),
                     ),
-                    height=int(
-                        data.get(
-                            "height",
-                            [0] * count,
-                        )[index]
+                    height=max(
+                        1,
+                        int(
+                            round(
+                                int(
+                                    data.get(
+                                        "height",
+                                        [0] * count,
+                                    )[index]
+                                )
+                                * scale_y
+                            )
+                        ),
                     ),
                     block=int(
                         data.get(
