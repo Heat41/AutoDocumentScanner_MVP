@@ -4,6 +4,7 @@ import numpy as np
 
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
+    OcrWord,
     preprocess_document,
     preprocess_field,
     read_field_ocr,
@@ -168,6 +169,32 @@ class TestKtpOcr(unittest.TestCase):
         self.assertGreater(
             result.shape[1],
             image.shape[1],
+        )
+
+    def test_ocr_word_exposes_position_and_line_identity(self):
+        word = OcrWord(
+            text="Nama",
+            confidence=90.0,
+            left=10,
+            top=20,
+            width=40,
+            height=15,
+            block=1,
+            paragraph=1,
+            line=2,
+        )
+
+        self.assertEqual(
+            word.right,
+            50,
+        )
+        self.assertEqual(
+            word.bottom,
+            35,
+        )
+        self.assertEqual(
+            word.line_key,
+            (1, 1, 2),
         )
 
 
