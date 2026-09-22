@@ -374,12 +374,9 @@ class TrackingKtpPage(ttk.Frame):
         ttk.Label(
             card,
             text=(
-                "Pipeline:
-"
-                "Auto Koreksi KTP
-"
-                "→ OCR per field
-"
+                "Pipeline:\n"
+                "Auto Koreksi KTP\n"
+                "→ OCR per field\n"
                 "→ Review manual"
             ),
             style="CardMuted.TLabel",
