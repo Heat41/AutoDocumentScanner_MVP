@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 
+from autodocscanner.ktp.ocr import OcrWord
 from autodocscanner.ktp.tracking import (
     KtpTrackingResult,
     extract_tracking_data,
@@ -238,6 +239,78 @@ class TestKtpTracking(unittest.TestCase):
         self.assertEqual(
             result.identity["alamat"],
             "JALAN DOKUMEN",
+        )
+
+    def test_label_anchor_candidate_has_priority(self):
+        class AnchorBackend:
+            def read_layout(
+                self,
+                image,
+            ):
+                return [
+                    OcrWord(
+                        text="Nama",
+                        confidence=92.0,
+                        left=10,
+                        top=30,
+                        width=45,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text=":",
+                        confidence=90.0,
+                        left=60,
+                        top=30,
+                        width=10,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text="NAMA",
+                        confidence=94.0,
+                        left=80,
+                        top=30,
+                        width=50,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                    OcrWord(
+                        text="ANCHOR",
+                        confidence=94.0,
+                        left=140,
+                        top=30,
+                        width=70,
+                        height=20,
+                        block=1,
+                        paragraph=1,
+                        line=1,
+                    ),
+                ]
+
+            def read(
+                self,
+                image,
+                field_name,
+            ):
+                return RESPONSES[
+                    field_name
+                ]
+
+        result = extract_tracking_data(
+            self.image,
+            backend=AnchorBackend(),
+        )
+
+        self.assertEqual(
+            result.identity["nama"],
+            "NAMA ANCHOR",
         )
 
 
