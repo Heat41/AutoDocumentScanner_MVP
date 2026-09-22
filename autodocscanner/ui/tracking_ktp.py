@@ -484,7 +484,7 @@ class TrackingKtpPage(ttk.Frame):
 
         self.roi_button = ttk.Button(
             preview_header,
-            text="Tampilkan ROI",
+            text="Tampilkan Bounding Box",
             command=self.toggle_roi_overlay,
             state="disabled",
         )
@@ -883,7 +883,7 @@ class TrackingKtpPage(ttk.Frame):
         self._tracking_detections = None
         self._roi_overlay_visible = False
         self.roi_button.configure(
-            text="Tampilkan ROI",
+            text="Tampilkan Bounding Box",
             state="disabled",
         )
         self.preview_pdf_button.configure(
@@ -1022,20 +1022,20 @@ class TrackingKtpPage(ttk.Frame):
                 self._tracking_detections,
             )
             self.roi_button.configure(
-                text="Sembunyikan ROI",
+                text="Sembunyikan Bounding Box",
             )
             self.status_text.set(
-                "Mode Kalibrasi ROI aktif — kotak menunjukkan area yang benar-benar dibaca OCR."
+                "Mode Field Detector aktif — bounding box menunjukkan area yang benar-benar dibaca OCR."
             )
         else:
             preview = (
                 self._corrected_preview_image
             )
             self.roi_button.configure(
-                text="Tampilkan ROI",
+                text="Tampilkan Bounding Box",
             )
             self.status_text.set(
-                "Mode Kalibrasi ROI nonaktif."
+                "Mode Field Detector nonaktif."
             )
 
         self._set_preview_image(
@@ -1313,7 +1313,7 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         self.roi_button.configure(
-            text="Tampilkan ROI",
+            text="Tampilkan Bounding Box",
             state=(
                 "normal"
                 if self._tracking_debug_image is not None
