@@ -355,3 +355,80 @@ def extract_anchor_candidates(
             )
 
     return result
+
+
+
+def locate_label_anchors(
+    words,
+):
+    result = {}
+
+    for line_words in (
+        _line_groups(
+            words
+        )
+    ):
+        match = _best_label_match(
+            line_words
+        )
+
+        if match is None:
+            continue
+
+        (
+            score,
+            field_name,
+            consumed_count,
+        ) = match
+
+        label_words = line_words[
+            :consumed_count
+        ]
+
+        if not label_words:
+            continue
+
+        left = min(
+            item.left
+            for item in label_words
+        )
+        top = min(
+            item.top
+            for item in label_words
+        )
+        right = max(
+            item.right
+            for item in label_words
+        )
+        bottom = max(
+            item.bottom
+            for item in label_words
+        )
+
+        confidence = (
+            _mean_confidence(
+                label_words
+            )
+            * score
+        )
+
+        previous = result.get(
+            field_name
+        )
+
+        candidate = (
+            (left + right) / 2.0,
+            (top + bottom) / 2.0,
+            float(confidence),
+        )
+
+        if (
+            previous is None
+            or candidate[2]
+            > previous[2]
+        ):
+            result[
+                field_name
+            ] = candidate
+
+    return result
