@@ -385,11 +385,24 @@ class TrackingKtpPage(ttk.Frame):
             pady=(8, 0),
         )
 
+        self.save_dataset_button = ttk.Button(
+            card,
+            text="Simpan Sampel Detector",
+            command=self.save_detector_sample,
+            state="disabled",
+        )
+        self.save_dataset_button.grid(
+            row=5,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
         ttk.Separator(
             card,
             orient="horizontal",
         ).grid(
-            row=5,
+            row=6,
             column=0,
             sticky="ew",
             pady=14,
@@ -407,7 +420,7 @@ class TrackingKtpPage(ttk.Frame):
             wraplength=180,
             justify="left",
         ).grid(
-            row=6,
+            row=7,
             column=0,
             sticky="nw",
         )
@@ -422,14 +435,14 @@ class TrackingKtpPage(ttk.Frame):
             wraplength=180,
             justify="left",
         ).grid(
-            row=7,
+            row=8,
             column=0,
             sticky="sw",
             pady=(18, 0),
         )
 
         card.rowconfigure(
-            7,
+            8,
             weight=1,
         )
 
@@ -889,6 +902,9 @@ class TrackingKtpPage(ttk.Frame):
         self.preview_pdf_button.configure(
             state="disabled",
         )
+        self.save_dataset_button.configure(
+            state="disabled",
+        )
 
         self.face_label.configure(
             image="",
@@ -1050,6 +1066,57 @@ class TrackingKtpPage(ttk.Frame):
             ].get().strip()
             for name in self.REVIEW_FIELDS
         }
+
+    def save_detector_sample(self):
+        tracking = self._last_tracking
+
+        if (
+            tracking is None
+            or tracking.debug_tracking_image is None
+        ):
+            return
+
+        try:
+            dataset_dir = (
+                Path("dataset")
+                / "ktp_fields"
+                / "unlabeled"
+            )
+            dataset_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            stem = (
+                self.input_path.stem
+                if self.input_path is not None
+                else "ktp_sample"
+            )
+
+            target = (
+                dataset_dir
+                / f"{stem}_canonical.png"
+            )
+
+            ok = cv2.imwrite(
+                str(target),
+                tracking.debug_tracking_image,
+            )
+
+            if not ok:
+                raise RuntimeError(
+                    "OpenCV gagal menyimpan sampel detector."
+                )
+
+            self.status_text.set(
+                f"Sampel detector tersimpan: {target.name}"
+            )
+
+        except Exception as exc:
+            messagebox.showerror(
+                "Simpan sampel detector gagal",
+                str(exc),
+            )
 
     def preview_pdf(self):
         tracking = self._last_tracking
@@ -1338,5 +1405,8 @@ class TrackingKtpPage(ttk.Frame):
             state="normal",
         )
         self.preview_pdf_button.configure(
+            state="normal",
+        )
+        self.save_dataset_button.configure(
             state="normal",
         )
