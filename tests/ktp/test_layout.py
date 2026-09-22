@@ -3,9 +3,12 @@ import unittest
 import numpy as np
 
 from autodocscanner.ktp.layout import (
+    KTP_CANONICAL_HEIGHT,
+    KTP_CANONICAL_WIDTH,
     KTP_FIELD_BOXES,
     KTP_VALUE_BOXES,
     NormalizedBox,
+    normalize_ktp_for_tracking,
     crop_normalized,
     normalized_to_pixel_box,
 )
@@ -43,6 +46,24 @@ class TestKtpLayout(unittest.TestCase):
         self.assertEqual(
             set(KTP_VALUE_BOXES),
             EXPECTED_FIELDS - {"foto"},
+        )
+
+    def test_tracking_normalization_uses_canonical_ktp_size(self):
+        image = np.zeros(
+            (270, 428, 3),
+            dtype=np.uint8,
+        )
+
+        normalized = normalize_ktp_for_tracking(
+            image
+        )
+
+        self.assertEqual(
+            normalized.shape[:2],
+            (
+                KTP_CANONICAL_HEIGHT,
+                KTP_CANONICAL_WIDTH,
+            ),
         )
 
     def test_all_boxes_are_normalized_and_non_empty(self):
