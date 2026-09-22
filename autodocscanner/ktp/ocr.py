@@ -1,0 +1,332 @@
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+
+MULTILINE_FIELDS = {
+    "alamat",
+}
+
+DIGIT_FIELDS = {
+    "nik",
+}
+
+OCR_PSM_BY_FIELD = {
+    "alamat": 6,
+}
+
+
+@dataclass(frozen=True)
+class OcrReadResult:
+    raw_text: str
+    confidence: float
+    used_fallback: bool = False
+
+
+def _validate_image(image):
+    if (
+        not isinstance(image, np.ndarray)
+        or image.size == 0
+    ):
+        raise ValueError(
+            "image OCR harus berupa numpy array yang tidak kosong."
+        )
+
+    if image.dtype != np.uint8:
+        raise ValueError(
+            "image OCR harus bertipe uint8."
+        )
+
+
+def _to_gray(image):
+    if image.ndim == 2:
+        return image
+
+    if image.ndim == 3 and image.shape[2] == 1:
+        return image[:, :, 0]
+
+    if image.ndim == 3 and image.shape[2] == 3:
+        return cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+    if image.ndim == 3 and image.shape[2] == 4:
+        return cv2.cvtColor(
+            image,
+            cv2.COLOR_BGRA2GRAY,
+        )
+
+    raise ValueError(
+        "Format image OCR tidak didukung."
+    )
+
+
+def preprocess_field(
+    image,
+    field_name,
+    fallback=False,
+):
+    _validate_image(image)
+    gray = _to_gray(image)
+
+    height, width = gray.shape[:2]
+    target_height = max(
+        48,
+        height * 3,
+    )
+    scale = (
+        target_height
+        / max(height, 1)
+    )
+    target_width = max(
+        2,
+        int(round(width * scale)),
+    )
+
+    enlarged = cv2.resize(
+        gray,
+        (target_width, target_height),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+    if fallback:
+        blurred = cv2.GaussianBlur(
+            enlarged,
+            (3, 3),
+            0,
+        )
+        return cv2.adaptiveThreshold(
+            blurred,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            9,
+        )
+
+    clahe = cv2.createCLAHE(
+        clipLimit=2.0,
+        tileGridSize=(8, 8),
+    )
+    return clahe.apply(enlarged)
+
+
+class TesseractBackend:
+    def __init__(
+        self,
+        language="ind+eng",
+        executable_path=None,
+    ):
+        self.language = language
+        self.executable_path = (
+            str(executable_path)
+            if executable_path
+            else None
+        )
+
+    @staticmethod
+    def _module():
+        try:
+            import pytesseract
+        except ImportError as exc:
+            raise RuntimeError(
+                "pytesseract belum terpasang. "
+                "Jalankan pip install -r requirements.txt."
+            ) from exc
+
+        return pytesseract
+
+    def _configure_executable(
+        self,
+        pytesseract,
+    ):
+        if self.executable_path:
+            pytesseract.pytesseract.tesseract_cmd = (
+                self.executable_path
+            )
+
+    def is_available(self):
+        try:
+            pytesseract = self._module()
+            self._configure_executable(
+                pytesseract
+            )
+            pytesseract.get_tesseract_version()
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _config_for_field(
+        field_name,
+    ):
+        psm = OCR_PSM_BY_FIELD.get(
+            field_name,
+            7,
+        )
+        parts = [
+            f"--psm {psm}",
+        ]
+
+        if field_name in DIGIT_FIELDS:
+            parts.append(
+                "-c tessedit_char_whitelist=0123456789OQDI"
+            )
+
+        return " ".join(parts)
+
+    def read(
+        self,
+        image,
+        field_name,
+    ):
+        pytesseract = self._module()
+        self._configure_executable(
+            pytesseract
+        )
+
+        try:
+            data = (
+                pytesseract.image_to_data(
+                    image,
+                    lang=self.language,
+                    config=self._config_for_field(
+                        field_name
+                    ),
+                    output_type=(
+                        pytesseract.Output.DICT
+                    ),
+                )
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Tesseract OCR gagal dijalankan. "
+                "Pastikan executable Tesseract dan language data tersedia."
+            ) from exc
+
+        texts = []
+        confidences = []
+
+        for text, confidence in zip(
+            data.get("text", []),
+            data.get("conf", []),
+        ):
+            value = str(text or "").strip()
+            if not value:
+                continue
+
+            texts.append(value)
+
+            try:
+                numeric_confidence = float(
+                    confidence
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            if numeric_confidence >= 0:
+                confidences.append(
+                    numeric_confidence
+                )
+
+        raw_text = " ".join(
+            texts
+        ).strip()
+
+        confidence = (
+            sum(confidences)
+            / len(confidences)
+            if confidences
+            else 0.0
+        )
+
+        return (
+            raw_text,
+            float(confidence),
+        )
+
+
+def _read_once(
+    image,
+    field_name,
+    backend,
+    fallback,
+):
+    prepared = preprocess_field(
+        image,
+        field_name,
+        fallback=fallback,
+    )
+    text, confidence = backend.read(
+        prepared,
+        field_name,
+    )
+
+    return OcrReadResult(
+        raw_text=str(
+            text or ""
+        ).strip(),
+        confidence=max(
+            0.0,
+            min(
+                100.0,
+                float(
+                    confidence or 0.0
+                ),
+            ),
+        ),
+        used_fallback=fallback,
+    )
+
+
+def read_field_ocr(
+    image,
+    field_name,
+    backend=None,
+    confidence_threshold=55.0,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
+    primary = _read_once(
+        image,
+        field_name,
+        backend,
+        fallback=False,
+    )
+
+    if (
+        primary.raw_text
+        and primary.confidence
+        >= confidence_threshold
+    ):
+        return primary
+
+    fallback = _read_once(
+        image,
+        field_name,
+        backend,
+        fallback=True,
+    )
+
+    if (
+        fallback.confidence
+        > primary.confidence
+        or (
+            not primary.raw_text
+            and bool(
+                fallback.raw_text
+            )
+        )
+    ):
+        return fallback
+
+    return primary
