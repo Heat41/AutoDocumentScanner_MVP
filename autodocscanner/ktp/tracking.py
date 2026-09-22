@@ -15,8 +15,10 @@ from autodocscanner.ktp.layout import (
     normalize_ktp_for_tracking,
 )
 from autodocscanner.ktp.ocr import (
-    TesseractBackend,
     read_field_ocr_candidates,
+)
+from autodocscanner.ktp.paddle_ocr import (
+    TrackingOcrBackend,
 )
 from autodocscanner.ktp.parsing import (
     parse_field,
@@ -347,7 +349,7 @@ def extract_tracking_data(
     backend = (
         backend
         if backend is not None
-        else TesseractBackend()
+        else TrackingOcrBackend()
     )
 
     anchor_candidates = {}
