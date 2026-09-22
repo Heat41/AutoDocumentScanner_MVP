@@ -4,6 +4,7 @@ import numpy as np
 
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
+    preprocess_document,
     preprocess_field,
     read_field_ocr,
 )
@@ -143,6 +144,30 @@ class TestKtpOcr(unittest.TestCase):
         )
         self.assertFalse(
             result.used_fallback
+        )
+
+    def test_preprocess_document_returns_grayscale_uint8(self):
+        image = np.full(
+            (120, 200, 3),
+            170,
+            dtype=np.uint8,
+        )
+
+        result = preprocess_document(
+            image
+        )
+
+        self.assertEqual(
+            result.ndim,
+            2,
+        )
+        self.assertEqual(
+            result.dtype,
+            np.uint8,
+        )
+        self.assertGreater(
+            result.shape[1],
+            image.shape[1],
         )
 
 
