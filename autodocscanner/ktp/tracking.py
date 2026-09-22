@@ -47,6 +47,7 @@ class KtpTrackingResult:
     fields: dict[str, TrackedField]
     identity: dict
     review_fields: list[str]
+    debug_tracking_image: np.ndarray | None = None
 
     @property
     def ready_for_review(self):
@@ -590,5 +591,8 @@ def extract_tracking_data(
         ),
         review_fields=(
             review_fields
+        ),
+        debug_tracking_image=(
+            tracking_image.copy()
         ),
     )
