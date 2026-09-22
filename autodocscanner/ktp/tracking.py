@@ -14,7 +14,7 @@ from autodocscanner.ktp.layout import (
 )
 from autodocscanner.ktp.ocr import (
     TesseractBackend,
-    read_field_ocr,
+    read_field_ocr_candidates,
 )
 from autodocscanner.ktp.parsing import (
     parse_field,
@@ -276,6 +276,33 @@ def _candidate_is_valid(
     )
 
 
+def _best_valid_ocr_candidate(
+    field_name,
+    candidates,
+):
+    valid = [
+        candidate
+        for candidate in candidates
+        if _candidate_is_valid(
+            field_name,
+            candidate.raw_text,
+        )
+    ]
+
+    if not valid:
+        return None
+
+    return max(
+        valid,
+        key=lambda candidate: (
+            candidate.confidence,
+            len(
+                candidate.raw_text
+            ),
+        ),
+    )
+
+
 def extract_tracking_data(
     corrected_image,
     backend=None,
@@ -348,20 +375,35 @@ def extract_tracking_data(
             ],
         )
 
-        ocr = read_field_ocr(
-            value_image,
-            name,
-            backend=backend,
-            confidence_threshold=(
-                confidence_threshold
-            ),
+        ocr_candidates = (
+            read_field_ocr_candidates(
+                value_image,
+                name,
+                backend=backend,
+            )
         )
 
-        raw_text = ocr.raw_text
-        confidence = ocr.confidence
-        used_fallback = (
-            ocr.used_fallback
+        best_ocr = (
+            _best_valid_ocr_candidate(
+                name,
+                ocr_candidates,
+            )
         )
+
+        if best_ocr is None:
+            raw_text = ""
+            confidence = 0.0
+            used_fallback = False
+        else:
+            raw_text = (
+                best_ocr.raw_text
+            )
+            confidence = (
+                best_ocr.confidence
+            )
+            used_fallback = (
+                best_ocr.used_fallback
+            )
 
         anchor_raw = ""
         anchor_confidence = 0.0
