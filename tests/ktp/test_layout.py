@@ -205,10 +205,14 @@ class TestKtpLayout(unittest.TestCase):
                     0.045,
                 )
 
-    def test_main_value_regions_keep_full_value_column(self):
-        self.assertLessEqual(
+    def test_main_value_regions_focus_on_value_column(self):
+        self.assertGreaterEqual(
             KTP_VALUE_BOXES["nik"].x1,
-            0.23,
+            0.22,
+        )
+        self.assertLessEqual(
+            KTP_VALUE_BOXES["nik"].x2,
+            0.71,
         )
 
         for name in (
@@ -223,11 +227,11 @@ class TestKtpLayout(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertGreaterEqual(
                     KTP_VALUE_BOXES[name].x1,
-                    0.23,
+                    0.27,
                 )
                 self.assertLessEqual(
-                    KTP_VALUE_BOXES[name].x1,
-                    0.26,
+                    KTP_VALUE_BOXES[name].x2,
+                    0.71,
                 )
 
 
