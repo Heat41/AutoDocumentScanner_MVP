@@ -1,4 +1,4 @@
-"""KTP data, extraction, and storage domain."""
+"""KTP data, extraction, OCR, tracking, and storage domain."""
 
 from autodocscanner.ktp.extraction import (
     KtpExtractionResult,
@@ -11,13 +11,45 @@ from autodocscanner.ktp.layout import (
     crop_normalized,
     normalized_to_pixel_box,
 )
+from autodocscanner.ktp.ocr import (
+    OcrReadResult,
+    TesseractBackend,
+    preprocess_field,
+    read_field_ocr,
+)
+from autodocscanner.ktp.parsing import (
+    clean_text,
+    parse_field,
+    parse_gender,
+    parse_nik,
+    parse_rt_rw,
+    parse_ttl,
+)
+from autodocscanner.ktp.tracking import (
+    KtpTrackingResult,
+    TrackedField,
+    extract_tracking_data,
+)
 
 __all__ = (
     "KTP_FIELD_BOXES",
     "KtpExtractionResult",
     "KtpFieldCrop",
+    "KtpTrackingResult",
     "NormalizedBox",
+    "OcrReadResult",
+    "TesseractBackend",
+    "TrackedField",
+    "clean_text",
     "crop_normalized",
     "extract_ktp_regions",
+    "extract_tracking_data",
     "normalized_to_pixel_box",
+    "parse_field",
+    "parse_gender",
+    "parse_nik",
+    "parse_rt_rw",
+    "parse_ttl",
+    "preprocess_field",
+    "read_field_ocr",
 )
