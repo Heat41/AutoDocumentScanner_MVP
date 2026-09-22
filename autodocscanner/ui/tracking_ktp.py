@@ -831,9 +831,6 @@ class TrackingKtpPage(ttk.Frame):
         self.process_button.configure(
             state="normal",
         )
-        self.preview_pdf_button.configure(
-            state="normal",
-        )
 
         self._clear_result()
         self._show_source_preview(
@@ -1159,5 +1156,8 @@ class TrackingKtpPage(ttk.Frame):
             state="normal",
         )
         self.process_button.configure(
+            state="normal",
+        )
+        self.preview_pdf_button.configure(
             state="normal",
         )
