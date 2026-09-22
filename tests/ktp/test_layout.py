@@ -167,6 +167,53 @@ class TestKtpLayout(unittest.TestCase):
                 ),
             )
 
+    def test_value_rows_follow_standard_ktp_vertical_order(self):
+        ordered = (
+            "nik",
+            "nama",
+            "ttl",
+            "jenis_kelamin",
+            "alamat",
+            "rt_rw",
+            "kelurahan_desa",
+            "kecamatan",
+            "agama",
+            "status_perkawinan",
+            "pekerjaan",
+            "kewarganegaraan",
+            "berlaku_hingga",
+        )
+
+        centers = [
+            (
+                KTP_VALUE_BOXES[name].y1
+                + KTP_VALUE_BOXES[name].y2
+            ) / 2
+            for name in ordered
+        ]
+
+        self.assertEqual(
+            centers,
+            sorted(centers),
+        )
+
+    def test_main_value_regions_start_to_right_of_labels(self):
+        for name in (
+            "nik",
+            "nama",
+            "ttl",
+            "alamat",
+            "rt_rw",
+            "kelurahan_desa",
+            "kecamatan",
+            "pekerjaan",
+        ):
+            with self.subTest(name=name):
+                self.assertGreaterEqual(
+                    KTP_VALUE_BOXES[name].x1,
+                    0.35,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
