@@ -18,6 +18,35 @@ OCR_PSM_BY_FIELD = {
 
 
 @dataclass(frozen=True)
+class OcrWord:
+    text: str
+    confidence: float
+    left: int
+    top: int
+    width: int
+    height: int
+    block: int
+    paragraph: int
+    line: int
+
+    @property
+    def right(self):
+        return self.left + self.width
+
+    @property
+    def bottom(self):
+        return self.top + self.height
+
+    @property
+    def line_key(self):
+        return (
+            self.block,
+            self.paragraph,
+            self.line,
+        )
+
+
+@dataclass(frozen=True)
 class OcrReadResult:
     raw_text: str
     confidence: float
@@ -224,6 +253,120 @@ class TesseractBackend:
             )
 
         return " ".join(parts)
+
+    def read_layout(
+        self,
+        image,
+    ):
+        pytesseract = self._module()
+        self._configure_executable(
+            pytesseract
+        )
+
+        prepared = preprocess_document(
+            image,
+            fallback=False,
+        )
+
+        try:
+            data = (
+                pytesseract.image_to_data(
+                    prepared,
+                    lang=self.language,
+                    config="--psm 6",
+                    output_type=(
+                        pytesseract.Output.DICT
+                    ),
+                )
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Tesseract layout OCR gagal dijalankan."
+            ) from exc
+
+        words = []
+        count = len(
+            data.get(
+                "text",
+                [],
+            )
+        )
+
+        for index in range(count):
+            text = str(
+                data["text"][index]
+                or ""
+            ).strip()
+
+            if not text:
+                continue
+
+            try:
+                confidence = float(
+                    data.get(
+                        "conf",
+                        [-1] * count,
+                    )[index]
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                confidence = -1.0
+
+            if confidence < 0:
+                continue
+
+            words.append(
+                OcrWord(
+                    text=text,
+                    confidence=confidence,
+                    left=int(
+                        data.get(
+                            "left",
+                            [0] * count,
+                        )[index]
+                    ),
+                    top=int(
+                        data.get(
+                            "top",
+                            [0] * count,
+                        )[index]
+                    ),
+                    width=int(
+                        data.get(
+                            "width",
+                            [0] * count,
+                        )[index]
+                    ),
+                    height=int(
+                        data.get(
+                            "height",
+                            [0] * count,
+                        )[index]
+                    ),
+                    block=int(
+                        data.get(
+                            "block_num",
+                            [0] * count,
+                        )[index]
+                    ),
+                    paragraph=int(
+                        data.get(
+                            "par_num",
+                            [0] * count,
+                        )[index]
+                    ),
+                    line=int(
+                        data.get(
+                            "line_num",
+                            [0] * count,
+                        )[index]
+                    ),
+                )
+            )
+
+        return words
 
     def read_document(
         self,
