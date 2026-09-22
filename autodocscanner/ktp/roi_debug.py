@@ -265,28 +265,42 @@ def build_detection_overlay(
         (
             text_width,
             text_height,
-        ), baseline = cv2.getTextSize(
+        ), _baseline = cv2.getTextSize(
             label,
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.38,
+            0.32,
             1,
         )
 
-        label_top = max(
-            0,
-            y1 - text_height - 8,
+        label_x = max(
+            2,
+            x1 - text_width - 8,
         )
-        label_right = min(
-            width,
-            x1 + text_width + 8,
+        label_y = min(
+            height - 4,
+            max(
+                text_height + 3,
+                int(
+                    round(
+                        (y1 + y2) / 2
+                    )
+                )
+                + text_height // 2,
+            ),
         )
 
         cv2.rectangle(
             overlay,
-            (x1, label_top),
             (
-                label_right,
-                y1,
+                label_x - 2,
+                label_y - text_height - 3,
+            ),
+            (
+                min(
+                    width - 1,
+                    label_x + text_width + 3,
+                ),
+                label_y + 2,
             ),
             color,
             -1,
@@ -296,14 +310,11 @@ def build_detection_overlay(
             overlay,
             label,
             (
-                x1 + 4,
-                max(
-                    text_height + 1,
-                    y1 - 4,
-                ),
+                label_x,
+                label_y,
             ),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.38,
+            0.32,
             (
                 0,
                 0,
