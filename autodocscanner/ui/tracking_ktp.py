@@ -8,7 +8,8 @@ import cv2
 from PIL import Image, ImageTk
 
 from autodocscanner.services.ktp_tracking import (
-    process_tracking_input,
+    correct_tracking_input,
+    track_corrected_ktp,
 )
 from autodocscanner.services.pdf_preview import (
     build_tracking_report_pdf,
@@ -833,9 +834,15 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         self._clear_result()
-        self._show_source_preview(
-            path
+        self.preview_label.configure(
+            image="",
+            text=(
+                "Foto dipilih.\n"
+                "Hasil corrected KTP akan tampil "
+                "setelah Auto Perspective selesai."
+            ),
         )
+        self._preview_photo = None
 
     def _clear_result(self):
         self._last_tracking = None
@@ -1023,10 +1030,10 @@ class TrackingKtpPage(ttk.Frame):
             state="disabled",
         )
         self.status_text.set(
-            "Memproses auto perspective dan OCR KTP..."
+            "Tahap 1/2 — Auto Perspective KTP..."
         )
         self.review_summary.configure(
-            text="OCR sedang berjalan...",
+            text="Menunggu hasil corrected KTP...",
         )
 
         worker = threading.Thread(
@@ -1041,12 +1048,53 @@ class TrackingKtpPage(ttk.Frame):
         input_path,
     ):
         try:
-            result = (
-                process_tracking_input(
+            corrected = (
+                correct_tracking_input(
                     self.scanner,
                     input_path,
                 )
             )
+        except Exception as exc:
+            try:
+                self.after(
+                    0,
+                    self._finish_failure,
+                    str(exc),
+                )
+            except tk.TclError:
+                pass
+            return
+
+        try:
+            self.after(
+                0,
+                self._show_corrected_stage,
+                corrected,
+            )
+        except tk.TclError:
+            return
+
+        try:
+            tracking = (
+                track_corrected_ktp(
+                    corrected[
+                        "corrected_image"
+                    ],
+                )
+            )
+            result = {
+                "corrected_image": (
+                    corrected[
+                        "corrected_image"
+                    ]
+                ),
+                "corners": (
+                    corrected[
+                        "corners"
+                    ]
+                ),
+                "tracking": tracking,
+            }
         except Exception as exc:
             try:
                 self.after(
@@ -1066,6 +1114,23 @@ class TrackingKtpPage(ttk.Frame):
             )
         except tk.TclError:
             pass
+
+    def _show_corrected_stage(
+        self,
+        corrected,
+    ):
+        self._set_preview_image(
+            corrected[
+                "corrected_image"
+            ],
+            target="ktp",
+        )
+        self.status_text.set(
+            "Tahap 2/2 — KTP terkoreksi. Menjalankan Tracking/OCR..."
+        )
+        self.review_summary.configure(
+            text="OCR sedang berjalan dari corrected KTP...",
+        )
 
     def _finish_failure(
         self,
