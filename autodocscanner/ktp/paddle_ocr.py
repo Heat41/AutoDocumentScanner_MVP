@@ -1,5 +1,6 @@
 import json
 
+import cv2
 import numpy as np
 
 from autodocscanner.ktp.ocr import (
@@ -131,9 +132,25 @@ class PaddleTextRecognitionBackend:
 
         model = self._load_model()
 
+        paddle_image = image
+
+        if image.ndim == 2:
+            paddle_image = cv2.cvtColor(
+                image,
+                cv2.COLOR_GRAY2BGR,
+            )
+        elif (
+            image.ndim == 3
+            and image.shape[2] == 1
+        ):
+            paddle_image = cv2.cvtColor(
+                image[:, :, 0],
+                cv2.COLOR_GRAY2BGR,
+            )
+
         try:
             results = model.predict(
-                input=image,
+                input=paddle_image,
                 batch_size=1,
             )
         except Exception as exc:
