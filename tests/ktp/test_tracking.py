@@ -187,6 +187,59 @@ class TestKtpTracking(unittest.TestCase):
             )
         )
 
+    def test_full_document_candidate_can_replace_bad_bbox_candidate(self):
+        class HybridBackend:
+            def read_document(
+                self,
+                image,
+            ):
+                return (
+                    "PROVINSI CONTOH\n"
+                    "KOTA CONTOH\n"
+                    "NIK : 1234567890123456\n"
+                    "Nama : NAMA DOKUMEN\n"
+                    "Tempat/Tgl Lahir : KOTA CONTOH, 02-03-1990\n"
+                    "Jenis kelamin : LAKI-LAKI\n"
+                    "Alamat : JALAN DOKUMEN\n"
+                    "RT/RW : 001/002\n"
+                    "Kel/Desa : DESA CONTOH\n"
+                    "Kecamatan : KECAMATAN CONTOH\n"
+                    "Agama : ISLAM\n"
+                    "Status Perkawinan : KAWIN\n"
+                    "Pekerjaan : KARYAWAN\n"
+                    "Kewarganegaraan : WNI\n"
+                    "Berlaku Hingga : SEUMUR HIDUP",
+                    78.0,
+                )
+
+            def read(
+                self,
+                image,
+                field_name,
+            ):
+                if field_name == "nama":
+                    return (
+                        "%%%___",
+                        88.0,
+                    )
+                return RESPONSES[
+                    field_name
+                ]
+
+        result = extract_tracking_data(
+            self.image,
+            backend=HybridBackend(),
+        )
+
+        self.assertEqual(
+            result.identity["nama"],
+            "NAMA DOKUMEN",
+        )
+        self.assertEqual(
+            result.identity["alamat"],
+            "JALAN DOKUMEN",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
