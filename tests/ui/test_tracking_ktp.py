@@ -135,6 +135,16 @@ class TestTrackingKtpPageContract(unittest.TestCase):
             )
         )
 
+    def test_current_review_values_method_is_exposed(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    TrackingKtpPage,
+                    "current_review_values",
+                )
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
