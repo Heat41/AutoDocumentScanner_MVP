@@ -82,6 +82,49 @@ class TestTrackingKtpPageContract(unittest.TestCase):
             "1990-03-02",
         )
 
+    def test_primary_columns_prioritize_review_panel(self):
+        self.assertEqual(
+            TrackingKtpPage.COLUMN_WEIGHTS,
+            (1, 3, 4),
+        )
+
+    def test_review_groups_are_defined(self):
+        self.assertEqual(
+            tuple(
+                TrackingKtpPage.REVIEW_GROUPS
+            ),
+            (
+                "Identitas Utama",
+                "Alamat",
+                "Data Lainnya",
+            ),
+        )
+
+    def test_field_status_text_is_quiet_for_valid_values(self):
+        self.assertEqual(
+            TrackingKtpPage.field_status_text(
+                value="NAMA CONTOH",
+                needs_review=False,
+            ),
+            "",
+        )
+
+    def test_field_status_text_marks_review_and_empty_values(self):
+        self.assertEqual(
+            TrackingKtpPage.field_status_text(
+                value="NAMA BURAM",
+                needs_review=True,
+            ),
+            "Periksa",
+        )
+        self.assertEqual(
+            TrackingKtpPage.field_status_text(
+                value="",
+                needs_review=True,
+            ),
+            "Kosong",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
