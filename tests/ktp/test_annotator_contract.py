@@ -54,6 +54,26 @@ class TestKtpAnnotatorContract(unittest.TestCase):
             )
         )
 
+    def test_canonical_stem_is_not_duplicated(self):
+        self.assertEqual(
+            KtpFieldAnnotator._canonical_stem(
+                "sample.png"
+            ),
+            "sample_canonical",
+        )
+        self.assertEqual(
+            KtpFieldAnnotator._canonical_stem(
+                "sample_canonical.png"
+            ),
+            "sample_canonical",
+        )
+        self.assertEqual(
+            KtpFieldAnnotator._canonical_stem(
+                "sample_canonical_canonical.png"
+            ),
+            "sample_canonical",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
