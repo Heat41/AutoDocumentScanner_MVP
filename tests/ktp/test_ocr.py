@@ -8,6 +8,7 @@ from autodocscanner.ktp.ocr import (
     preprocess_document,
     preprocess_field,
     read_field_ocr,
+    read_field_ocr_candidates,
 )
 
 
@@ -195,6 +196,30 @@ class TestKtpOcr(unittest.TestCase):
         self.assertEqual(
             word.line_key,
             (1, 1, 2),
+        )
+
+    def test_multi_pass_returns_three_candidates(self):
+        backend = FakeBackend(
+            [
+                ("PASS SATU", 40.0),
+                ("PASS DUA", 70.0),
+                ("PASS TIGA", 65.0),
+            ]
+        )
+
+        results = read_field_ocr_candidates(
+            self.image,
+            "nama",
+            backend=backend,
+        )
+
+        self.assertEqual(
+            len(results),
+            3,
+        )
+        self.assertEqual(
+            results[1].raw_text,
+            "PASS DUA",
         )
 
 
