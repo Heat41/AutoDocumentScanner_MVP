@@ -2,6 +2,9 @@ import unittest
 
 import numpy as np
 
+from autodocscanner.ktp.field_detection import (
+    FieldDetection,
+)
 from autodocscanner.ktp.ocr import OcrWord
 from autodocscanner.ktp.tracking import (
     KtpTrackingResult,
@@ -387,6 +390,71 @@ class TestKtpTracking(unittest.TestCase):
         self.assertEqual(
             result.identity["kewarganegaraan"],
             "",
+        )
+
+    def test_tracking_uses_detector_boxes_as_ocr_source(self):
+        class FakeDetector:
+            def detect(
+                self,
+                image,
+                anchors=None,
+            ):
+                fields = []
+                names = [
+                    name
+                    for name in RESPONSES
+                ]
+
+                for index, name in enumerate(names):
+                    y1 = 10 + index * 20
+                    fields.append(
+                        FieldDetection(
+                            class_name=name,
+                            bbox=(
+                                100,
+                                y1,
+                                400,
+                                y1 + 18,
+                            ),
+                            confidence=0.9,
+                            source="test",
+                        )
+                    )
+
+                fields.append(
+                    FieldDetection(
+                        class_name="foto",
+                        bbox=(
+                            620,
+                            120,
+                            800,
+                            360,
+                        ),
+                        confidence=0.95,
+                        source="test",
+                    )
+                )
+                return fields
+
+        result = extract_tracking_data(
+            self.image,
+            backend=MappingBackend(),
+            detector=FakeDetector(),
+        )
+
+        self.assertEqual(
+            result.identity["nama"],
+            "NAMA CONTOH",
+        )
+        self.assertTrue(
+            result.detections
+        )
+        self.assertEqual(
+            {
+                item.source
+                for item in result.detections
+            },
+            {"test"},
         )
 
 
