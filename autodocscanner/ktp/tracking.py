@@ -291,6 +291,9 @@ def _candidate_is_valid(
     ):
         return False
 
+    if field_name in _ENUM_VALUES:
+        return True
+
     return _looks_clean_text(
         raw_text
     )
