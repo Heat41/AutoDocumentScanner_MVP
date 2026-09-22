@@ -187,6 +187,20 @@ class TestKtpTracking(unittest.TestCase):
             ].needs_review
         )
 
+    def test_debug_tracking_image_matches_canonical_working_image(self):
+        result = extract_tracking_data(
+            self.image,
+            backend=MappingBackend(),
+        )
+
+        self.assertIsNotNone(
+            result.debug_tracking_image
+        )
+        self.assertEqual(
+            result.debug_tracking_image.shape[:2],
+            (540, 856),
+        )
+
     def test_corrected_image_is_independent_copy(self):
         result = extract_tracking_data(
             self.image,
