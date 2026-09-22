@@ -2,6 +2,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from autodocscanner.ktp.anchors import (
+    extract_anchor_candidates,
+)
 from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
 )
@@ -215,8 +218,24 @@ def extract_tracking_data(
         else TesseractBackend()
     )
 
+    anchor_candidates = {}
     document_candidates = {}
     document_confidence = 0.0
+
+    if hasattr(
+        backend,
+        "read_layout",
+    ):
+        try:
+            anchor_candidates = (
+                extract_anchor_candidates(
+                    backend.read_layout(
+                        corrected_image
+                    )
+                )
+            )
+        except Exception:
+            anchor_candidates = {}
 
     if hasattr(
         backend,
@@ -262,6 +281,17 @@ def extract_tracking_data(
             ocr.used_fallback
         )
 
+        anchor_raw = ""
+        anchor_confidence = 0.0
+
+        if name in anchor_candidates:
+            (
+                anchor_raw,
+                anchor_confidence,
+            ) = anchor_candidates[
+                name
+            ]
+
         document_raw = (
             document_candidates.get(
                 name,
@@ -270,6 +300,23 @@ def extract_tracking_data(
         )
 
         if (
+            anchor_raw
+            and _candidate_is_valid(
+                name,
+                anchor_raw,
+            )
+        ):
+            raw_text = anchor_raw
+            confidence = max(
+                confidence,
+                float(
+                    anchor_confidence
+                    or 0.0
+                ),
+            )
+            used_fallback = False
+
+        elif (
             document_raw
             and _candidate_is_valid(
                 name,
