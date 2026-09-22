@@ -9,9 +9,12 @@ from autodocscanner.ktp.anchors import (
 from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
 )
+from autodocscanner.ktp.field_detection import (
+    AutoFieldDetector,
+    best_detection_by_class,
+    crop_detection,
+)
 from autodocscanner.ktp.layout import (
-    build_anchor_aligned_value_boxes,
-    crop_normalized,
     normalize_ktp_for_tracking,
 )
 from autodocscanner.ktp.ocr import (
@@ -48,7 +51,7 @@ class KtpTrackingResult:
     identity: dict
     review_fields: list[str]
     debug_tracking_image: np.ndarray | None = None
-    debug_roi_boxes: dict | None = None
+    detections: list | None = None
 
     @property
     def ready_for_review(self):
@@ -339,6 +342,7 @@ def extract_tracking_data(
     confidence_threshold=(
         CONFIDENCE_THRESHOLD
     ),
+    detector=None,
 ):
     tracking_image = (
         normalize_ktp_for_tracking(
@@ -405,6 +409,21 @@ def extract_tracking_data(
         tracking_image
     )
 
+    detector = (
+        detector
+        if detector is not None
+        else AutoFieldDetector()
+    )
+    detections = detector.detect(
+        tracking_image,
+        anchors=label_anchors,
+    )
+    detection_map = (
+        best_detection_by_class(
+            detections
+        )
+    )
+
     if hasattr(
         backend,
         "read_document",
@@ -425,27 +444,25 @@ def extract_tracking_data(
             document_candidates = {}
             document_confidence = 0.0
 
-    roi_boxes = (
-        build_anchor_aligned_value_boxes(
-            image_height=tracking_image.shape[0],
-            anchors=label_anchors,
-        )
-    )
-
     fields = {}
     review_fields = []
 
-    for name, crop in (
-        extraction.fields.items()
+    for name in (
+        extraction.fields
     ):
         if name == "foto":
             continue
 
-        value_image = crop_normalized(
+        detection = detection_map.get(
+            name
+        )
+
+        if detection is None:
+            continue
+
+        value_image = crop_detection(
             tracking_image,
-            roi_boxes[
-                name
-            ],
+            detection,
         )
 
         ocr_candidates = (
@@ -496,47 +513,45 @@ def extract_tracking_data(
             )
         )
 
+        bbox_candidate_valid = (
+            _candidate_is_valid(
+                name,
+                raw_text,
+            )
+        )
+
         if (
-            anchor_raw
+            not bbox_candidate_valid
+            and anchor_raw
             and _candidate_is_valid(
                 name,
                 anchor_raw,
             )
         ):
             raw_text = anchor_raw
-            confidence = max(
-                confidence,
-                float(
-                    anchor_confidence
-                    or 0.0
-                ),
+            confidence = float(
+                anchor_confidence
+                or 0.0
             )
-            used_fallback = False
+            used_fallback = True
 
         elif (
-            document_raw
+            not _candidate_is_valid(
+                name,
+                raw_text,
+            )
+            and document_raw
             and _candidate_is_valid(
                 name,
                 document_raw,
             )
-            and (
-                not _candidate_is_valid(
-                    name,
-                    raw_text,
-                )
-                or document_confidence
-                >= confidence - 12.0
-            )
         ):
             raw_text = document_raw
-            confidence = max(
-                confidence,
-                float(
-                    document_confidence
-                    or 0.0
-                ),
+            confidence = float(
+                document_confidence
+                or 0.0
             )
-            used_fallback = False
+            used_fallback = True
 
         parsed = parse_field(
             name,
@@ -597,7 +612,12 @@ def extract_tracking_data(
             corrected_image.copy()
         ),
         face_image=(
-            extraction.face_image.copy()
+            crop_detection(
+                tracking_image,
+                detection_map["foto"],
+            )
+            if "foto" in detection_map
+            else extraction.face_image.copy()
         ),
         fields=fields,
         identity=_build_identity(
@@ -609,5 +629,7 @@ def extract_tracking_data(
         debug_tracking_image=(
             tracking_image.copy()
         ),
-        debug_roi_boxes=roi_boxes,
+        detections=list(
+            detection_map.values()
+        ),
     )
