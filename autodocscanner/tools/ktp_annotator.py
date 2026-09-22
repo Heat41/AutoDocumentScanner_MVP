@@ -10,6 +10,9 @@ from PIL import Image, ImageTk
 from autodocscanner.core.scanner import (
     AutoDocumentScanner,
 )
+from autodocscanner.ktp.annotation_preprocess import (
+    prepare_annotation_image,
+)
 from autodocscanner.ktp.annotation import (
     Annotation,
     read_yolo_annotations,
@@ -17,11 +20,6 @@ from autodocscanner.ktp.annotation import (
 )
 from autodocscanner.ktp.field_detection import (
     FIELD_CLASSES,
-)
-from autodocscanner.ktp.layout import (
-    KTP_CANONICAL_HEIGHT,
-    KTP_CANONICAL_WIDTH,
-    normalize_ktp_for_tracking,
 )
 
 
@@ -306,24 +304,6 @@ class KtpFieldAnnotator(tk.Tk):
             )
         )
 
-    @staticmethod
-    def _is_canonical_image(
-        image,
-    ):
-        if image is None:
-            return False
-
-        height, width = (
-            image.shape[:2]
-        )
-
-        return (
-            width
-            == KTP_CANONICAL_WIDTH
-            and height
-            == KTP_CANONICAL_HEIGHT
-        )
-
     def _prepare_canonical(
         self,
         source_path,
@@ -332,39 +312,12 @@ class KtpFieldAnnotator(tk.Tk):
             source_path
         )
 
-        if not source_path.is_file():
-            raise FileNotFoundError(
-                f"File tidak ditemukan: {source_path}"
+        prepared = (
+            prepare_annotation_image(
+                source_path,
+                scanner=self.scanner,
             )
-
-        source_image = cv2.imread(
-            str(source_path)
         )
-
-        if source_image is None:
-            raise ValueError(
-                f"Gambar tidak dapat dibaca: {source_path}"
-            )
-
-        if self._is_canonical_image(
-            source_image
-        ):
-            canonical = source_image
-        else:
-            corrected, _corners = (
-                self.scanner.scan(
-                    source_path,
-                    output_path=None,
-                    mode="ktp",
-                    output_mode="color",
-                )
-            )
-
-            canonical = (
-                normalize_ktp_for_tracking(
-                    corrected
-                )
-            )
 
         target = (
             self._canonical_target(
@@ -374,13 +327,25 @@ class KtpFieldAnnotator(tk.Tk):
 
         ok = cv2.imwrite(
             str(target),
-            canonical,
+            prepared.image,
         )
 
         if not ok:
             raise RuntimeError(
                 "OpenCV gagal menyimpan canonical KTP untuk anotasi."
             )
+
+        self.status_text.set(
+            (
+                "Canonical siap — "
+                + (
+                    "Auto Perspective diterapkan."
+                    if prepared.source_mode
+                    == "auto_perspective"
+                    else "input sudah canonical."
+                )
+            )
+        )
 
         return target
 
