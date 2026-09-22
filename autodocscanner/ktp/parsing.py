@@ -165,3 +165,163 @@ def parse_field(field_name, value):
         return parse_gender(value)
 
     return _generic_field(field_name, value)
+
+
+_DOCUMENT_LABELS = (
+    ("nik", ("NIK",)),
+    ("nama", ("NAMA",)),
+    (
+        "ttl",
+        (
+            "TEMPAT/TGL LAHIR",
+            "TEMPAT TGL LAHIR",
+            "TEMPAT/TANGGAL LAHIR",
+            "TEMPAT TANGGAL LAHIR",
+        ),
+    ),
+    (
+        "jenis_kelamin",
+        (
+            "JENIS KELAMIN",
+            "JENIS KELAMIN ",
+        ),
+    ),
+    (
+        "golongan_darah",
+        (
+            "GOL DARAH",
+            "GOL. DARAH",
+        ),
+    ),
+    ("alamat", ("ALAMAT",)),
+    (
+        "rt_rw",
+        (
+            "RT/RW",
+            "RT RW",
+        ),
+    ),
+    (
+        "kelurahan_desa",
+        (
+            "KEL/DESA",
+            "KEL DESA",
+            "KELURAHAN/DESA",
+            "KELURAHAN DESA",
+        ),
+    ),
+    ("kecamatan", ("KECAMATAN",)),
+    ("agama", ("AGAMA",)),
+    (
+        "status_perkawinan",
+        (
+            "STATUS PERKAWINAN",
+            "STATUS KAWIN",
+        ),
+    ),
+    ("pekerjaan", ("PEKERJAAN",)),
+    (
+        "kewarganegaraan",
+        (
+            "KEWARGANEGARAAN",
+            "KEWARGANEGARAAN ",
+        ),
+    ),
+    (
+        "berlaku_hingga",
+        (
+            "BERLAKU HINGGA",
+            "BERLAKU HINGGA ",
+        ),
+    ),
+)
+
+
+def _line_value_after_label(
+    line,
+    aliases,
+):
+    clean = clean_text(line)
+    upper = clean.upper()
+
+    for alias in aliases:
+        alias_upper = alias.upper()
+        if not upper.startswith(
+            alias_upper
+        ):
+            continue
+
+        remainder = clean[
+            len(alias): 
+        ].lstrip(
+            " :-"
+        )
+        return remainder.strip()
+
+    return None
+
+
+def parse_ktp_document(text):
+    lines = [
+        clean_text(line)
+        for line in str(
+            text or ""
+        ).splitlines()
+        if clean_text(line)
+    ]
+
+    result = {}
+
+    for line in lines:
+        upper = line.upper()
+
+        if (
+            "provinsi"
+            not in result
+            and upper.startswith(
+                "PROVINSI "
+            )
+        ):
+            result[
+                "provinsi"
+            ] = line.upper()
+            continue
+
+        if (
+            "kabupaten_kota"
+            not in result
+            and (
+                upper.startswith(
+                    "KOTA "
+                )
+                or upper.startswith(
+                    "KABUPATEN "
+                )
+            )
+        ):
+            result[
+                "kabupaten_kota"
+            ] = line.upper()
+            continue
+
+        for field_name, aliases in (
+            _DOCUMENT_LABELS
+        ):
+            value = (
+                _line_value_after_label(
+                    line,
+                    aliases,
+                )
+            )
+
+            if value is None:
+                continue
+
+            if value:
+                result[
+                    field_name
+                ] = value
+
+            break
+
+    return result
