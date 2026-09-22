@@ -287,6 +287,30 @@ class KtpFieldAnnotator(tk.Tk):
             Path(selected)
         )
 
+    @staticmethod
+    def _canonical_stem(
+        source_path,
+    ):
+        stem = Path(
+            source_path
+        ).stem
+
+        while stem.endswith(
+            "_canonical_canonical"
+        ):
+            stem = stem[
+                :-len(
+                    "_canonical"
+                )
+            ]
+
+        if not stem.endswith(
+            "_canonical"
+        ):
+            stem += "_canonical"
+
+        return stem
+
     def _canonical_target(
         self,
         source_path,
@@ -299,8 +323,10 @@ class KtpFieldAnnotator(tk.Tk):
         return (
             CANONICAL_DIR
             / (
-                source_path.stem
-                + "_canonical.png"
+                self._canonical_stem(
+                    source_path
+                )
+                + ".png"
             )
         )
 
@@ -364,13 +390,70 @@ class KtpFieldAnnotator(tk.Tk):
         )
         self.image = image
 
-        label_path = (
+        label_candidates = [
+            (
+                LABEL_DIR
+                / (
+                    self.image_path.stem
+                    + ".txt"
+                )
+            )
+        ]
+
+        canonical_stem = (
+            self._canonical_stem(
+                self.image_path
+            )
+        )
+
+        canonical_label = (
             LABEL_DIR
             / (
-                self.image_path.stem
+                canonical_stem
                 + ".txt"
             )
         )
+
+        if (
+            canonical_label
+            not in label_candidates
+        ):
+            label_candidates.append(
+                canonical_label
+            )
+
+        legacy_stem = (
+            self.image_path.stem
+            .replace(
+                "_canonical_canonical",
+                "_canonical",
+            )
+        )
+        legacy_label = (
+            LABEL_DIR
+            / (
+                legacy_stem
+                + ".txt"
+            )
+        )
+
+        if (
+            legacy_label
+            not in label_candidates
+        ):
+            label_candidates.append(
+                legacy_label
+            )
+
+        label_path = next(
+            (
+                candidate
+                for candidate in label_candidates
+                if candidate.is_file()
+            ),
+            label_candidates[0],
+        )
+
         self.annotations = (
             read_yolo_annotations(
                 label_path,
