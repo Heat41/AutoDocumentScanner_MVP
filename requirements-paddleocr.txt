@@ -1,0 +1,4 @@
+# Optional Stage 2D Tracking OCR engine.
+# Install only for PaddleOCR UAT; baseline requirements remain lightweight.
+paddlepaddle==3.3.1
+paddleocr==3.7.0
