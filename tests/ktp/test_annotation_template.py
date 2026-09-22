@@ -161,6 +161,41 @@ class TestAnnotationTemplate(unittest.TestCase):
                 ),
             )
 
+    def test_bootstrap_prefers_canonical_label_over_raw_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labels = root / "labels"
+            labels.mkdir()
+
+            raw = labels / "sample.txt"
+            raw.write_text(
+                "0 0.100000 0.100000 0.100000 0.100000\n",
+                encoding="utf-8",
+            )
+
+            canonical = labels / "sample_canonical.txt"
+            canonical.write_text(
+                "3 0.500000 0.500000 0.200000 0.100000\n",
+                encoding="utf-8",
+            )
+
+            template = root / "templates" / "default.txt"
+
+            created = bootstrap_annotation_template(
+                template,
+                labels,
+            )
+
+            self.assertTrue(created)
+            self.assertEqual(
+                template.read_text(
+                    encoding="utf-8"
+                ),
+                canonical.read_text(
+                    encoding="utf-8"
+                ),
+            )
+
     def test_template_seeds_unlabeled_image(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
