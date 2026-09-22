@@ -10,6 +10,7 @@ from autodocscanner.ktp.ocr import (
 )
 from autodocscanner.ktp.parsing import (
     parse_field,
+    parse_ktp_document,
 )
 
 
