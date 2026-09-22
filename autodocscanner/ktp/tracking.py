@@ -6,6 +6,7 @@ from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
 )
 from autodocscanner.ktp.ocr import (
+    TesseractBackend,
     read_field_ocr,
 )
 from autodocscanner.ktp.parsing import (
@@ -208,15 +209,18 @@ def extract_tracking_data(
         corrected_image
     )
 
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
     document_candidates = {}
     document_confidence = 0.0
 
-    if (
-        backend is not None
-        and hasattr(
-            backend,
-            "read_document",
-        )
+    if hasattr(
+        backend,
+        "read_document",
     ):
         try:
             (
