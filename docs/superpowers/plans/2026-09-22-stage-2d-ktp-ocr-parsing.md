@@ -73,3 +73,28 @@
 **Files:**
 - Modify: `autodocscanner/ktp/__init__.py`
 - Full repository regression.
+
+
+## Implementation checkpoint — 2026-09-22
+
+Completed on `main`:
+- KTP field text parsers.
+- CPU-only OCR preprocessing.
+- Lazy Tesseract backend.
+- Confidence scoring.
+- One fallback preprocessing pass for weak OCR.
+- Tracking service combining crop -> OCR -> parser.
+- Structured identity output.
+- Mandatory-review flags for low-confidence/incomplete fields.
+- Portrait crop excluded from OCR.
+- `pytesseract` added to runtime requirements.
+
+Audit:
+- No changes to scanner/perspective engine.
+- No automatic Stage 2C database write.
+- No Tracking UI integration yet; that follows after core regression is green.
+
+Pending:
+- Install/update Python requirements.
+- Verify Tesseract executable availability on Windows.
+- Full repository regression.
