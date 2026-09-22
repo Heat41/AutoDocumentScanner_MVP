@@ -70,3 +70,23 @@
 ### Task 4 — Regression checkpoint
 - Full unit regression.
 - UI smoke: select image, process, switch between all three top navigation pages, process a second image.
+
+
+## Implementation checkpoint — 2026-09-22
+
+Completed on `main`:
+- Headless Tracking KTP processing service.
+- Tracking page uses the existing shared scanner instance.
+- Single-image KTP selection.
+- Worker-thread processing for auto perspective + OCR.
+- Corrected KTP preview.
+- Face crop preview.
+- Editable structured identity review fields.
+- Visible review markers for OCR fields requiring attention.
+- Reprocessing replaces prior review state.
+- Rekam Data KTP remains disabled pending Stage 2F.
+
+Audit:
+- Scanner and perspective engine files were not changed.
+- Stage 2C storage is not written automatically.
+- Full regression and Windows UI smoke are pending.
