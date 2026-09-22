@@ -136,10 +136,18 @@ def parse_gender(value):
 
 def _generic_field(field_name, value):
     label = field_name.replace("_", " ").upper()
-    text = _strip_leading_label(
-        value,
-        (label,),
+    text = clean_text(value)
+
+    pattern = re.compile(
+        rf"^\s*{re.escape(label)}\s*[:\-]\s*",
+        flags=re.IGNORECASE,
     )
+    text = pattern.sub(
+        "",
+        text,
+        count=1,
+    )
+
     return clean_text(text).upper()
 
 
