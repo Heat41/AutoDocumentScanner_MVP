@@ -4,7 +4,9 @@ from autodocscanner.ktp.field_detection import (
     FIELD_CLASSES,
 )
 from autodocscanner.tools.ktp_annotator import (
+    CANONICAL_DIR,
     DATASET_ROOT,
+    KtpFieldAnnotator,
 )
 
 
@@ -30,6 +32,26 @@ class TestKtpAnnotatorContract(unittest.TestCase):
         self.assertIn(
             "foto",
             FIELD_CLASSES,
+        )
+
+    def test_canonical_output_is_inside_local_dataset(self):
+        self.assertEqual(
+            CANONICAL_DIR.parts[-3:],
+            (
+                "dataset",
+                "ktp_fields",
+                "canonical",
+            ),
+        )
+
+    def test_annotator_exposes_raw_to_canonical_preparation(self):
+        self.assertTrue(
+            callable(
+                getattr(
+                    KtpFieldAnnotator,
+                    "_prepare_canonical",
+                )
+            )
         )
 
 
