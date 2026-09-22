@@ -4,7 +4,9 @@ from pathlib import Path
 import numpy as np
 
 from autodocscanner.services.ktp_tracking import (
+    correct_tracking_input,
     process_tracking_input,
+    track_corrected_ktp,
 )
 
 
@@ -116,6 +118,46 @@ class TestKtpTrackingService(unittest.TestCase):
         self.assertEqual(
             result["corners"].shape,
             (4, 2),
+        )
+
+    def test_correction_stage_returns_corrected_image_only(self):
+        result = correct_tracking_input(
+            FakeScanner(),
+            "sample.jpg",
+        )
+
+        self.assertIn(
+            "corrected_image",
+            result,
+        )
+        self.assertIn(
+            "corners",
+            result,
+        )
+        self.assertNotIn(
+            "tracking",
+            result,
+        )
+
+    def test_tracking_stage_accepts_corrected_image(self):
+        corrected = np.full(
+            (540, 856, 3),
+            150,
+            dtype=np.uint8,
+        )
+
+        tracking = track_corrected_ktp(
+            corrected,
+            backend=FakeBackend(),
+        )
+
+        self.assertEqual(
+            tracking.corrected_image.shape,
+            corrected.shape,
+        )
+        self.assertEqual(
+            tracking.identity["nama"],
+            "NAMA CONTOH",
         )
 
 
