@@ -160,9 +160,30 @@ def _looks_clean_text(value):
         for char in visible
         if char.isalnum()
     )
+    punctuation_count = sum(
+        1
+        for char in visible
+        if not char.isalnum()
+        and char not in (".", ",", "/", "-", "'")
+    )
+
+    alpha_words = [
+        word
+        for word in text.replace(
+            "/",
+            " ",
+        ).replace(
+            "-",
+            " ",
+        ).split()
+        if any(
+            char.isalpha()
+            for char in word
+        )
+    ]
 
     return (
-        alnum_count >= 2
+        alnum_count >= 3
         and (
             alnum_count
             / max(
@@ -170,8 +191,52 @@ def _looks_clean_text(value):
                 1,
             )
         )
-        >= 0.55
+        >= 0.72
+        and punctuation_count
+        <= max(
+            2,
+            len(visible) // 12,
+        )
+        and bool(
+            alpha_words
+        )
     )
+
+
+_ENUM_VALUES = {
+    "agama": {
+        "ISLAM",
+        "KRISTEN",
+        "KATOLIK",
+        "HINDU",
+        "BUDDHA",
+        "KHONGHUCU",
+    },
+    "jenis_kelamin": {
+        "LAKI-LAKI",
+        "PEREMPUAN",
+    },
+    "kewarganegaraan": {
+        "WNI",
+        "WNA",
+    },
+}
+
+
+def _enum_value_is_valid(
+    field_name,
+    parsed,
+):
+    allowed = _ENUM_VALUES.get(
+        field_name
+    )
+
+    if allowed is None:
+        return True
+
+    return str(
+        parsed or ""
+    ).strip().upper() in allowed
 
 
 def _candidate_is_valid(
@@ -195,6 +260,12 @@ def _candidate_is_valid(
         "rt_rw",
     ):
         return True
+
+    if not _enum_value_is_valid(
+        field_name,
+        parsed,
+    ):
+        return False
 
     return _looks_clean_text(
         raw_text
@@ -346,6 +417,22 @@ def extract_tracking_data(
             raw_text,
         )
 
+        candidate_valid = (
+            _candidate_is_valid(
+                name,
+                raw_text,
+            )
+        )
+
+        if not candidate_valid:
+            raw_text = ""
+            parsed = parse_field(
+                name,
+                "",
+            )
+            confidence = 0.0
+            used_fallback = False
+
         complete = (
             _parsed_value_complete(
                 name,
@@ -357,6 +444,7 @@ def extract_tracking_data(
             confidence
             < confidence_threshold
             or not complete
+            or not candidate_valid
         )
 
         field = TrackedField(
