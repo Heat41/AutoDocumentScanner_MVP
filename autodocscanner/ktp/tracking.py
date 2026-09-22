@@ -224,6 +224,19 @@ _ENUM_VALUES = {
         "WNI",
         "WNA",
     },
+    "golongan_darah": {
+        "A",
+        "B",
+        "AB",
+        "O",
+        "-",
+    },
+    "status_perkawinan": {
+        "BELUM KAWIN",
+        "KAWIN",
+        "CERAI HIDUP",
+        "CERAI MATI",
+    },
 }
 
 
@@ -264,6 +277,13 @@ def _candidate_is_valid(
         "rt_rw",
     ):
         return True
+
+    if field_name == "berlaku_hingga":
+        value = str(
+            parsed or ""
+        ).strip().upper()
+        if value == "SEUMUR HIDUP":
+            return True
 
     if not _enum_value_is_valid(
         field_name,
