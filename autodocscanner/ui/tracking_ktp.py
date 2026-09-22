@@ -11,7 +11,7 @@ from autodocscanner.services.ktp_tracking import (
     process_tracking_input,
 )
 from autodocscanner.services.pdf_preview import (
-    build_ktp_preview_pdf,
+    build_tracking_report_pdf,
 )
 
 
@@ -956,6 +956,14 @@ class TrackingKtpPage(ttk.Frame):
             text="",
         )
 
+    def current_review_values(self):
+        return {
+            name: self._review_vars[
+                name
+            ].get().strip()
+            for name in self.REVIEW_FIELDS
+        }
+
     def preview_pdf(self):
         tracking = self._last_tracking
 
@@ -966,11 +974,13 @@ class TrackingKtpPage(ttk.Frame):
             stem = (
                 self.input_path.stem
                 if self.input_path is not None
-                else "ktp_preview"
+                else "tracking_ktp"
             )
-            pdf_path = build_ktp_preview_pdf(
+            pdf_path = build_tracking_report_pdf(
                 tracking.corrected_image,
-                stem=f"{stem}_preview",
+                tracking.face_image,
+                self.current_review_values(),
+                stem=f"{stem}_tracking",
             )
 
             if os.name != "nt":
