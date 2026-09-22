@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
@@ -499,8 +500,25 @@ class OnnxFieldDetector:
         )
 
 
+def _runtime_root():
+    frozen_root = getattr(
+        sys,
+        "_MEIPASS",
+        None,
+    )
+
+    if frozen_root:
+        return Path(
+            frozen_root
+        )
+
+    return Path(
+        __file__
+    ).resolve().parents[2]
+
+
 class AutoFieldDetector:
-    DEFAULT_MODEL_PATH = (
+    DEFAULT_MODEL_RELATIVE = (
         Path("models")
         / "ktp_field_detector"
         / "ktp_fields.onnx"
@@ -511,9 +529,15 @@ class AutoFieldDetector:
         model_path=None,
         template_detector=None,
     ):
-        self.model_path = Path(
-            model_path
-            or self.DEFAULT_MODEL_PATH
+        self.model_path = (
+            Path(
+                model_path
+            )
+            if model_path is not None
+            else (
+                _runtime_root()
+                / self.DEFAULT_MODEL_RELATIVE
+            )
         )
         self.template_detector = (
             template_detector
