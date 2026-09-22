@@ -252,9 +252,47 @@ def extract_tracking_data(
             ),
         )
 
+        raw_text = ocr.raw_text
+        confidence = ocr.confidence
+        used_fallback = (
+            ocr.used_fallback
+        )
+
+        document_raw = (
+            document_candidates.get(
+                name,
+                "",
+            )
+        )
+
+        if (
+            document_raw
+            and _candidate_is_valid(
+                name,
+                document_raw,
+            )
+            and (
+                not _candidate_is_valid(
+                    name,
+                    raw_text,
+                )
+                or document_confidence
+                >= confidence - 12.0
+            )
+        ):
+            raw_text = document_raw
+            confidence = max(
+                confidence,
+                float(
+                    document_confidence
+                    or 0.0
+                ),
+            )
+            used_fallback = False
+
         parsed = parse_field(
             name,
-            ocr.raw_text,
+            raw_text,
         )
 
         complete = (
@@ -265,18 +303,18 @@ def extract_tracking_data(
         )
 
         needs_review = (
-            ocr.confidence
+            confidence
             < confidence_threshold
             or not complete
         )
 
         field = TrackedField(
             name=name,
-            raw_text=ocr.raw_text,
+            raw_text=raw_text,
             value=parsed,
-            confidence=ocr.confidence,
+            confidence=confidence,
             used_fallback=(
-                ocr.used_fallback
+                used_fallback
             ),
             needs_review=(
                 needs_review
