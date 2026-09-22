@@ -20,3 +20,6 @@ release/
 *.log
 
 data/
+
+# Local KTP detector dataset (sensitive, never commit)
+dataset/
