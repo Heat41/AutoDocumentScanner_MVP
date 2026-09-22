@@ -8,6 +8,10 @@ from autodocscanner.ktp.anchors import (
 from autodocscanner.ktp.extraction import (
     extract_ktp_regions,
 )
+from autodocscanner.ktp.layout import (
+    KTP_VALUE_BOXES,
+    crop_normalized,
+)
 from autodocscanner.ktp.ocr import (
     TesseractBackend,
     read_field_ocr,
@@ -337,8 +341,15 @@ def extract_tracking_data(
         if name == "foto":
             continue
 
+        value_image = crop_normalized(
+            corrected_image,
+            KTP_VALUE_BOXES[
+                name
+            ],
+        )
+
         ocr = read_field_ocr(
-            crop.image,
+            value_image,
             name,
             backend=backend,
             confidence_threshold=(
