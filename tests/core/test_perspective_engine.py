@@ -3,7 +3,10 @@ import unittest
 import cv2
 import numpy as np
 
-from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
+from autodocscanner.core.perspective_engine import (
+    AutoPerspectiveEngine,
+    PerspectiveCandidate,
+)
 from autodocscanner.core.scanner import AutoDocumentScanner
 
 
@@ -145,6 +148,102 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
                 - self.engine.target_ratio
             ),
             0.35,
+        )
+
+
+    def test_color_refined_candidate_can_use_snapped_boundary_variant(self):
+        image = np.zeros(
+            (400, 640, 3),
+            dtype=np.uint8,
+        )
+        raw = np.array(
+            [
+                [80, 70],
+                [560, 70],
+                [560, 330],
+                [80, 330],
+            ],
+            dtype=np.float32,
+        )
+        snapped = raw + np.array(
+            [
+                [-3, -3],
+                [3, -3],
+                [3, 3],
+                [-3, 3],
+            ],
+            dtype=np.float32,
+        )
+
+        self.engine._resize_for_detection = (
+            lambda source: (
+                source.copy(),
+                1.0,
+            )
+        )
+        self.engine._build_detection_maps = (
+            lambda source: (
+                [
+                    np.zeros(
+                        source.shape[:2],
+                        dtype=np.uint8,
+                    )
+                ],
+                np.zeros(
+                    source.shape[:2],
+                    dtype=np.uint8,
+                ),
+            )
+        )
+        self.engine._contour_candidates = (
+            lambda maps: []
+        )
+        self.engine._color_candidate = (
+            lambda source: [
+                PerspectiveCandidate(
+                    points=raw.copy(),
+                    score=0.0,
+                    source="color_refined",
+                )
+            ]
+        )
+        self.engine._snap_quad_to_boundary = (
+            lambda source, points: (
+                snapped.copy()
+            )
+        )
+        self.engine._candidate_score = (
+            lambda candidate, source, edges: (
+                0.92
+                if candidate.source
+                == "color_refined_snapped"
+                else 0.70
+            )
+        )
+        self.engine._warp_quality = (
+            lambda warped: 0.80
+        )
+
+        corners, metadata = (
+            self.engine.detect(
+                image
+            )
+        )
+
+        self.assertIsNotNone(
+            corners
+        )
+        self.assertTrue(
+            np.allclose(
+                corners,
+                snapped,
+            )
+        )
+        self.assertEqual(
+            metadata[
+                "selected_source"
+            ],
+            "color_refined_snapped",
         )
 
 
