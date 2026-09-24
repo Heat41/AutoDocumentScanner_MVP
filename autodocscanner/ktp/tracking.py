@@ -33,6 +33,7 @@ from autodocscanner.ktp.ocr import (
     read_name_ocr_candidates,
     read_nik_ocr_candidates,
     read_numeric_fragment,
+    read_segmented_digits,
 )
 from autodocscanner.ktp.parsing import (
     parse_field,
@@ -488,7 +489,6 @@ def _ocr_detection_for_field(
     extend_right_fields = {
         "provinsi",
         "kabupaten_kota",
-        "nama",
         "ttl",
         "alamat",
         "kelurahan_desa",
@@ -637,17 +637,30 @@ def _recover_nik_from_fragments(
         expected_length=4,
         backend=backend,
     )
+    segmented_serial = read_segmented_digits(
+        serial_crop,
+        digit_count=4,
+        backend=backend,
+    )
 
     region_digits = "".join(
         char
         for char in region.raw_text
         if char.isdigit()
     )
+
     serial_digits = "".join(
         char
-        for char in serial.raw_text
+        for char in segmented_serial.raw_text
         if char.isdigit()
     )
+
+    if len(serial_digits) != 4:
+        serial_digits = "".join(
+            char
+            for char in serial.raw_text
+            if char.isdigit()
+        )
 
     if (
         len(region_digits) != 4
