@@ -92,6 +92,15 @@ class TestKtpParsing(unittest.TestCase):
             "SEUMUR HIDUP",
         )
 
+    def test_generic_field_cleans_unicode_dash_at_edge(self):
+        self.assertEqual(
+            parse_field(
+                "kabupaten_kota",
+                "KABUPATEN MELAWI —",
+            ),
+            "KABUPATEN MELAWI",
+        )
+
     def test_parse_ktp_document_extracts_labeled_lines(self):
         text = """
 PROVINSI CONTOH
