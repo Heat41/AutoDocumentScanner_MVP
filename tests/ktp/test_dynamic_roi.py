@@ -89,6 +89,35 @@ class TestAnchorAlignedValueBoxes(unittest.TestCase):
             0.018001,
         )
 
+    def test_horizontal_anchor_keeps_right_edge_and_expands_left(self):
+        template = KTP_VALUE_BOXES[
+            "alamat"
+        ]
+
+        boxes = build_anchor_aligned_value_boxes(
+            image_height=540,
+            image_width=856,
+            anchors={
+                "alamat": (
+                    300.0,
+                    220.0,
+                    95.0,
+                ),
+            },
+        )
+
+        actual = boxes["alamat"]
+
+        self.assertLess(
+            actual.x1,
+            template.x1,
+        )
+        self.assertAlmostEqual(
+            actual.x2,
+            template.x2,
+            places=6,
+        )
+
     def test_missing_anchor_keeps_template_box(self):
         boxes = build_anchor_aligned_value_boxes(
             image_height=540,
