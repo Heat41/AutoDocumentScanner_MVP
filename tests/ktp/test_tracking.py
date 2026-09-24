@@ -114,6 +114,32 @@ class TestKtpTracking(unittest.TestCase):
             "PEREMPUAN",
         )
 
+    def test_name_ocr_keeps_manual_template_bbox(self):
+        detection = FieldDetection(
+            "nama",
+            (150, 100, 300, 130),
+            0.95,
+            "annotation_template",
+        )
+        photo = FieldDetection(
+            "foto",
+            (600, 80, 820, 430),
+            0.95,
+            "annotation_template",
+        )
+
+        actual = _ocr_detection_for_field(
+            "nama",
+            detection,
+            {"foto": photo},
+            856,
+        )
+
+        self.assertEqual(
+            actual.bbox,
+            detection.bbox,
+        )
+
     def test_ocr_detection_can_extend_long_text_to_photo_boundary(self):
         detection = FieldDetection(
             "pekerjaan",
