@@ -90,6 +90,78 @@ class TestTemplateFieldDetector(unittest.TestCase):
             ),
         )
 
+    def test_saved_template_uses_global_anchor_alignment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = (
+                Path(tmp)
+                / "default.txt"
+            )
+            template_path.write_text(
+                "\n".join(
+                    [
+                        "2 0.350000 0.200000 0.300000 0.040000",
+                        "3 0.350000 0.300000 0.300000 0.040000",
+                        "7 0.350000 0.500000 0.300000 0.040000",
+                        "16 0.820000 0.500000 0.180000 0.300000",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            detector = TemplateFieldDetector(
+                template_path=template_path
+            )
+
+            width = self.image.shape[1]
+            height = self.image.shape[0]
+
+            anchors = {
+                "nik": (
+                    0.20 * width + 10.0,
+                    0.20 * height + 8.0,
+                    95.0,
+                ),
+                "nama": (
+                    0.20 * width + 10.0,
+                    0.30 * height + 8.0,
+                    94.0,
+                ),
+                "alamat": (
+                    0.20 * width + 10.0,
+                    0.50 * height + 8.0,
+                    93.0,
+                ),
+            }
+
+            detections = best_detection_by_class(
+                detector.detect(
+                    self.image,
+                    anchors=anchors,
+                )
+            )
+
+        self.assertEqual(
+            detections["nik"].source,
+            "annotation_template_aligned",
+        )
+        self.assertGreater(
+            detections["nik"].bbox[0],
+            int(
+                round(
+                    0.20 * width
+                )
+            ),
+        )
+        self.assertGreater(
+            detections["foto"].bbox[0],
+            int(
+                round(
+                    0.73 * width
+                )
+            ),
+        )
+
     def test_anchor_changes_detected_row(self):
         with tempfile.TemporaryDirectory() as tmp:
             detector = TemplateFieldDetector(
