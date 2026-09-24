@@ -69,6 +69,29 @@ class TestKtpParsing(unittest.TestCase):
             "CONTOH",
         )
 
+    def test_generic_field_cleans_edge_ocr_punctuation(self):
+        self.assertEqual(
+            parse_field(
+                "kelurahan_desa",
+                "'PASIRAN",
+            ),
+            "PASIRAN",
+        )
+        self.assertEqual(
+            parse_field(
+                "pekerjaan",
+                "WIRASWASTA .",
+            ),
+            "WIRASWASTA",
+        )
+        self.assertEqual(
+            parse_field(
+                "berlaku_hingga",
+                "SEUMUR HIDUP-",
+            ),
+            "SEUMUR HIDUP",
+        )
+
     def test_parse_ktp_document_extracts_labeled_lines(self):
         text = """
 PROVINSI CONTOH
