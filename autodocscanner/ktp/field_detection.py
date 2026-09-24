@@ -237,6 +237,394 @@ def _runtime_root():
     ).resolve().parents[2]
 
 
+def _robust_median(
+    values,
+):
+    data = np.asarray(
+        list(values),
+        dtype=np.float32,
+    )
+
+    if data.size == 0:
+        return 0.0
+
+    median = float(
+        np.median(
+            data
+        )
+    )
+    deviation = np.abs(
+        data - median
+    )
+    mad = float(
+        np.median(
+            deviation
+        )
+    )
+
+    if mad <= 1e-6:
+        return median
+
+    keep = deviation <= (
+        3.5
+        * mad
+    )
+    filtered = data[
+        keep
+    ]
+
+    if filtered.size == 0:
+        return median
+
+    return float(
+        np.median(
+            filtered
+        )
+    )
+
+
+def _estimate_saved_template_transform(
+    saved_boxes,
+    anchors,
+    image_width,
+    image_height,
+):
+    samples = []
+
+    for name, anchor in dict(
+        anchors or {}
+    ).items():
+        bbox = saved_boxes.get(
+            name
+        )
+
+        if bbox is None:
+            continue
+
+        try:
+            anchor_x, anchor_y, confidence = (
+                anchor
+            )
+            anchor_x = float(
+                anchor_x
+            )
+            anchor_y = float(
+                anchor_y
+            )
+            confidence = float(
+                confidence
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            continue
+
+        if confidence < 35.0:
+            continue
+
+        x1, y1, _x2, y2 = bbox
+        samples.append(
+            (
+                float(
+                    x1
+                ),
+                float(
+                    (
+                        y1 + y2
+                    )
+                    / 2.0
+                ),
+                anchor_x,
+                anchor_y,
+                confidence,
+            )
+        )
+
+    if len(samples) < 3:
+        return {
+            "applied": False,
+            "scale_y": 1.0,
+            "shift_x": 0.0,
+            "shift_y": 0.0,
+            "sample_count": len(
+                samples
+            ),
+        }
+
+    y_scales = []
+
+    for index, first in enumerate(
+        samples
+    ):
+        for second in samples[
+            index + 1:
+        ]:
+            template_delta = (
+                second[1]
+                - first[1]
+            )
+            detected_delta = (
+                second[3]
+                - first[3]
+            )
+
+            if abs(
+                template_delta
+            ) < 40.0:
+                continue
+
+            if (
+                template_delta
+                * detected_delta
+                <= 0.0
+            ):
+                continue
+
+            scale = (
+                detected_delta
+                / template_delta
+            )
+
+            if 0.90 <= scale <= 1.10:
+                y_scales.append(
+                    scale
+                )
+
+    scale_y = (
+        _robust_median(
+            y_scales
+        )
+        if y_scales
+        else 1.0
+    )
+    scale_y = max(
+        0.94,
+        min(
+            1.06,
+            scale_y,
+        ),
+    )
+
+    shift_x = _robust_median(
+        anchor_x - template_x
+        for (
+            template_x,
+            _template_y,
+            anchor_x,
+            _anchor_y,
+            _confidence,
+        ) in samples
+    )
+    shift_y = _robust_median(
+        anchor_y
+        - scale_y
+        * template_y
+        for (
+            _template_x,
+            template_y,
+            _anchor_x,
+            anchor_y,
+            _confidence,
+        ) in samples
+    )
+
+    shift_x = max(
+        -0.035
+        * float(
+            image_width
+        ),
+        min(
+            0.035
+            * float(
+                image_width
+            ),
+            shift_x,
+        ),
+    )
+    shift_y = max(
+        -0.045
+        * float(
+            image_height
+        ),
+        min(
+            0.045
+            * float(
+                image_height
+            ),
+            shift_y,
+        ),
+    )
+
+    return {
+        "applied": True,
+        "scale_y": float(
+            scale_y
+        ),
+        "shift_x": float(
+            shift_x
+        ),
+        "shift_y": float(
+            shift_y
+        ),
+        "sample_count": len(
+            samples
+        ),
+    }
+
+
+def _align_saved_bbox(
+    class_name,
+    bbox,
+    anchors,
+    transform,
+    image_width,
+    image_height,
+):
+    x1, y1, x2, y2 = [
+        float(
+            value
+        )
+        for value in bbox
+    ]
+
+    if transform.get(
+        "applied"
+    ):
+        scale_y = float(
+            transform.get(
+                "scale_y",
+                1.0,
+            )
+        )
+        shift_x = float(
+            transform.get(
+                "shift_x",
+                0.0,
+            )
+        )
+        shift_y = float(
+            transform.get(
+                "shift_y",
+                0.0,
+            )
+        )
+
+        x1 += shift_x
+        x2 += shift_x
+        y1 = (
+            y1
+            * scale_y
+            + shift_y
+        )
+        y2 = (
+            y2
+            * scale_y
+            + shift_y
+        )
+
+    anchor = dict(
+        anchors or {}
+    ).get(
+        class_name
+    )
+
+    if anchor is not None:
+        try:
+            anchor_x, anchor_y, confidence = (
+                anchor
+            )
+            anchor_x = float(
+                anchor_x
+            )
+            anchor_y = float(
+                anchor_y
+            )
+            confidence = float(
+                confidence
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            anchor = None
+
+    if (
+        anchor is not None
+        and confidence >= 50.0
+    ):
+        box_width = max(
+            x2 - x1,
+            1.0,
+        )
+        box_height = max(
+            y2 - y1,
+            1.0,
+        )
+
+        current_center_y = (
+            y1 + y2
+        ) / 2.0
+
+        residual_x = (
+            anchor_x
+            - x1
+        )
+        residual_y = (
+            anchor_y
+            - current_center_y
+        )
+
+        residual_x = max(
+            -0.012
+            * float(
+                image_width
+            ),
+            min(
+                0.012
+                * float(
+                    image_width
+                ),
+                residual_x,
+            ),
+        )
+        residual_y = max(
+            -0.014
+            * float(
+                image_height
+            ),
+            min(
+                0.014
+                * float(
+                    image_height
+                ),
+                residual_y,
+            ),
+        )
+
+        x1 += residual_x
+        x2 = (
+            x1
+            + box_width
+        )
+        y1 += residual_y
+        y2 = (
+            y1
+            + box_height
+        )
+
+    return _clamp_bbox(
+        (
+            x1,
+            y1,
+            x2,
+            y2,
+        ),
+        image_width,
+        image_height,
+    )
+
+
 class TemplateFieldDetector:
     DEFAULT_TEMPLATE_RELATIVE = (
         Path("dataset")
@@ -375,6 +763,15 @@ class TemplateFieldDetector:
             )
         )
 
+        saved_transform = (
+            _estimate_saved_template_transform(
+                saved_boxes,
+                anchors,
+                image_width=width,
+                image_height=height,
+            )
+        )
+
         text_boxes = (
             build_anchor_aligned_value_boxes(
                 image_height=height,
@@ -391,12 +788,29 @@ class TemplateFieldDetector:
             )
 
             if saved_bbox is not None:
+                aligned_bbox = (
+                    _align_saved_bbox(
+                        class_name,
+                        saved_bbox,
+                        anchors,
+                        saved_transform,
+                        image_width=width,
+                        image_height=height,
+                    )
+                )
+
                 detections.append(
                     FieldDetection(
                         class_name=class_name,
-                        bbox=saved_bbox,
+                        bbox=aligned_bbox,
                         confidence=0.95,
-                        source="annotation_template",
+                        source=(
+                            "annotation_template_aligned"
+                            if saved_transform.get(
+                                "applied"
+                            )
+                            else "annotation_template"
+                        ),
                     )
                 )
                 continue
