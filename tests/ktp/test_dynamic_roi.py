@@ -42,7 +42,7 @@ class TestAnchorAlignedValueBoxes(unittest.TestCase):
             places=3,
         )
 
-    def test_anchor_shift_is_bounded_and_preserves_box_size(self):
+    def test_anchor_shift_is_bounded_and_preserves_vertical_size(self):
         template = KTP_VALUE_BOXES[
             "nama"
         ]
@@ -61,9 +61,13 @@ class TestAnchorAlignedValueBoxes(unittest.TestCase):
 
         actual = boxes["nama"]
 
+        self.assertLessEqual(
+            actual.x1,
+            template.x1,
+        )
         self.assertAlmostEqual(
-            actual.x2 - actual.x1,
-            template.x2 - template.x1,
+            actual.x2,
+            template.x2,
             places=6,
         )
         self.assertAlmostEqual(
