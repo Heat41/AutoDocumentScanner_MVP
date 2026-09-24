@@ -11,6 +11,8 @@ from autodocscanner.output.safe import atomic_imwrite
 
 class AutoDocumentScanner:
     KTP_ASPECT_RATIO = 85.60 / 53.98
+    KTP_CANONICAL_WIDTH = 856
+    KTP_CANONICAL_HEIGHT = 540
 
     def __init__(
         self,
@@ -305,6 +307,39 @@ class AutoDocumentScanner:
             interpolation=cv2.INTER_CUBIC,
         )
 
+    @classmethod
+    def normalize_ktp_canvas(
+        cls,
+        image,
+    ):
+        if (
+            not isinstance(
+                image,
+                np.ndarray,
+            )
+            or image.size == 0
+        ):
+            raise ValueError(
+                "image KTP canonical tidak boleh kosong."
+            )
+
+        if (
+            image.shape[1]
+            == cls.KTP_CANONICAL_WIDTH
+            and image.shape[0]
+            == cls.KTP_CANONICAL_HEIGHT
+        ):
+            return image.copy()
+
+        return cv2.resize(
+            image,
+            (
+                cls.KTP_CANONICAL_WIDTH,
+                cls.KTP_CANONICAL_HEIGHT,
+            ),
+            interpolation=cv2.INTER_CUBIC,
+        )
+
     @staticmethod
     def enhance(image):
         lab = cv2.cvtColor(
@@ -456,6 +491,9 @@ class AutoDocumentScanner:
 
         if mode == "ktp":
             result = self.normalize_ktp_ratio(
+                result
+            )
+            result = self.normalize_ktp_canvas(
                 result
             )
 
