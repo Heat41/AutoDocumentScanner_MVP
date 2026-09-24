@@ -223,24 +223,37 @@ def build_anchor_aligned_value_boxes(
         if confidence < 20.0:
             continue
 
-        center_y = max(
+        template_center_y = (
+            box.y1
+            + box.y2
+        ) / 2.0
+        detected_center_y = max(
             0.0,
             min(
                 1.0,
                 anchor_y / height,
             ),
         )
-        half_height = min(
-            0.022,
-            max(
-                0.016,
-                (
-                    box.y2
-                    - box.y1
-                )
-                / 2.0,
+
+        # OCR anchor boleh memperbaiki posisi baris, tetapi jangan sampai
+        # menggeser ROI terlalu jauh dari layout canonical.
+        max_y_shift = 0.018
+        y_shift = max(
+            -max_y_shift,
+            min(
+                max_y_shift,
+                detected_center_y
+                - template_center_y,
             ),
         )
+        center_y = (
+            template_center_y
+            + y_shift
+        )
+        half_height = (
+            box.y2
+            - box.y1
+        ) / 2.0
 
         y1 = max(
             0.0,
@@ -251,40 +264,44 @@ def build_anchor_aligned_value_boxes(
             center_y + half_height,
         )
 
-        if y2 - y1 < 0.020:
-            continue
-
         x1 = box.x1
         x2 = box.x2
 
         if image_width is not None:
-            anchor_x_normalized = max(
+            detected_x = max(
                 0.0,
                 min(
                     1.0,
                     float(_x) / width,
                 ),
             )
-            padding = 0.008
-            dynamic_x1 = max(
-                0.0,
-                anchor_x_normalized
-                - padding,
-            )
 
+            # Geser seluruh ROI secara kecil dan pertahankan lebarnya.
+            # Ini mencegah box mengecil ketika OCR value-start kurang presisi.
+            max_x_shift = 0.025
+            desired_shift = (
+                detected_x
+                - box.x1
+            )
+            x_shift = max(
+                -max_x_shift,
+                min(
+                    max_x_shift,
+                    desired_shift,
+                ),
+            )
             box_width = (
                 box.x2
                 - box.x1
             )
-            x1 = dynamic_x1
-            x2 = min(
-                1.0,
-                x1 + box_width,
+            x1 = max(
+                0.0,
+                min(
+                    1.0 - box_width,
+                    box.x1 + x_shift,
+                ),
             )
-
-            if x2 - x1 < 0.08:
-                x1 = box.x1
-                x2 = box.x2
+            x2 = x1 + box_width
 
         result[name] = NormalizedBox(
             x1,
