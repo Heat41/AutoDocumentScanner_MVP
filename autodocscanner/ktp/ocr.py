@@ -807,6 +807,10 @@ def read_numeric_fragment(
         if backend is not None
         else TesseractBackend()
     )
+    expected_length = max(
+        int(expected_length),
+        1,
+    )
 
     candidates = (
         read_field_ocr_candidates(
@@ -816,7 +820,9 @@ def read_numeric_fragment(
         )
     )
 
-    normalized = []
+    window_scores = {}
+    window_confidence = {}
+    window_fallback = {}
 
     for candidate in candidates:
         digits = "".join(
@@ -825,63 +831,93 @@ def read_numeric_fragment(
             if char.isdigit()
         )
 
-        if not digits:
+        if len(digits) < expected_length:
             continue
 
-        normalized.append(
-            (
-                digits,
-                candidate,
+        windows = {
+            digits[
+                index:
+                index
+                + expected_length
+            ]
+            for index in range(
+                0,
+                len(digits)
+                - expected_length
+                + 1,
             )
-        )
+        }
 
-    exact = [
-        item
-        for item in normalized
-        if len(item[0])
-        == int(expected_length)
-    ]
+        for window in windows:
+            score = (
+                1.0
+                + float(
+                    candidate.confidence
+                )
+                / 100.0
+            )
+            window_scores[
+                window
+            ] = (
+                window_scores.get(
+                    window,
+                    0.0,
+                )
+                + score
+            )
+            window_confidence[
+                window
+            ] = max(
+                window_confidence.get(
+                    window,
+                    0.0,
+                ),
+                float(
+                    candidate.confidence
+                ),
+            )
+            window_fallback[
+                window
+            ] = (
+                window_fallback.get(
+                    window,
+                    False,
+                )
+                or bool(
+                    candidate.used_fallback
+                )
+            )
 
-    if exact:
-        digits, candidate = max(
-            exact,
-            key=lambda item: (
-                item[1].confidence
+    if window_scores:
+        best_window = max(
+            window_scores,
+            key=lambda value: (
+                window_scores[value],
+                window_confidence[
+                    value
+                ],
             ),
         )
 
         return OcrReadResult(
-            raw_text=digits,
-            confidence=candidate.confidence,
+            raw_text=best_window,
+            confidence=(
+                window_confidence[
+                    best_window
+                ]
+            ),
             used_fallback=(
-                candidate.used_fallback
+                window_fallback[
+                    best_window
+                ]
             ),
         )
-
-    if not normalized:
-        return OcrReadResult(
-            raw_text="",
-            confidence=0.0,
-            used_fallback=True,
-        )
-
-    digits, candidate = min(
-        normalized,
-        key=lambda item: (
-            abs(
-                len(item[0])
-                - int(expected_length)
-            ),
-            -item[1].confidence,
-        ),
-    )
 
     return OcrReadResult(
-        raw_text=digits,
-        confidence=candidate.confidence,
+        raw_text="",
+        confidence=0.0,
         used_fallback=True,
     )
-
 
 def read_field_ocr_candidates(
     image,
