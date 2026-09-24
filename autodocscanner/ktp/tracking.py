@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 import numpy as np
 
@@ -11,6 +12,7 @@ from autodocscanner.ktp.extraction import (
 )
 from autodocscanner.ktp.field_detection import (
     AutoFieldDetector,
+    FieldDetection,
     best_detection_by_class,
     crop_detection,
     crop_detection_padded,
@@ -19,12 +21,16 @@ from autodocscanner.ktp.layout import (
     normalize_ktp_for_tracking,
 )
 from autodocscanner.ktp.nik_validation import (
+    PROVINCE_NIK_PREFIXES,
+    birth_segment_from_context,
+    normalize_province_value,
     repair_nik_with_context,
 )
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
     TesseractBackend,
     read_field_ocr_candidates,
+    read_numeric_fragment,
 )
 from autodocscanner.ktp.parsing import (
     parse_field,
@@ -255,6 +261,267 @@ _ENUM_VALUES = {
 }
 
 
+_FUZZY_ENUM_FIELDS = {
+    "agama",
+    "jenis_kelamin",
+    "status_perkawinan",
+}
+
+
+def _normalize_enum_candidate(
+    field_name,
+    value,
+):
+    allowed = _ENUM_VALUES.get(
+        field_name
+    )
+
+    text = str(
+        value or ""
+    ).strip().upper()
+
+    if (
+        allowed is None
+        or text in allowed
+        or field_name
+        not in _FUZZY_ENUM_FIELDS
+    ):
+        return text
+
+    compact = "".join(
+        char
+        for char in text
+        if char.isalnum()
+    )
+
+    if not compact:
+        return text
+
+    best_value = text
+    best_score = 0.0
+
+    for candidate in allowed:
+        candidate_compact = "".join(
+            char
+            for char in candidate
+            if char.isalnum()
+        )
+
+        score = SequenceMatcher(
+            None,
+            compact,
+            candidate_compact,
+        ).ratio()
+
+        if score > best_score:
+            best_score = score
+            best_value = candidate
+
+    if best_score >= 0.72:
+        return best_value
+
+    return text
+
+
+def _ocr_detection_for_field(
+    field_name,
+    detection,
+    detection_map,
+    image_width,
+):
+    if not isinstance(
+        detection,
+        FieldDetection,
+    ):
+        return detection
+
+    extend_right_fields = {
+        "provinsi",
+        "kabupaten_kota",
+        "nama",
+        "ttl",
+        "alamat",
+        "kelurahan_desa",
+        "kecamatan",
+        "agama",
+        "status_perkawinan",
+        "pekerjaan",
+        "kewarganegaraan",
+        "berlaku_hingga",
+    }
+
+    if field_name not in extend_right_fields:
+        return detection
+
+    photo = detection_map.get(
+        "foto"
+    )
+
+    safe_right = (
+        int(
+            photo.bbox[0]
+        )
+        - 8
+        if isinstance(
+            photo,
+            FieldDetection,
+        )
+        else int(
+            image_width
+        )
+    )
+
+    x1, y1, x2, y2 = (
+        detection.bbox
+    )
+    expanded_x2 = max(
+        int(x2),
+        min(
+            int(image_width),
+            safe_right,
+        ),
+    )
+
+    return FieldDetection(
+        class_name=detection.class_name,
+        bbox=(
+            int(x1),
+            int(y1),
+            expanded_x2,
+            int(y2),
+        ),
+        confidence=detection.confidence,
+        source=detection.source,
+    )
+
+
+def _recover_nik_from_fragments(
+    nik_image,
+    backend,
+    province,
+    birth_date,
+    gender,
+):
+    if (
+        nik_image is None
+        or not isinstance(
+            nik_image,
+            np.ndarray,
+        )
+        or nik_image.size == 0
+    ):
+        return None
+
+    province_text = normalize_province_value(
+        province
+    )
+    province_name = (
+        province_text
+        .replace(
+            "PROVINSI ",
+            "",
+            1,
+        )
+        .strip()
+    )
+    prefix = PROVINCE_NIK_PREFIXES.get(
+        province_name,
+        "",
+    )
+    birth_segment = (
+        birth_segment_from_context(
+            birth_date,
+            gender,
+        )
+    )
+
+    if (
+        len(prefix) != 2
+        or len(birth_segment) != 6
+    ):
+        return None
+
+    height, width = (
+        nik_image.shape[:2]
+    )
+
+    region_crop = nik_image[
+        :,
+        max(
+            0,
+            int(
+                round(
+                    width * 0.10
+                )
+            ),
+        ):
+        min(
+            width,
+            int(
+                round(
+                    width * 0.42
+                )
+            ),
+        ),
+    ]
+    serial_crop = nik_image[
+        :,
+        max(
+            0,
+            int(
+                round(
+                    width * 0.72
+                )
+            ),
+        ):
+        width,
+    ]
+
+    region = read_numeric_fragment(
+        region_crop,
+        expected_length=4,
+        backend=backend,
+    )
+    serial = read_numeric_fragment(
+        serial_crop,
+        expected_length=4,
+        backend=backend,
+    )
+
+    region_digits = "".join(
+        char
+        for char in region.raw_text
+        if char.isdigit()
+    )
+    serial_digits = "".join(
+        char
+        for char in serial.raw_text
+        if char.isdigit()
+    )
+
+    if (
+        len(region_digits) != 4
+        or len(serial_digits) != 4
+    ):
+        return None
+
+    value = (
+        prefix
+        + region_digits
+        + birth_segment
+        + serial_digits
+    )
+
+    return OcrReadResult(
+        raw_text=value,
+        confidence=min(
+            float(region.confidence),
+            float(serial.confidence),
+        ),
+        used_fallback=True,
+    )
+
+
 def _enum_value_is_valid(
     field_name,
     parsed,
@@ -266,9 +533,14 @@ def _enum_value_is_valid(
     if allowed is None:
         return True
 
-    return str(
-        parsed or ""
-    ).strip().upper() in allowed
+    normalized = (
+        _normalize_enum_candidate(
+            field_name,
+            parsed,
+        )
+    )
+
+    return normalized in allowed
 
 
 def _candidate_is_valid(
