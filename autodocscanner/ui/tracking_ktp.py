@@ -109,6 +109,9 @@ class TrackingKtpPage(ttk.Frame):
         self.input_path = None
         self._worker_running = False
         self._worker_queue = queue.SimpleQueue()
+        self._loading_popup = None
+        self._loading_status = None
+        self._loading_progress = None
         self._last_tracking = None
         self._preview_photo = None
         self._face_photo = None
@@ -1157,6 +1160,150 @@ class TrackingKtpPage(ttk.Frame):
                 str(exc),
             )
 
+    def _show_loading_popup(self):
+        if (
+            self._loading_popup is not None
+            and self._loading_popup.winfo_exists()
+        ):
+            return
+
+        popup = tk.Toplevel(self)
+        popup.title("Memproses Tracking KTP")
+        popup.transient(
+            self.winfo_toplevel()
+        )
+        popup.resizable(
+            False,
+            False,
+        )
+        popup.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: None,
+        )
+
+        shell = ttk.Frame(
+            popup,
+            padding=20,
+        )
+        shell.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+        )
+
+        ttk.Label(
+            shell,
+            text="Memproses Tracking KTP",
+            style="CardLabel.TLabel",
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+
+        self._loading_status = tk.StringVar(
+            master=popup,
+            value="Menyiapkan Auto Perspective...",
+        )
+
+        ttk.Label(
+            shell,
+            textvariable=self._loading_status,
+            style="CardMuted.TLabel",
+            width=42,
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(8, 10),
+        )
+
+        progress = ttk.Progressbar(
+            shell,
+            mode="indeterminate",
+            length=320,
+        )
+        progress.grid(
+            row=2,
+            column=0,
+            sticky="ew",
+        )
+        progress.start(
+            12
+        )
+
+        popup.update_idletasks()
+
+        parent = self.winfo_toplevel()
+        parent.update_idletasks()
+
+        x = (
+            parent.winfo_rootx()
+            + max(
+                0,
+                (
+                    parent.winfo_width()
+                    - popup.winfo_width()
+                )
+                // 2,
+            )
+        )
+        y = (
+            parent.winfo_rooty()
+            + max(
+                0,
+                (
+                    parent.winfo_height()
+                    - popup.winfo_height()
+                )
+                // 2,
+            )
+        )
+
+        popup.geometry(
+            f"+{x}+{y}"
+        )
+        popup.grab_set()
+
+        self._loading_popup = popup
+        self._loading_progress = progress
+
+    def _set_loading_status(
+        self,
+        text,
+    ):
+        if (
+            self._loading_status is not None
+        ):
+            self._loading_status.set(
+                str(text)
+            )
+
+    def _close_loading_popup(self):
+        popup = self._loading_popup
+
+        self._loading_popup = None
+        self._loading_status = None
+
+        if self._loading_progress is not None:
+            try:
+                self._loading_progress.stop()
+            except tk.TclError:
+                pass
+
+        self._loading_progress = None
+
+        if (
+            popup is not None
+            and popup.winfo_exists()
+        ):
+            try:
+                popup.grab_release()
+            except tk.TclError:
+                pass
+
+            popup.destroy()
+
     def process_selected(self):
         if (
             self._worker_running
@@ -1184,6 +1331,8 @@ class TrackingKtpPage(ttk.Frame):
         self.review_summary.configure(
             text="Menunggu hasil corrected KTP...",
         )
+
+        self._show_loading_popup()
 
         self.after(
             50,
@@ -1302,6 +1451,9 @@ class TrackingKtpPage(ttk.Frame):
         self.status_text.set(
             "Tahap 2/2 — KTP terkoreksi. Menjalankan Tracking/OCR..."
         )
+        self._set_loading_status(
+            "Menjalankan OCR dan deteksi field..."
+        )
         self.review_summary.configure(
             text="OCR sedang berjalan dari corrected KTP...",
         )
@@ -1310,6 +1462,7 @@ class TrackingKtpPage(ttk.Frame):
         self,
         message,
     ):
+        self._close_loading_popup()
         self._worker_running = False
 
         self.select_button.configure(
@@ -1339,6 +1492,11 @@ class TrackingKtpPage(ttk.Frame):
         self,
         result,
     ):
+        self._set_loading_status(
+            "Menyelesaikan hasil tracking..."
+        )
+        self._close_loading_popup()
+
         tracking = result[
             "tracking"
         ]
