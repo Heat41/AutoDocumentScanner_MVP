@@ -99,11 +99,11 @@ class TestTemplateFieldDetector(unittest.TestCase):
             )
 
             baseline = best_detection_by_class(
-            detector.detect(
-                self.image,
-                anchors={},
-            )
-        )["nama"]
+                detector.detect(
+                    self.image,
+                    anchors={},
+                )
+            )["nama"]
 
             anchored = best_detection_by_class(
                 detector.detect(
