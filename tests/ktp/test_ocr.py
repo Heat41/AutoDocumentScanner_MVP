@@ -12,6 +12,7 @@ from autodocscanner.ktp.ocr import (
     read_name_ocr_candidates,
     read_nik_ocr_candidates,
     read_numeric_fragment,
+    read_segmented_digits,
 )
 
 
@@ -270,6 +271,54 @@ class TestKtpOcr(unittest.TestCase):
         self.assertEqual(
             results[0].raw_text,
             "6110014101980004",
+        )
+
+    def test_segmented_digit_reader_keeps_four_serial_digits(self):
+        backend = ConfiguredFakeBackend(
+            [
+                ("0", 80.0),
+                ("0", 78.0),
+                ("0", 82.0),
+                ("0", 79.0),
+                ("0", 84.0),
+                ("0", 81.0),
+                ("4", 90.0),
+                ("4", 88.0),
+            ]
+        )
+
+        image = np.full(
+            (40, 160, 3),
+            255,
+            dtype=np.uint8,
+        )
+        cv = 20
+        image[
+            8:32,
+            10:30,
+        ] = cv
+        image[
+            8:32,
+            50:70,
+        ] = cv
+        image[
+            8:32,
+            90:110,
+        ] = cv
+        image[
+            8:32,
+            130:150,
+        ] = cv
+
+        result = read_segmented_digits(
+            image,
+            digit_count=4,
+            backend=backend,
+        )
+
+        self.assertEqual(
+            result.raw_text,
+            "0004",
         )
 
     def test_numeric_fragment_selects_consensus_window_from_noisy_reads(self):
