@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date
+from difflib import SequenceMatcher
 import re
 
 
@@ -80,6 +81,63 @@ def _normalize_region_name(value):
         ].strip()
 
     return text
+
+
+def normalize_province_value(
+    value,
+    threshold=0.72,
+):
+    region = _normalize_region_name(
+        value
+    )
+
+    if not region:
+        return ""
+
+    if region in PROVINCE_NIK_PREFIXES:
+        return (
+            "PROVINSI "
+            + region
+        )
+
+    best_name = ""
+    best_score = 0.0
+
+    for name in PROVINCE_NIK_PREFIXES:
+        score = SequenceMatcher(
+            None,
+            region,
+            name,
+        ).ratio()
+
+        if score > best_score:
+            best_score = score
+            best_name = name
+
+    if (
+        best_name
+        and best_score >= float(
+            threshold
+        )
+    ):
+        return (
+            "PROVINSI "
+            + best_name
+        )
+
+    return str(
+        value or ""
+    ).strip().upper()
+
+
+def birth_segment_from_context(
+    birth_date,
+    gender,
+):
+    return _birth_segment(
+        birth_date,
+        gender,
+    )
 
 
 def _birth_segment(
