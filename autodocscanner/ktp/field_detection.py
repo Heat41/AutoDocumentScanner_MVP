@@ -169,6 +169,7 @@ class TemplateFieldDetector:
         text_boxes = (
             build_anchor_aligned_value_boxes(
                 image_height=height,
+                image_width=width,
                 anchors=anchors,
             )
         )
