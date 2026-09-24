@@ -9,6 +9,7 @@ from autodocscanner.ktp.ocr import (
     preprocess_field,
     read_field_ocr,
     read_field_ocr_candidates,
+    read_numeric_fragment,
 )
 
 
@@ -196,6 +197,27 @@ class TestKtpOcr(unittest.TestCase):
         self.assertEqual(
             word.line_key,
             (1, 1, 2),
+        )
+
+    def test_numeric_fragment_selects_consensus_window_from_noisy_reads(self):
+        backend = FakeBackend(
+            [
+                ("11001", 90.0),
+                ("1001", 86.0),
+                ("10017", 80.0),
+                ("1001", 88.0),
+            ]
+        )
+
+        result = read_numeric_fragment(
+            self.image,
+            expected_length=4,
+            backend=backend,
+        )
+
+        self.assertEqual(
+            result.raw_text,
+            "1001",
         )
 
     def test_multi_pass_returns_four_candidates(self):
