@@ -1419,14 +1419,12 @@ def extract_tracking_data(
             raw_text=contextual_nik.raw_text,
             value=contextual_nik.raw_text,
             confidence=contextual_nik.confidence,
-            used_fallback=(
-                contextual_nik.used_fallback
-            ),
-            needs_review=False,
+            used_fallback=True,
+            needs_review=True,
         )
 
-        if "nik" in review_fields:
-            review_fields.remove(
+        if "nik" not in review_fields:
+            review_fields.append(
                 "nik"
             )
 
