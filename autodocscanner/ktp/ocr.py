@@ -372,6 +372,93 @@ class TesseractBackend:
 
         return " ".join(parts)
 
+    def read_configured(
+        self,
+        image,
+        config,
+        language=None,
+    ):
+        pytesseract = self._module()
+        self._configure_executable(
+            pytesseract
+        )
+
+        try:
+            data = (
+                pytesseract.image_to_data(
+                    image,
+                    lang=(
+                        language
+                        or self.language
+                    ),
+                    config=str(
+                        config
+                    ),
+                    output_type=(
+                        pytesseract.Output.DICT
+                    ),
+                )
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "Tesseract OCR konfigurasi khusus gagal dijalankan."
+            ) from exc
+
+        texts = []
+        confidences = []
+
+        for text, confidence in zip(
+            data.get(
+                "text",
+                [],
+            ),
+            data.get(
+                "conf",
+                [],
+            ),
+        ):
+            value = str(
+                text or ""
+            ).strip()
+
+            if not value:
+                continue
+
+            texts.append(
+                value
+            )
+
+            try:
+                numeric_confidence = float(
+                    confidence
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            if numeric_confidence >= 0:
+                confidences.append(
+                    numeric_confidence
+                )
+
+        return (
+            " ".join(
+                texts
+            ).strip(),
+            (
+                sum(
+                    confidences
+                )
+                / len(
+                    confidences
+                )
+                if confidences
+                else 0.0
+            ),
+        )
+
     def read_layout(
         self,
         image,
@@ -795,6 +882,89 @@ def read_field_ocr(
         return fallback
 
     return primary
+
+
+def read_name_ocr_candidates(
+    image,
+    backend=None,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
+    if not hasattr(
+        backend,
+        "read_configured",
+    ):
+        return []
+
+    prepared_images = (
+        preprocess_field(
+            image,
+            "nama",
+            fallback=False,
+        ),
+        preprocess_field_otsu(
+            image,
+        ),
+        preprocess_field_strong(
+            image,
+            "nama",
+        ),
+    )
+
+    results = []
+
+    for prepared in prepared_images:
+        for psm in (
+            7,
+            8,
+            13,
+        ):
+            config = (
+                f"--psm {psm} "
+                "-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ "
+                "-c preserve_interword_spaces=1"
+            )
+
+            text, confidence = (
+                backend.read_configured(
+                    prepared,
+                    config=config,
+                )
+            )
+
+            normalized = " ".join(
+                str(
+                    text or ""
+                )
+                .upper()
+                .split()
+            )
+
+            if not normalized:
+                continue
+
+            results.append(
+                OcrReadResult(
+                    raw_text=normalized,
+                    confidence=max(
+                        0.0,
+                        min(
+                            100.0,
+                            float(
+                                confidence
+                                or 0.0
+                            ),
+                        ),
+                    ),
+                    used_fallback=True,
+                )
+            )
+
+    return results
 
 
 def read_numeric_fragment(
