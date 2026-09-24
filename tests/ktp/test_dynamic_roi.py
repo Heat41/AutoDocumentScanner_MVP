@@ -30,6 +30,53 @@ class TestAnchorAlignedValueBoxes(unittest.TestCase):
             places=3,
         )
 
+    def test_anchor_shift_is_bounded_and_preserves_box_size(self):
+        template = KTP_VALUE_BOXES[
+            "nama"
+        ]
+
+        boxes = build_anchor_aligned_value_boxes(
+            image_height=540,
+            image_width=856,
+            anchors={
+                "nama": (
+                    500.0,
+                    400.0,
+                    95.0,
+                ),
+            },
+        )
+
+        actual = boxes["nama"]
+
+        self.assertAlmostEqual(
+            actual.x2 - actual.x1,
+            template.x2 - template.x1,
+            places=6,
+        )
+        self.assertAlmostEqual(
+            actual.y2 - actual.y1,
+            template.y2 - template.y1,
+            places=6,
+        )
+
+        template_center_y = (
+            template.y1
+            + template.y2
+        ) / 2.0
+        actual_center_y = (
+            actual.y1
+            + actual.y2
+        ) / 2.0
+
+        self.assertLessEqual(
+            abs(
+                actual_center_y
+                - template_center_y
+            ),
+            0.018001,
+        )
+
     def test_missing_anchor_keeps_template_box(self):
         boxes = build_anchor_aligned_value_boxes(
             image_height=540,
