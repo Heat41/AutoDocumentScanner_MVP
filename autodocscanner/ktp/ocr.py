@@ -1049,6 +1049,118 @@ def read_name_ocr_candidates(
     return results
 
 
+def _digit_hole_count(
+    image,
+):
+    _validate_image(
+        image
+    )
+    gray = _to_gray(
+        image
+    )
+
+    if (
+        len(
+            np.unique(
+                gray
+            )
+        )
+        > 8
+    ):
+        _threshold, binary = (
+            cv2.threshold(
+                gray,
+                0,
+                255,
+                cv2.THRESH_BINARY
+                + cv2.THRESH_OTSU,
+            )
+        )
+    else:
+        binary = gray.copy()
+
+    foreground = (
+        255
+        - binary
+    )
+
+    contours, hierarchy = (
+        cv2.findContours(
+            foreground,
+            cv2.RETR_CCOMP,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+    )
+
+    if (
+        hierarchy is None
+        or not contours
+    ):
+        return 0
+
+    hierarchy = hierarchy[0]
+    image_area = max(
+        int(
+            gray.shape[0]
+            * gray.shape[1]
+        ),
+        1,
+    )
+    min_hole_area = max(
+        3.0,
+        image_area
+        * 0.003,
+    )
+
+    holes = 0
+
+    for index, contour in enumerate(
+        contours
+    ):
+        parent = int(
+            hierarchy[
+                index
+            ][3]
+        )
+
+        if parent < 0:
+            continue
+
+        area = abs(
+            float(
+                cv2.contourArea(
+                    contour
+                )
+            )
+        )
+
+        if area >= min_hole_area:
+            holes += 1
+
+    return holes
+
+
+def _repair_segmented_digit_by_shape(
+    image,
+    digit,
+):
+    value = str(
+        digit or ""
+    ).strip()
+
+    if value != "8":
+        return value
+
+    # Pada font NIK, angka 8 memiliki area tertutup. Angka 4 yang
+    # sering salah dibaca sebagai 8 memiliki struktur terbuka.
+    if _digit_hole_count(
+        image
+    ) == 0:
+        return "4"
+
+    return value
+
+
 def read_segmented_digits(
     image,
     digit_count,
@@ -1259,6 +1371,13 @@ def read_segmented_digits(
                 confidence=0.0,
                 used_fallback=True,
             )
+
+        best_text = (
+            _repair_segmented_digit_by_shape(
+                cell,
+                best_text,
+            )
+        )
 
         digits.append(
             best_text
