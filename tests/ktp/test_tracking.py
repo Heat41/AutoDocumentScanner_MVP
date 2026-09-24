@@ -89,6 +89,48 @@ class TestKtpTracking(unittest.TestCase):
             "6172020503800002",
         )
 
+    def test_tracking_repairs_nik_prefix_from_consistent_context(self):
+        responses = dict(
+            RESPONSES
+        )
+        responses["provinsi"] = (
+            "PROVINSI KALIMANTAN BARAT",
+            94.0,
+        )
+        responses["nik"] = (
+            "5112340503800002",
+            90.0,
+        )
+        responses["ttl"] = (
+            "KOTA CONTOH, 05-03-1980",
+            91.0,
+        )
+        responses["jenis_kelamin"] = (
+            "LAKI LAKI",
+            92.0,
+        )
+
+        result = extract_tracking_data(
+            self.image,
+            backend=MappingBackend(
+                responses
+            ),
+        )
+
+        self.assertEqual(
+            result.identity["nik"],
+            "6112340503800002",
+        )
+        self.assertTrue(
+            result.fields[
+                "nik"
+            ].needs_review
+        )
+        self.assertIn(
+            "nik",
+            result.review_fields,
+        )
+
     def test_tracking_extracts_structured_identity(self):
         result = extract_tracking_data(
             self.image,
