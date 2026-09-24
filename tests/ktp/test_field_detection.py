@@ -11,6 +11,7 @@ from autodocscanner.ktp.field_detection import (
     TemplateFieldDetector,
     best_detection_by_class,
     crop_detection,
+    crop_detection_padded,
 )
 
 
@@ -183,6 +184,36 @@ class TestDetectionHelpers(unittest.TestCase):
         self.assertEqual(
             result["nama"].source,
             "onnx",
+        )
+
+    def test_padded_crop_expands_ocr_region(self):
+        image = np.zeros(
+            (100, 200, 3),
+            dtype=np.uint8,
+        )
+        detection = FieldDetection(
+            "nama",
+            (50, 40, 150, 60),
+            0.95,
+            "annotation_template",
+        )
+
+        normal = crop_detection(
+            image,
+            detection,
+        )
+        padded = crop_detection_padded(
+            image,
+            detection,
+        )
+
+        self.assertGreater(
+            padded.shape[0],
+            normal.shape[0],
+        )
+        self.assertGreater(
+            padded.shape[1],
+            normal.shape[1],
         )
 
     def test_crop_detection_clamps_to_image(self):
