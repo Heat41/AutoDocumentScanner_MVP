@@ -60,13 +60,7 @@ class TestTemplateFieldDetector(unittest.TestCase):
             detections = best_detection_by_class(
                 detector.detect(
                     self.image,
-                    anchors={
-                        "nama": (
-                            700.0,
-                            500.0,
-                            99.0,
-                        ),
-                    },
+                    anchors={},
                 )
             )
 
