@@ -276,17 +276,21 @@ def build_anchor_aligned_value_boxes(
                 ),
             )
 
-            # Geser seluruh ROI secara kecil dan pertahankan lebarnya.
-            # Ini mencegah box mengecil ketika OCR value-start kurang presisi.
-            max_x_shift = 0.025
+            # Value-start hasil OCR tidak aman untuk mendorong ROI ke
+            # kanan karena karakter pertama dapat ikut terpotong. Posisi
+            # canonical menjadi batas kanan: anchor hanya boleh menarik ROI
+            # sedikit ke kiri bila value memang mulai lebih kiri.
+            max_left_shift = 0.020
+            left_padding = 0.010
             desired_shift = (
                 detected_x
+                - left_padding
                 - box.x1
             )
             x_shift = max(
-                -max_x_shift,
+                -max_left_shift,
                 min(
-                    max_x_shift,
+                    0.0,
                     desired_shift,
                 ),
             )
@@ -296,12 +300,12 @@ def build_anchor_aligned_value_boxes(
             )
             x1 = max(
                 0.0,
-                min(
-                    1.0 - box_width,
-                    box.x1 + x_shift,
-                ),
+                box.x1 + x_shift,
             )
-            x2 = x1 + box_width
+            x2 = min(
+                1.0,
+                x1 + box_width,
+            )
 
         result[name] = NormalizedBox(
             x1,
