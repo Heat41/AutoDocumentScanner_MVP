@@ -22,10 +22,17 @@ class TestTemplateFieldDetector(unittest.TestCase):
         )
 
     def test_emits_all_tracking_classes(self):
-        detections = TemplateFieldDetector().detect(
-            self.image,
-            anchors={},
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            detector = TemplateFieldDetector(
+                template_path=(
+                    Path(tmp)
+                    / "missing-template.txt"
+                )
+            )
+            detections = detector.detect(
+                self.image,
+                anchors={},
+            )
 
         self.assertEqual(
             {item.class_name for item in detections},
@@ -83,27 +90,33 @@ class TestTemplateFieldDetector(unittest.TestCase):
         )
 
     def test_anchor_changes_detected_row(self):
-        detector = TemplateFieldDetector()
+        with tempfile.TemporaryDirectory() as tmp:
+            detector = TemplateFieldDetector(
+                template_path=(
+                    Path(tmp)
+                    / "missing-template.txt"
+                )
+            )
 
-        baseline = best_detection_by_class(
+            baseline = best_detection_by_class(
             detector.detect(
                 self.image,
                 anchors={},
             )
         )["nama"]
 
-        anchored = best_detection_by_class(
-            detector.detect(
-                self.image,
-                anchors={
-                    "nama": (
-                        80.0,
-                        210.0,
-                        95.0,
-                    ),
-                },
-            )
-        )["nama"]
+            anchored = best_detection_by_class(
+                detector.detect(
+                    self.image,
+                    anchors={
+                        "nama": (
+                            80.0,
+                            210.0,
+                            95.0,
+                        ),
+                    },
+                )
+            )["nama"]
 
         self.assertNotEqual(
             baseline.bbox[1],
@@ -118,7 +131,15 @@ class TestAutoFieldDetector(unittest.TestCase):
                 model_path=(
                     Path(tmp)
                     / "missing.onnx"
-                )
+                ),
+                template_detector=(
+                    TemplateFieldDetector(
+                        template_path=(
+                            Path(tmp)
+                            / "missing-template.txt"
+                        )
+                    )
+                ),
             )
 
             detections = detector.detect(
