@@ -1,10 +1,12 @@
 import unittest
 
+import cv2
 import numpy as np
 
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
     OcrWord,
+    _repair_segmented_digit_by_shape,
     preprocess_document,
     preprocess_field,
     read_field_ocr,
@@ -271,6 +273,73 @@ class TestKtpOcr(unittest.TestCase):
         self.assertEqual(
             results[0].raw_text,
             "6110014101980004",
+        )
+
+    def test_shape_repair_changes_open_eight_reading_to_four(self):
+        image = np.full(
+            (60, 40),
+            255,
+            dtype=np.uint8,
+        )
+
+        cv2.line(
+            image,
+            (26, 8),
+            (26, 50),
+            0,
+            5,
+        )
+        cv2.line(
+            image,
+            (8, 30),
+            (31, 30),
+            0,
+            5,
+        )
+        cv2.line(
+            image,
+            (8, 30),
+            (22, 8),
+            0,
+            5,
+        )
+
+        self.assertEqual(
+            _repair_segmented_digit_by_shape(
+                image,
+                "8",
+            ),
+            "4",
+        )
+
+    def test_shape_repair_keeps_closed_eight(self):
+        image = np.full(
+            (70, 45),
+            255,
+            dtype=np.uint8,
+        )
+
+        cv2.circle(
+            image,
+            (22, 22),
+            13,
+            0,
+            5,
+        )
+        cv2.circle(
+            image,
+            (22, 48),
+            13,
+            0,
+            5,
+        )
+
+        self.assertEqual(
+            _repair_segmented_digit_by_shape(
+                image,
+                "8",
+            ),
+            "8",
         )
 
     def test_segmented_digit_reader_keeps_four_serial_digits(self):
