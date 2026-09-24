@@ -9,6 +9,8 @@ from autodocscanner.ktp.ocr import (
     preprocess_field,
     read_field_ocr,
     read_field_ocr_candidates,
+    read_name_ocr_candidates,
+    read_nik_ocr_candidates,
     read_numeric_fragment,
 )
 
@@ -23,6 +25,29 @@ class FakeBackend:
             (image.copy(), field_name)
         )
         return self.responses.pop(0)
+
+
+class ConfiguredFakeBackend(FakeBackend):
+    def __init__(
+        self,
+        configured_responses,
+    ):
+        super().__init__(
+            []
+        )
+        self.configured_responses = list(
+            configured_responses
+        )
+
+    def read_configured(
+        self,
+        image,
+        config,
+        language=None,
+    ):
+        return self.configured_responses.pop(
+            0
+        )
 
 
 class TestKtpOcr(unittest.TestCase):
@@ -197,6 +222,54 @@ class TestKtpOcr(unittest.TestCase):
         self.assertEqual(
             word.line_key,
             (1, 1, 2),
+        )
+
+    def test_specialized_name_ocr_returns_configured_candidates(self):
+        backend = ConfiguredFakeBackend(
+            [
+                (
+                    "SITI ISNAINI",
+                    70.0,
+                )
+            ]
+            * 9
+        )
+
+        results = read_name_ocr_candidates(
+            self.image,
+            backend=backend,
+        )
+
+        self.assertTrue(
+            results
+        )
+        self.assertEqual(
+            results[0].raw_text,
+            "SITI ISNAINI",
+        )
+
+    def test_specialized_nik_ocr_keeps_numeric_candidates(self):
+        backend = ConfiguredFakeBackend(
+            [
+                (
+                    "6110014101980004",
+                    74.0,
+                )
+            ]
+            * 9
+        )
+
+        results = read_nik_ocr_candidates(
+            self.image,
+            backend=backend,
+        )
+
+        self.assertTrue(
+            results
+        )
+        self.assertEqual(
+            results[0].raw_text,
+            "6110014101980004",
         )
 
     def test_numeric_fragment_selects_consensus_window_from_noisy_reads(self):
