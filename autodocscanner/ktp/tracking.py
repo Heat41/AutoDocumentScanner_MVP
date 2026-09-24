@@ -769,7 +769,7 @@ def _best_name_candidate(
             >= 2
             and candidate.confidence
             >= best_confidence
-            - 25.0
+            - 40.0
         )
     ]
 
