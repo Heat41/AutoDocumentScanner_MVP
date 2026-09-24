@@ -19,6 +19,7 @@ from autodocscanner.ktp.layout import (
     normalize_ktp_for_tracking,
 )
 from autodocscanner.ktp.ocr import (
+    OcrReadResult,
     TesseractBackend,
     read_field_ocr_candidates,
 )
@@ -310,10 +311,102 @@ def _candidate_is_valid(
     )
 
 
+def _nik_consensus_candidate(
+    candidates,
+):
+    valid = []
+
+    for candidate in candidates:
+        digits = parse_field(
+            "nik",
+            candidate.raw_text,
+        )
+
+        if len(digits) == 16:
+            valid.append(
+                (
+                    digits,
+                    candidate,
+                )
+            )
+
+    if not valid:
+        return None
+
+    if len(valid) == 1:
+        return valid[0][1]
+
+    consensus = []
+
+    for index in range(16):
+        counts = {}
+
+        for digits, _candidate in valid:
+            digit = digits[index]
+            counts[digit] = (
+                counts.get(
+                    digit,
+                    0,
+                )
+                + 1
+            )
+
+        highest = max(
+            counts.values()
+        )
+        tied = [
+            digit
+            for digit, count in counts.items()
+            if count == highest
+        ]
+
+        if len(tied) == 1:
+            consensus.append(
+                tied[0]
+            )
+            continue
+
+        best = max(
+            (
+                pair
+                for pair in valid
+                if pair[0][index] in tied
+            ),
+            key=lambda pair: (
+                pair[1].confidence
+            ),
+        )
+        consensus.append(
+            best[0][index]
+        )
+
+    return OcrReadResult(
+        raw_text="".join(
+            consensus
+        ),
+        confidence=max(
+            candidate.confidence
+            for _digits, candidate in valid
+        ),
+        used_fallback=any(
+            candidate.used_fallback
+            for _digits, candidate in valid
+        ),
+    )
+
+
 def _best_valid_ocr_candidate(
     field_name,
     candidates,
 ):
+    if field_name == "nik":
+        consensus = _nik_consensus_candidate(
+            candidates
+        )
+
+        if consensus is not None:
+            return consensus
+
     valid = [
         candidate
         for candidate in candidates
