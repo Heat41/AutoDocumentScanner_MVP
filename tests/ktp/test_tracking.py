@@ -14,6 +14,7 @@ from autodocscanner.ktp.tracking import (
     _nik_consensus_candidate,
     _normalize_enum_candidate,
     _ocr_detection_for_field,
+    _prefer_corroborated_text,
     _recover_nik_from_fragments,
     extract_tracking_data,
 )
@@ -59,6 +60,40 @@ class TestKtpTracking(unittest.TestCase):
             (540, 856, 3),
             170,
             dtype=np.uint8,
+        )
+
+    def test_citizenship_normalizes_common_ocr_confusion(self):
+        self.assertEqual(
+            _normalize_enum_candidate(
+                "kewarganegaraan",
+                "WNL",
+            ),
+            "WNI",
+        )
+
+    def test_name_can_prefer_corroborated_spaced_reading(self):
+        value, confidence, changed = (
+            _prefer_corroborated_text(
+                "nama",
+                "SITLISNAINE",
+                82.0,
+                "SITI ISNAINI",
+                75.0,
+                "",
+                0.0,
+            )
+        )
+
+        self.assertTrue(
+            changed
+        )
+        self.assertEqual(
+            value,
+            "SITI ISNAINI",
+        )
+        self.assertGreaterEqual(
+            confidence,
+            82.0,
         )
 
     def test_fuzzy_enum_normalizes_common_ocr_noise(self):
