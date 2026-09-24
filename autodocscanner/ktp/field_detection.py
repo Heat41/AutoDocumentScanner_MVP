@@ -148,7 +148,137 @@ def best_detection_by_class(
     return result
 
 
+def _runtime_root():
+    frozen_root = getattr(
+        sys,
+        "_MEIPASS",
+        None,
+    )
+
+    if frozen_root:
+        return Path(
+            frozen_root
+        )
+
+    return Path(
+        __file__
+    ).resolve().parents[2]
+
+
 class TemplateFieldDetector:
+    DEFAULT_TEMPLATE_RELATIVE = (
+        Path("dataset")
+        / "ktp_fields"
+        / "templates"
+        / "default.txt"
+    )
+
+    def __init__(
+        self,
+        template_path=None,
+    ):
+        self.template_path = (
+            Path(
+                template_path
+            )
+            if template_path is not None
+            else (
+                _runtime_root()
+                / self.DEFAULT_TEMPLATE_RELATIVE
+            )
+        )
+
+    def _saved_template_boxes(
+        self,
+        image_width,
+        image_height,
+    ):
+        if not self.template_path.is_file():
+            return {}
+
+        result = {}
+
+        try:
+            lines = self.template_path.read_text(
+                encoding="utf-8"
+            ).splitlines()
+        except OSError:
+            return {}
+
+        for raw_line in lines:
+            parts = raw_line.strip().split()
+
+            if len(parts) != 5:
+                continue
+
+            try:
+                class_id = int(
+                    parts[0]
+                )
+                center_x, center_y, box_width, box_height = [
+                    float(value)
+                    for value in parts[1:]
+                ]
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            if (
+                class_id < 0
+                or class_id >= len(FIELD_CLASSES)
+            ):
+                continue
+
+            width = float(
+                image_width
+            )
+            height = float(
+                image_height
+            )
+
+            pixel_width = (
+                box_width
+                * width
+            )
+            pixel_height = (
+                box_height
+                * height
+            )
+            pixel_center_x = (
+                center_x
+                * width
+            )
+            pixel_center_y = (
+                center_y
+                * height
+            )
+
+            bbox = _clamp_bbox(
+                (
+                    pixel_center_x
+                    - pixel_width / 2.0,
+                    pixel_center_y
+                    - pixel_height / 2.0,
+                    pixel_center_x
+                    + pixel_width / 2.0,
+                    pixel_center_y
+                    + pixel_height / 2.0,
+                ),
+                image_width,
+                image_height,
+            )
+
+            result[
+                FIELD_CLASSES[
+                    class_id
+                ]
+            ] = bbox
+
+        return result
+
+
     def detect(
         self,
         image,
@@ -166,6 +296,13 @@ class TemplateFieldDetector:
             image.shape[:2]
         )
 
+        saved_boxes = (
+            self._saved_template_boxes(
+                image_width=width,
+                image_height=height,
+            )
+        )
+
         text_boxes = (
             build_anchor_aligned_value_boxes(
                 image_height=height,
@@ -177,6 +314,21 @@ class TemplateFieldDetector:
         detections = []
 
         for class_name in FIELD_CLASSES:
+            saved_bbox = saved_boxes.get(
+                class_name
+            )
+
+            if saved_bbox is not None:
+                detections.append(
+                    FieldDetection(
+                        class_name=class_name,
+                        bbox=saved_bbox,
+                        confidence=0.95,
+                        source="annotation_template",
+                    )
+                )
+                continue
+
             if class_name == "foto":
                 box = KTP_FIELD_BOXES[
                     "foto"
@@ -499,23 +651,6 @@ class OnnxFieldDetector:
                 detections
             ).values()
         )
-
-
-def _runtime_root():
-    frozen_root = getattr(
-        sys,
-        "_MEIPASS",
-        None,
-    )
-
-    if frozen_root:
-        return Path(
-            frozen_root
-        )
-
-    return Path(
-        __file__
-    ).resolve().parents[2]
 
 
 class AutoFieldDetector:
