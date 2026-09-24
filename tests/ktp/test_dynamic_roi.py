@@ -7,7 +7,7 @@ from autodocscanner.ktp.layout import (
 
 
 class TestAnchorAlignedValueBoxes(unittest.TestCase):
-    def test_detected_label_repositions_row_center(self):
+    def test_detected_label_repositions_row_center_with_bounded_shift(self):
         boxes = build_anchor_aligned_value_boxes(
             image_height=540,
             anchors={
@@ -19,14 +19,26 @@ class TestAnchorAlignedValueBoxes(unittest.TestCase):
             },
         )
 
+        template = KTP_VALUE_BOXES[
+            "nama"
+        ]
+        template_center = (
+            template.y1
+            + template.y2
+        ) / 2.0
         center = (
             boxes["nama"].y1
             + boxes["nama"].y2
         ) / 2.0
 
-        self.assertAlmostEqual(
+        self.assertGreater(
             center,
-            180.0 / 540.0,
+            template_center,
+        )
+        self.assertAlmostEqual(
+            center
+            - template_center,
+            0.018,
             places=3,
         )
 
