@@ -800,6 +800,7 @@ def extract_tracking_data(
 
     fields = {}
     review_fields = []
+    nik_source_image = None
 
     for name in (
         extraction.fields
@@ -814,9 +815,22 @@ def extract_tracking_data(
         if detection is None:
             continue
 
+        if name == "nik":
+            nik_source_image = crop_detection(
+                tracking_image,
+                detection,
+            )
+
+        ocr_detection = _ocr_detection_for_field(
+            name,
+            detection,
+            detection_map,
+            tracking_image.shape[1],
+        )
+
         value_image = crop_detection_padded(
             tracking_image,
-            detection,
+            ocr_detection,
         )
 
         ocr_candidates = (
@@ -912,6 +926,21 @@ def extract_tracking_data(
             raw_text,
         )
 
+        if name in _ENUM_VALUES:
+            parsed = (
+                _normalize_enum_candidate(
+                    name,
+                    parsed,
+                )
+            )
+
+        if name == "provinsi":
+            parsed = (
+                normalize_province_value(
+                    parsed
+                )
+            )
+
         candidate_valid = (
             _candidate_is_valid(
                 name,
@@ -960,6 +989,79 @@ def extract_tracking_data(
             review_fields.append(
                 name
             )
+
+    current_nik = fields.get(
+        "nik"
+    )
+    ttl_for_nik = fields.get(
+        "ttl"
+    )
+    province_for_nik = fields.get(
+        "provinsi"
+    )
+    gender_for_nik = fields.get(
+        "jenis_kelamin"
+    )
+
+    if (
+        current_nik is not None
+        and not str(
+            current_nik.value or ""
+        ).strip()
+        and isinstance(
+            backend,
+            TesseractBackend,
+        )
+    ):
+        ttl_value = (
+            ttl_for_nik.value
+            if ttl_for_nik is not None
+            and isinstance(
+                ttl_for_nik.value,
+                dict,
+            )
+            else {}
+        )
+
+        recovered_nik = (
+            _recover_nik_from_fragments(
+                nik_source_image,
+                backend,
+                province=(
+                    province_for_nik.value
+                    if province_for_nik is not None
+                    else ""
+                ),
+                birth_date=(
+                    ttl_value.get(
+                        "tanggal_lahir",
+                        "",
+                    )
+                ),
+                gender=(
+                    gender_for_nik.value
+                    if gender_for_nik is not None
+                    else ""
+                ),
+            )
+        )
+
+        if recovered_nik is not None:
+            fields["nik"] = TrackedField(
+                name="nik",
+                raw_text=recovered_nik.raw_text,
+                value=recovered_nik.raw_text,
+                confidence=(
+                    recovered_nik.confidence
+                ),
+                used_fallback=True,
+                needs_review=True,
+            )
+
+            if "nik" not in review_fields:
+                review_fields.append(
+                    "nik"
+                )
 
     nik_field = fields.get(
         "nik"
