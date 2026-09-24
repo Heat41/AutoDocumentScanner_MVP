@@ -1122,7 +1122,7 @@ class AutoPerspectiveEngine:
 
         # Apparent ratio dapat berubah cukup besar karena perspektif.
         # Karena itu ratio hanya validator ringan, bukan faktor dominan.
-        if candidate.source == "color_refined":
+        if candidate.source.startswith("color_refined"):
             source_bonus = 0.16
         elif candidate.source.startswith("color"):
             source_bonus = 0.055
@@ -1312,35 +1312,74 @@ class AutoPerspectiveEngine:
                 "score": 0.0,
             }
 
-        for candidate in candidates:
-            if candidate.source == "color_refined":
-                # Sudut sudah berasal dari empat fitted physical edges.
-                # Jangan snap ulang ke edge internal/background.
-                candidate.points = self.order_points(
-                    candidate.points
-                )
-            else:
-                raw_points = candidate.points.copy()
+        expanded_candidates = []
 
-                candidate.points = self._snap_quad_to_boundary(
+        for candidate in candidates:
+            raw_points = self.order_points(
+                candidate.points
+            )
+
+            if candidate.source == "color_refined":
+                # Pertahankan fitted physical edges sebagai baseline.
+                candidate.points = raw_points
+                expanded_candidates.append(
+                    candidate
+                )
+
+                # Beberapa foto KTP memiliki glare/warna pudar sehingga hasil
+                # line-fitting bisa sedikit masuk/keluar dari boundary asli.
+                # Coba versi snapped sebagai kandidat tambahan, bukan sebagai
+                # pengganti paksa, agar perilaku lama tetap aman.
+                snapped_points = self._snap_quad_to_boundary(
                     resized,
-                    candidate.points,
+                    raw_points,
                 )
 
                 moved = float(
                     np.mean(
                         np.linalg.norm(
-                            candidate.points - raw_points,
+                            snapped_points - raw_points,
                             axis=1,
                         )
                     )
                 )
 
                 if moved >= 1.5:
-                    candidate.source = (
-                        f"{candidate.source}_snapped"
+                    expanded_candidates.append(
+                        PerspectiveCandidate(
+                            points=snapped_points,
+                            score=0.0,
+                            source="color_refined_snapped",
+                        )
                     )
+                continue
 
+            candidate.points = self._snap_quad_to_boundary(
+                resized,
+                raw_points,
+            )
+
+            moved = float(
+                np.mean(
+                    np.linalg.norm(
+                        candidate.points - raw_points,
+                        axis=1,
+                    )
+                )
+            )
+
+            if moved >= 1.5:
+                candidate.source = (
+                    f"{candidate.source}_snapped"
+                )
+
+            expanded_candidates.append(
+                candidate
+            )
+
+        candidates = expanded_candidates
+
+        for candidate in candidates:
             candidate.score = self._candidate_score(
                 candidate,
                 resized,
