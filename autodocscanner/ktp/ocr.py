@@ -797,6 +797,92 @@ def read_field_ocr(
     return primary
 
 
+def read_numeric_fragment(
+    image,
+    expected_length,
+    backend=None,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
+    candidates = (
+        read_field_ocr_candidates(
+            image,
+            "nik",
+            backend=backend,
+        )
+    )
+
+    normalized = []
+
+    for candidate in candidates:
+        digits = "".join(
+            char
+            for char in candidate.raw_text
+            if char.isdigit()
+        )
+
+        if not digits:
+            continue
+
+        normalized.append(
+            (
+                digits,
+                candidate,
+            )
+        )
+
+    exact = [
+        item
+        for item in normalized
+        if len(item[0])
+        == int(expected_length)
+    ]
+
+    if exact:
+        digits, candidate = max(
+            exact,
+            key=lambda item: (
+                item[1].confidence
+            ),
+        )
+
+        return OcrReadResult(
+            raw_text=digits,
+            confidence=candidate.confidence,
+            used_fallback=(
+                candidate.used_fallback
+            ),
+        )
+
+    if not normalized:
+        return OcrReadResult(
+            raw_text="",
+            confidence=0.0,
+            used_fallback=True,
+        )
+
+    digits, candidate = min(
+        normalized,
+        key=lambda item: (
+            abs(
+                len(item[0])
+                - int(expected_length)
+            ),
+            -item[1].confidence,
+        ),
+    )
+
+    return OcrReadResult(
+        raw_text=digits,
+        confidence=candidate.confidence,
+        used_fallback=True,
+    )
+
+
 def read_field_ocr_candidates(
     image,
     field_name,
