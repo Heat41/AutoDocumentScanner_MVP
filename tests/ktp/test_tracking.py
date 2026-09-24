@@ -11,11 +11,13 @@ from autodocscanner.ktp.ocr import (
 )
 from autodocscanner.ktp.tracking import (
     KtpTrackingResult,
+    _best_name_candidate,
     _nik_consensus_candidate,
     _normalize_enum_candidate,
     _ocr_detection_for_field,
     _prefer_corroborated_text,
     _recover_nik_from_fragments,
+    _select_nik_candidate_with_context,
     extract_tracking_data,
 )
 
@@ -179,6 +181,62 @@ class TestKtpTracking(unittest.TestCase):
         )
         self.assertEqual(
             recovered.raw_text,
+            "6110014101980004",
+        )
+
+    def test_name_prefers_structured_two_word_candidate(self):
+        result = _best_name_candidate(
+            [
+                OcrReadResult(
+                    "SITLISNAINE",
+                    91.0,
+                    False,
+                ),
+                OcrReadResult(
+                    "SITI ISNAINI",
+                    63.0,
+                    True,
+                ),
+            ]
+        )
+
+        self.assertIsNotNone(
+            result
+        )
+        self.assertEqual(
+            result.raw_text,
+            "SITI ISNAINI",
+        )
+
+    def test_contextual_nik_prefers_candidate_matching_birth_and_province(self):
+        result = _select_nik_candidate_with_context(
+            [
+                OcrReadResult(
+                    "6110054101985000",
+                    94.0,
+                    True,
+                ),
+                OcrReadResult(
+                    "6110014101980004",
+                    71.0,
+                    True,
+                ),
+                OcrReadResult(
+                    "5110014101980004",
+                    96.0,
+                    False,
+                ),
+            ],
+            province="PROVINSI KALIMANTAN BARAT",
+            birth_date="1998-01-01",
+            gender="PEREMPUAN",
+        )
+
+        self.assertIsNotNone(
+            result
+        )
+        self.assertEqual(
+            result.raw_text,
             "6110014101980004",
         )
 
