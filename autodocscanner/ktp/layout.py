@@ -276,36 +276,32 @@ def build_anchor_aligned_value_boxes(
                 ),
             )
 
-            # Value-start hasil OCR tidak aman untuk mendorong ROI ke
-            # kanan karena karakter pertama dapat ikut terpotong. Posisi
-            # canonical menjadi batas kanan: anchor hanya boleh menarik ROI
-            # sedikit ke kiri bila value memang mulai lebih kiri.
-            max_left_shift = 0.020
-            left_padding = 0.010
-            desired_shift = (
+            # Untuk OCR KTP, kehilangan karakter pertama lebih merusak
+            # daripada sedikit background/label di sisi kiri. Karena itu
+            # sisi kanan tetap mengikuti template, sedangkan sisi kiri
+            # diberi safety margin minimum dan boleh ditarik sedikit lebih
+            # kiri bila anchor value terdeteksi lebih awal.
+            safety_margin = 0.020
+            max_extra_left = 0.012
+            anchor_target = (
                 detected_x
-                - left_padding
-                - box.x1
+                - 0.008
             )
-            x_shift = max(
-                -max_left_shift,
-                min(
-                    0.0,
-                    desired_shift,
-                ),
-            )
-            box_width = (
-                box.x2
-                - box.x1
-            )
-            x1 = max(
+            canonical_safe_x1 = max(
                 0.0,
-                box.x1 + x_shift,
+                box.x1
+                - safety_margin,
             )
-            x2 = min(
-                1.0,
-                x1 + box_width,
+            anchor_safe_x1 = max(
+                0.0,
+                anchor_target
+                - max_extra_left,
             )
+            x1 = min(
+                canonical_safe_x1,
+                anchor_safe_x1,
+            )
+            x2 = box.x2
 
         result[name] = NormalizedBox(
             x1,
