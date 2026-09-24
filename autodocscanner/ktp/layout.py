@@ -177,9 +177,14 @@ KTP_VALUE_BOXES = {
 def build_anchor_aligned_value_boxes(
     image_height,
     anchors,
+    image_width=None,
 ):
     height = max(
         int(image_height or 0),
+        1,
+    )
+    width = max(
+        int(image_width or 0),
         1,
     )
     anchors = dict(
@@ -249,10 +254,42 @@ def build_anchor_aligned_value_boxes(
         if y2 - y1 < 0.020:
             continue
 
+        x1 = box.x1
+        x2 = box.x2
+
+        if image_width is not None:
+            anchor_x_normalized = max(
+                0.0,
+                min(
+                    1.0,
+                    float(_x) / width,
+                ),
+            )
+            padding = 0.008
+            dynamic_x1 = max(
+                0.0,
+                anchor_x_normalized
+                - padding,
+            )
+
+            box_width = (
+                box.x2
+                - box.x1
+            )
+            x1 = dynamic_x1
+            x2 = min(
+                1.0,
+                x1 + box_width,
+            )
+
+            if x2 - x1 < 0.08:
+                x1 = box.x1
+                x2 = box.x2
+
         result[name] = NormalizedBox(
-            box.x1,
+            x1,
             y1,
-            box.x2,
+            x2,
             y2,
         )
 
