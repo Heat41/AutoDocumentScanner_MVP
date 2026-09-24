@@ -13,6 +13,7 @@ from autodocscanner.ktp.field_detection import (
     AutoFieldDetector,
     best_detection_by_class,
     crop_detection,
+    crop_detection_padded,
 )
 from autodocscanner.ktp.layout import (
     normalize_ktp_for_tracking,
@@ -445,7 +446,7 @@ def extract_tracking_data(
         if detection is None:
             continue
 
-        value_image = crop_detection(
+        value_image = crop_detection_padded(
             tracking_image,
             detection,
         )
