@@ -18,6 +18,9 @@ from autodocscanner.ktp.field_detection import (
 from autodocscanner.ktp.layout import (
     normalize_ktp_for_tracking,
 )
+from autodocscanner.ktp.nik_validation import (
+    repair_nik_with_context,
+)
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
     TesseractBackend,
@@ -685,6 +688,66 @@ def extract_tracking_data(
             review_fields.append(
                 name
             )
+
+    nik_field = fields.get(
+        "nik"
+    )
+    ttl_field = fields.get(
+        "ttl"
+    )
+    province_field = fields.get(
+        "provinsi"
+    )
+    gender_field = fields.get(
+        "jenis_kelamin"
+    )
+
+    if nik_field is not None:
+        ttl_value = (
+            ttl_field.value
+            if ttl_field is not None
+            and isinstance(
+                ttl_field.value,
+                dict,
+            )
+            else {}
+        )
+        nik_context = (
+            repair_nik_with_context(
+                nik_field.value,
+                province=(
+                    province_field.value
+                    if province_field is not None
+                    else ""
+                ),
+                birth_date=(
+                    ttl_value.get(
+                        "tanggal_lahir",
+                        "",
+                    )
+                ),
+                gender=(
+                    gender_field.value
+                    if gender_field is not None
+                    else ""
+                ),
+            )
+        )
+
+        if nik_context.changed:
+            fields["nik"] = TrackedField(
+                name="nik",
+                raw_text=nik_context.value,
+                value=nik_context.value,
+                confidence=nik_field.confidence,
+                used_fallback=True,
+                needs_review=True,
+            )
+
+            if "nik" not in review_fields:
+                review_fields.append(
+                    "nik"
+                )
 
     return KtpTrackingResult(
         corrected_image=(
