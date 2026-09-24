@@ -1,11 +1,20 @@
 import unittest
 
 from autodocscanner.ktp.nik_validation import (
+    normalize_province_value,
     repair_nik_with_context,
 )
 
 
 class TestNikContextValidation(unittest.TestCase):
+    def test_normalizes_noisy_province_name(self):
+        self.assertEqual(
+            normalize_province_value(
+                "PROVINSI KALIMANTAN BAA I"
+            ),
+            "PROVINSI KALIMANTAN BARAT",
+        )
+
     def test_repairs_province_prefix_when_birth_segment_matches(self):
         result = repair_nik_with_context(
             "5112340503800002",
