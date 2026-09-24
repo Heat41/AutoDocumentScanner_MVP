@@ -12,6 +12,9 @@ from autodocscanner.ktp.ocr import (
 from autodocscanner.ktp.tracking import (
     KtpTrackingResult,
     _nik_consensus_candidate,
+    _normalize_enum_candidate,
+    _ocr_detection_for_field,
+    _recover_nik_from_fragments,
     extract_tracking_data,
 )
 
@@ -56,6 +59,92 @@ class TestKtpTracking(unittest.TestCase):
             (540, 856, 3),
             170,
             dtype=np.uint8,
+        )
+
+    def test_fuzzy_enum_normalizes_common_ocr_noise(self):
+        self.assertEqual(
+            _normalize_enum_candidate(
+                "agama",
+                "ISI AM",
+            ),
+            "ISLAM",
+        )
+        self.assertEqual(
+            _normalize_enum_candidate(
+                "jenis_kelamin",
+                "PEREMFUAN",
+            ),
+            "PEREMPUAN",
+        )
+
+    def test_ocr_detection_can_extend_long_text_to_photo_boundary(self):
+        detection = FieldDetection(
+            "pekerjaan",
+            (150, 300, 300, 330),
+            0.95,
+            "annotation_template",
+        )
+        photo = FieldDetection(
+            "foto",
+            (600, 100, 800, 420),
+            0.95,
+            "annotation_template",
+        )
+
+        expanded = _ocr_detection_for_field(
+            "pekerjaan",
+            detection,
+            {"foto": photo},
+            856,
+        )
+
+        self.assertEqual(
+            expanded.bbox,
+            (150, 300, 592, 330),
+        )
+
+    def test_nik_fragment_recovery_builds_context_valid_nik(self):
+        class FragmentBackend:
+            def __init__(self):
+                self.responses = [
+                    ("1001", 90.0),
+                    ("1001", 88.0),
+                    ("1001", 85.0),
+                    ("1001", 92.0),
+                    ("0004", 91.0),
+                    ("0004", 89.0),
+                    ("0004", 87.0),
+                    ("0004", 93.0),
+                ]
+
+            def read(
+                self,
+                image,
+                field_name,
+            ):
+                return self.responses.pop(
+                    0
+                )
+
+        recovered = _recover_nik_from_fragments(
+            np.zeros(
+                (40, 320, 3),
+                dtype=np.uint8,
+            ),
+            FragmentBackend(),
+            province=(
+                "PROVINSI KALIMANTAN BARAT"
+            ),
+            birth_date="1998-01-01",
+            gender="PEREMPUAN",
+        )
+
+        self.assertIsNotNone(
+            recovered
+        )
+        self.assertEqual(
+            recovered.raw_text,
+            "6110014101980004",
         )
 
     def test_nik_consensus_prefers_majority_digit_per_position(self):
