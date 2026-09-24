@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import queue
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -107,6 +108,7 @@ class TrackingKtpPage(ttk.Frame):
         self.scanner = scanner
         self.input_path = None
         self._worker_running = False
+        self._worker_queue = queue.SimpleQueue()
         self._last_tracking = None
         self._preview_photo = None
         self._face_photo = None
@@ -1185,9 +1187,15 @@ class TrackingKtpPage(ttk.Frame):
 
         self.after(
             50,
-            self._process_worker,
-            self.input_path,
+            self._poll_worker_queue,
         )
+
+        worker = threading.Thread(
+            target=self._process_worker,
+            args=(self.input_path,),
+            daemon=True,
+        )
+        worker.start()
 
     def _process_worker(
         self,
@@ -1203,58 +1211,80 @@ class TrackingKtpPage(ttk.Frame):
                 )
             )
         except Exception as exc:
-            try:
-                self.after(
-                    0,
-                    self._finish_failure,
+            self._worker_queue.put(
+                (
+                    "failure",
                     str(exc),
                 )
-            except tk.TclError:
-                pass
-            return
-
-        corrected = {
-            "corrected_image": corrected_image,
-            "corners": corners,
-        }
-
-        try:
-            self.after(
-                0,
-                self._show_corrected_stage,
-                corrected,
             )
-        except tk.TclError:
             return
+
+        self._worker_queue.put(
+            (
+                "corrected",
+                {
+                    "corrected_image": corrected_image,
+                    "corners": corners,
+                },
+            )
+        )
 
         try:
             tracking = extract_tracking_data(
                 corrected_image
             )
-            result = {
-                "corrected_image": corrected_image,
-                "corners": corners,
-                "tracking": tracking,
-            }
         except Exception as exc:
-            try:
-                self.after(
-                    0,
-                    self._finish_failure,
+            self._worker_queue.put(
+                (
+                    "failure",
                     str(exc),
                 )
-            except tk.TclError:
-                pass
+            )
             return
 
-        try:
-            self.after(
-                0,
-                self._finish_success,
-                result,
+        self._worker_queue.put(
+            (
+                "success",
+                {
+                    "corrected_image": corrected_image,
+                    "corners": corners,
+                    "tracking": tracking,
+                },
             )
-        except tk.TclError:
+        )
+
+    def _poll_worker_queue(self):
+        try:
+            while True:
+                event, payload = (
+                    self._worker_queue.get_nowait()
+                )
+
+                if event == "corrected":
+                    self._show_corrected_stage(
+                        payload
+                    )
+                    continue
+
+                if event == "failure":
+                    self._finish_failure(
+                        payload
+                    )
+                    return
+
+                if event == "success":
+                    self._finish_success(
+                        payload
+                    )
+                    return
+        except queue.Empty:
             pass
+
+        if self._worker_running:
+            self.after(
+                50,
+                self._poll_worker_queue,
+            )
 
     def _show_corrected_stage(
         self,
