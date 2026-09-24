@@ -265,6 +265,7 @@ _FUZZY_ENUM_FIELDS = {
     "agama",
     "jenis_kelamin",
     "status_perkawinan",
+    "kewarganegaraan",
 }
 
 
@@ -297,6 +298,21 @@ def _normalize_enum_candidate(
     if not compact:
         return text
 
+    if field_name == "kewarganegaraan":
+        if (
+            compact.startswith("WN")
+            and compact[-1:]
+            in ("I", "1", "L")
+        ):
+            return "WNI"
+
+        if (
+            compact.startswith("WN")
+            and compact[-1:]
+            in ("A", "4")
+        ):
+            return "WNA"
+
     best_value = text
     best_score = 0.0
 
@@ -321,6 +337,138 @@ def _normalize_enum_candidate(
         return best_value
 
     return text
+
+
+def _compact_compare_text(
+    value,
+):
+    return "".join(
+        char
+        for char in str(
+            value or ""
+        ).upper()
+        if char.isalnum()
+    )
+
+
+def _prefer_corroborated_text(
+    field_name,
+    raw_text,
+    confidence,
+    anchor_raw,
+    anchor_confidence,
+    document_raw,
+    document_confidence,
+):
+    if field_name != "nama":
+        return (
+            raw_text,
+            confidence,
+            False,
+        )
+
+    base = str(
+        raw_text or ""
+    ).strip()
+
+    alternatives = []
+
+    for value, alt_confidence in (
+        (
+            anchor_raw,
+            anchor_confidence,
+        ),
+        (
+            document_raw,
+            document_confidence,
+        ),
+    ):
+        value = str(
+            value or ""
+        ).strip()
+
+        if (
+            not value
+            or not _candidate_is_valid(
+                field_name,
+                value,
+            )
+        ):
+            continue
+
+        alternatives.append(
+            (
+                value,
+                float(
+                    alt_confidence
+                    or 0.0
+                ),
+            )
+        )
+
+    if not alternatives:
+        return (
+            raw_text,
+            confidence,
+            False,
+        )
+
+    base_compact = _compact_compare_text(
+        base
+    )
+
+    best_value = base
+    best_confidence = float(
+        confidence or 0.0
+    )
+    changed = False
+
+    for value, alt_confidence in alternatives:
+        alt_compact = (
+            _compact_compare_text(
+                value
+            )
+        )
+
+        if (
+            not base_compact
+            or not alt_compact
+        ):
+            continue
+
+        similarity = SequenceMatcher(
+            None,
+            base_compact,
+            alt_compact,
+        ).ratio()
+
+        if similarity < 0.80:
+            continue
+
+        base_spaces = base.count(
+            " "
+        )
+        alt_spaces = value.count(
+            " "
+        )
+
+        if (
+            alt_spaces > base_spaces
+            and alt_confidence
+            >= best_confidence - 30.0
+        ):
+            best_value = value
+            best_confidence = max(
+                best_confidence,
+                alt_confidence,
+            )
+            changed = True
+
+    return (
+        best_value,
+        best_confidence,
+        changed,
+    )
 
 
 def _ocr_detection_for_field(
@@ -918,6 +1066,27 @@ def extract_tracking_data(
             confidence = float(
                 document_confidence
                 or 0.0
+            )
+            used_fallback = True
+
+        (
+            supported_text,
+            supported_confidence,
+            supported_changed,
+        ) = _prefer_corroborated_text(
+            name,
+            raw_text,
+            confidence,
+            anchor_raw,
+            anchor_confidence,
+            document_raw,
+            document_confidence,
+        )
+
+        if supported_changed:
+            raw_text = supported_text
+            confidence = (
+                supported_confidence
             )
             used_fallback = True
 
