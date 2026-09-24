@@ -1183,12 +1183,11 @@ class TrackingKtpPage(ttk.Frame):
             text="Menunggu hasil corrected KTP...",
         )
 
-        worker = threading.Thread(
-            target=self._process_worker,
-            args=(self.input_path,),
-            daemon=True,
+        self.after(
+            50,
+            self._process_worker,
+            self.input_path,
         )
-        worker.start()
 
     def _process_worker(
         self,
