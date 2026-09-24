@@ -282,24 +282,25 @@ class TestKtpOcr(unittest.TestCase):
             dtype=np.uint8,
         )
 
+        # Bentuk 4 terbuka: tidak memiliki loop tertutup seperti angka 8.
         cv2.line(
             image,
-            (26, 8),
-            (26, 50),
+            (27, 7),
+            (27, 52),
             0,
             5,
         )
         cv2.line(
             image,
-            (8, 30),
-            (31, 30),
+            (9, 31),
+            (32, 31),
             0,
             5,
         )
         cv2.line(
             image,
-            (8, 30),
-            (22, 8),
+            (11, 12),
+            (11, 31),
             0,
             5,
         )
@@ -310,6 +311,29 @@ class TestKtpOcr(unittest.TestCase):
                 "8",
             ),
             "4",
+        )
+
+    def test_shape_repair_keeps_ambiguous_one_hole_eight(self):
+        image = np.full(
+            (60, 40),
+            255,
+            dtype=np.uint8,
+        )
+
+        cv2.circle(
+            image,
+            (20, 30),
+            14,
+            0,
+            5,
+        )
+
+        self.assertEqual(
+            _repair_segmented_digit_by_shape(
+                image,
+                "8",
+            ),
+            "8",
         )
 
     def test_shape_repair_keeps_closed_eight(self):
