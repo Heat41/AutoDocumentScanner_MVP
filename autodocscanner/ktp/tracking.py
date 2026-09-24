@@ -31,6 +31,7 @@ from autodocscanner.ktp.ocr import (
     TesseractBackend,
     read_field_ocr_candidates,
     read_name_ocr_candidates,
+    read_nik_ocr_candidates,
     read_numeric_fragment,
 )
 from autodocscanner.ktp.parsing import (
@@ -1216,6 +1217,12 @@ def extract_tracking_data(
             )
 
         if name == "nik":
+            ocr_candidates.extend(
+                read_nik_ocr_candidates(
+                    value_image,
+                    backend=backend,
+                )
+            )
             nik_ocr_candidates = list(
                 ocr_candidates
             )
