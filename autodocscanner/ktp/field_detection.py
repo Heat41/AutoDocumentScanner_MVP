@@ -120,6 +120,78 @@ def crop_detection(
     ].copy()
 
 
+def crop_detection_padded(
+    image,
+    detection,
+    pad_x_ratio=0.018,
+    pad_y_ratio=0.12,
+):
+    if (
+        not isinstance(image, np.ndarray)
+        or image.size == 0
+    ):
+        raise ValueError(
+            "image detector harus berupa numpy array yang tidak kosong."
+        )
+
+    if not isinstance(
+        detection,
+        FieldDetection,
+    ):
+        raise TypeError(
+            "detection harus berupa FieldDetection."
+        )
+
+    height, width = image.shape[:2]
+    x1, y1, x2, y2 = detection.bbox
+
+    box_width = max(
+        int(x2) - int(x1),
+        1,
+    )
+    box_height = max(
+        int(y2) - int(y1),
+        1,
+    )
+
+    pad_x = max(
+        2,
+        int(
+            round(
+                box_width
+                * float(pad_x_ratio)
+            )
+        ),
+    )
+    pad_y = max(
+        1,
+        int(
+            round(
+                box_height
+                * float(pad_y_ratio)
+            )
+        ),
+    )
+
+    padded = _clamp_bbox(
+        (
+            x1 - pad_x,
+            y1 - pad_y,
+            x2 + pad_x,
+            y2 + pad_y,
+        ),
+        width,
+        height,
+    )
+
+    px1, py1, px2, py2 = padded
+
+    return image[
+        py1:py2,
+        px1:px2,
+    ].copy()
+
+
 def best_detection_by_class(
     detections,
 ):
