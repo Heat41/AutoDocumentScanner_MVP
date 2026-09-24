@@ -997,7 +997,7 @@ class TrackingKtpPage(ttk.Frame):
             # entire card visible inside the preview panel without
             # clipping/zooming when the Tracking column is narrower.
             pil_image.thumbnail(
-                (390, 430),
+                (500, 360),
                 Image.Resampling.LANCZOS,
             )
             photo = ImageTk.PhotoImage(
@@ -1380,15 +1380,21 @@ class TrackingKtpPage(ttk.Frame):
                 )
             )
 
-        self._corrected_preview_image = (
-            result[
-                "corrected_image"
-            ].copy()
-        )
         self._tracking_debug_image = (
             tracking.debug_tracking_image.copy()
             if tracking.debug_tracking_image is not None
             else None
+        )
+
+        # Preview Tracking harus memakai canvas canonical yang sama dengan
+        # koordinat detector (856x540). Dengan begitu toggle bounding box
+        # tidak mengubah basis skala/ukuran gambar.
+        self._corrected_preview_image = (
+            self._tracking_debug_image.copy()
+            if self._tracking_debug_image is not None
+            else result[
+                "corrected_image"
+            ].copy()
         )
         self._tracking_detections = (
             list(
