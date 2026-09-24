@@ -198,12 +198,13 @@ class TestKtpOcr(unittest.TestCase):
             (1, 1, 2),
         )
 
-    def test_multi_pass_returns_three_candidates(self):
+    def test_multi_pass_returns_four_candidates(self):
         backend = FakeBackend(
             [
                 ("PASS SATU", 40.0),
                 ("PASS DUA", 70.0),
                 ("PASS TIGA", 65.0),
+                ("PASS EMPAT", 75.0),
             ]
         )
 
@@ -215,11 +216,15 @@ class TestKtpOcr(unittest.TestCase):
 
         self.assertEqual(
             len(results),
-            3,
+            4,
         )
         self.assertEqual(
             results[1].raw_text,
             "PASS DUA",
+        )
+        self.assertEqual(
+            results[3].raw_text,
+            "PASS EMPAT",
         )
 
 
