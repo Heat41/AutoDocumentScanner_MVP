@@ -1049,6 +1049,242 @@ def read_name_ocr_candidates(
     return results
 
 
+def read_segmented_digits(
+    image,
+    digit_count,
+    backend=None,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+    digit_count = max(
+        int(digit_count),
+        1,
+    )
+
+    if not hasattr(
+        backend,
+        "read_configured",
+    ):
+        return OcrReadResult(
+            raw_text="",
+            confidence=0.0,
+            used_fallback=True,
+        )
+
+    prepared = preprocess_field_strong(
+        image,
+        "nik",
+    )
+
+    if prepared.ndim != 2:
+        return OcrReadResult(
+            raw_text="",
+            confidence=0.0,
+            used_fallback=True,
+        )
+
+    mask = prepared < 128
+    height, width = mask.shape[:2]
+
+    if width < digit_count:
+        return OcrReadResult(
+            raw_text="",
+            confidence=0.0,
+            used_fallback=True,
+        )
+
+    row_start = max(
+        0,
+        int(
+            round(
+                height * 0.12
+            )
+        ),
+    )
+    row_end = min(
+        height,
+        int(
+            round(
+                height * 0.90
+            )
+        ),
+    )
+
+    projection = mask[
+        row_start:row_end,
+        :
+    ].sum(
+        axis=0
+    )
+
+    min_ink = max(
+        2,
+        int(
+            round(
+                max(
+                    row_end - row_start,
+                    1,
+                )
+                * 0.10
+            )
+        ),
+    )
+    active = np.flatnonzero(
+        projection >= min_ink
+    )
+
+    if active.size >= 2:
+        left = int(
+            active[0]
+        )
+        right = int(
+            active[-1]
+        ) + 1
+    else:
+        left = 0
+        right = width
+
+    span = max(
+        right - left,
+        digit_count,
+    )
+
+    digits = []
+    confidences = []
+
+    for index in range(
+        digit_count
+    ):
+        x1 = int(
+            round(
+                left
+                + span
+                * index
+                / digit_count
+            )
+        )
+        x2 = int(
+            round(
+                left
+                + span
+                * (
+                    index + 1
+                )
+                / digit_count
+            )
+        )
+
+        x1 = max(
+            0,
+            min(
+                width - 1,
+                x1,
+            ),
+        )
+        x2 = max(
+            x1 + 1,
+            min(
+                width,
+                x2,
+            ),
+        )
+
+        cell = prepared[
+            :,
+            x1:x2,
+        ]
+
+        pad = max(
+            4,
+            int(
+                round(
+                    cell.shape[1]
+                    * 0.20
+                )
+            ),
+        )
+        cell = cv2.copyMakeBorder(
+            cell,
+            pad,
+            pad,
+            pad,
+            pad,
+            cv2.BORDER_CONSTANT,
+            value=255,
+        )
+
+        best_text = ""
+        best_confidence = 0.0
+
+        for psm in (
+            10,
+            13,
+        ):
+            text, confidence = (
+                backend.read_configured(
+                    cell,
+                    config=(
+                        f"--psm {psm} "
+                        "-c tessedit_char_whitelist=0123456789"
+                    ),
+                )
+            )
+
+            candidate = "".join(
+                char
+                for char in str(
+                    text or ""
+                )
+                if char.isdigit()
+            )
+
+            if (
+                len(candidate) == 1
+                and float(
+                    confidence or 0.0
+                )
+                >= best_confidence
+            ):
+                best_text = candidate
+                best_confidence = float(
+                    confidence or 0.0
+                )
+
+        if len(best_text) != 1:
+            return OcrReadResult(
+                raw_text="",
+                confidence=0.0,
+                used_fallback=True,
+            )
+
+        digits.append(
+            best_text
+        )
+        confidences.append(
+            best_confidence
+        )
+
+    return OcrReadResult(
+        raw_text="".join(
+            digits
+        ),
+        confidence=(
+            sum(
+                confidences
+            )
+            / len(
+                confidences
+            )
+            if confidences
+            else 0.0
+        ),
+        used_fallback=True,
+    )
+
+
 def read_numeric_fragment(
     image,
     expected_length,
