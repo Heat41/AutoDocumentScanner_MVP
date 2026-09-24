@@ -35,6 +35,53 @@ class TestTemplateFieldDetector(unittest.TestCase):
             all(item.source == "template" for item in detections)
         )
 
+    def test_saved_annotation_template_overrides_hardcoded_boxes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = (
+                Path(tmp)
+                / "default.txt"
+            )
+            template_path.write_text(
+                "3 0.350000 0.300000 0.400000 0.080000\n",
+                encoding="utf-8",
+            )
+
+            detector = TemplateFieldDetector(
+                template_path=template_path
+            )
+            detections = best_detection_by_class(
+                detector.detect(
+                    self.image,
+                    anchors={
+                        "nama": (
+                            700.0,
+                            500.0,
+                            99.0,
+                        ),
+                    },
+                )
+            )
+
+        nama = detections["nama"]
+
+        self.assertEqual(
+            nama.source,
+            "annotation_template",
+        )
+        self.assertEqual(
+            nama.confidence,
+            0.95,
+        )
+        self.assertEqual(
+            nama.bbox,
+            (
+                128,
+                140,
+                471,
+                184,
+            ),
+        )
+
     def test_anchor_changes_detected_row(self):
         detector = TemplateFieldDetector()
 
