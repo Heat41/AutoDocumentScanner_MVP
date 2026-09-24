@@ -832,112 +832,86 @@ def _select_nik_candidate_with_context(
     birth_date,
     gender,
 ):
-    province_text = normalize_province_value(
-        province
-    )
-    province_name = (
-        province_text
-        .replace(
-            "PROVINSI ",
-            "",
-            1,
-        )
-        .strip()
-    )
-    expected_prefix = PROVINCE_NIK_PREFIXES.get(
-        province_name,
-        "",
-    )
-    expected_birth = birth_segment_from_context(
-        birth_date,
-        gender,
-    )
-
-    ranked = []
+    aggregated = {}
 
     for candidate in candidates:
         for window in _nik_windows(
             candidate
         ):
-            score = float(
+            context = repair_nik_with_context(
+                window,
+                province=province,
+                birth_date=birth_date,
+                gender=gender,
+            )
+
+            if not context.context_valid:
+                continue
+
+            canonical = context.value
+
+            stats = aggregated.setdefault(
+                canonical,
+                {
+                    "count": 0,
+                    "confidence_sum": 0.0,
+                    "max_confidence": 0.0,
+                    "used_fallback": False,
+                    "changed": False,
+                },
+            )
+
+            stats["count"] += 1
+            stats["confidence_sum"] += float(
                 candidate.confidence
             )
-
-            prefix_match = (
-                bool(
-                    expected_prefix
-                )
-                and window[:2]
-                == expected_prefix
+            stats["max_confidence"] = max(
+                stats["max_confidence"],
+                float(
+                    candidate.confidence
+                ),
             )
-            birth_match = (
-                bool(
-                    expected_birth
+            stats["used_fallback"] = (
+                stats["used_fallback"]
+                or bool(
+                    candidate.used_fallback
                 )
-                and window[6:12]
-                == expected_birth
             )
-
-            if prefix_match:
-                score += 120.0
-
-            if birth_match:
-                score += 180.0
-
-            if (
-                expected_prefix
-                and expected_birth
-                and not (
-                    prefix_match
-                    and birth_match
-                )
-            ):
-                score -= 160.0
-
-            ranked.append(
-                (
-                    score,
-                    window,
-                    candidate,
-                    prefix_match,
-                    birth_match,
+            stats["changed"] = (
+                stats["changed"]
+                or bool(
+                    context.changed
                 )
             )
 
-    if not ranked:
+    if not aggregated:
         return None
 
-    ranked.sort(
+    value, stats = max(
+        aggregated.items(),
         key=lambda item: (
-            item[0],
-            item[2].confidence,
+            item[1]["count"],
+            item[1]["confidence_sum"],
+            item[1]["max_confidence"],
         ),
-        reverse=True,
     )
 
-    (
-        _score,
-        value,
-        source,
-        prefix_match,
-        birth_match,
-    ) = ranked[0]
-
-    if (
-        expected_prefix
-        and expected_birth
-        and not (
-            prefix_match
-            and birth_match
+    confidence = (
+        stats["confidence_sum"]
+        / max(
+            stats["count"],
+            1,
         )
-    ):
-        return None
+    )
 
     return OcrReadResult(
         raw_text=value,
-        confidence=source.confidence,
+        confidence=float(
+            confidence
+        ),
         used_fallback=(
-            source.used_fallback
+            stats["used_fallback"]
+            or stats["changed"]
         ),
     )
 
