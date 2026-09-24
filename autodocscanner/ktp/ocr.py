@@ -367,7 +367,7 @@ class TesseractBackend:
 
         if field_name in DIGIT_FIELDS:
             parts.append(
-                "-c tessedit_char_whitelist=0123456789OQDILZSBGoqdilzsbg"
+                "-c tessedit_char_whitelist=0123456789"
             )
 
         return " ".join(parts)
