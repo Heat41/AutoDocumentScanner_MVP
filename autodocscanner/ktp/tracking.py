@@ -373,25 +373,10 @@ def extract_tracking_data(
                 )
             )
 
-            registration = (
-                register_ktp_to_template(
-                    tracking_image,
-                    locate_label_anchors(
-                        layout_words
-                    ),
-                )
-            )
-
-            if registration.applied:
-                tracking_image = (
-                    registration.image
-                )
-                layout_words = (
-                    backend.read_layout(
-                        tracking_image
-                    )
-                )
-
+            # Auto Perspective sudah menghasilkan KTP canonical.
+            # Jangan warp ulang gambar berdasarkan OCR anchor karena sedikit
+            # noise pada posisi label dapat membuat seluruh kartu bergeser
+            # atau terkompresi. Anchor hanya dipakai untuk mengoreksi ROI.
             label_anchors = (
                 locate_label_anchors(
                     layout_words
