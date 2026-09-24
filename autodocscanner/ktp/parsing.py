@@ -148,7 +148,22 @@ def _generic_field(field_name, value):
         count=1,
     )
 
-    return clean_text(text).upper()
+    text = clean_text(text).upper()
+
+    # Bersihkan noise OCR hanya di tepi value; tanda baca internal
+    # seperti "GG.PANCABAKTINO. 12" tetap dipertahankan.
+    text = re.sub(
+        r"^[\s'\"`|:;,.\-_]+",
+        "",
+        text,
+    )
+    text = re.sub(
+        r"[\s'\"`|:;,.\-_]+$",
+        "",
+        text,
+    )
+
+    return clean_text(text)
 
 
 def parse_field(field_name, value):
