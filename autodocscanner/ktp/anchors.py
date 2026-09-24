@@ -416,8 +416,27 @@ def locate_label_anchors(
             field_name
         )
 
+        value_words = (
+            _value_words_after_label(
+                line_words,
+                consumed_count,
+            )
+        )
+
+        if value_words:
+            anchor_x = float(
+                min(
+                    item.left
+                    for item in value_words
+                )
+            )
+        else:
+            anchor_x = float(
+                right
+            )
+
         candidate = (
-            (left + right) / 2.0,
+            anchor_x,
             (top + bottom) / 2.0,
             float(confidence),
         )
