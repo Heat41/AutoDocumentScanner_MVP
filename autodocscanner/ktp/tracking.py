@@ -545,6 +545,171 @@ def _ocr_detection_for_field(
     )
 
 
+def _refine_nik_serial_with_segments(
+    nik_image,
+    backend,
+    base_nik,
+    province,
+    birth_date,
+    gender,
+):
+    if (
+        nik_image is None
+        or not isinstance(
+            nik_image,
+            np.ndarray,
+        )
+        or nik_image.size == 0
+    ):
+        return None
+
+    base_digits = "".join(
+        char
+        for char in str(
+            base_nik or ""
+        )
+        if char.isdigit()
+    )
+
+    if len(base_digits) != 16:
+        return None
+
+    base_context = repair_nik_with_context(
+        base_digits,
+        province=province,
+        birth_date=birth_date,
+        gender=gender,
+    )
+
+    if not base_context.context_valid:
+        return None
+
+    height, width = nik_image.shape[:2]
+    serial_votes = []
+
+    full = read_segmented_digits(
+        nik_image,
+        digit_count=16,
+        backend=backend,
+    )
+    full_digits = "".join(
+        char
+        for char in full.raw_text
+        if char.isdigit()
+    )
+
+    if len(full_digits) == 16:
+        full_context = repair_nik_with_context(
+            full_digits,
+            province=province,
+            birth_date=birth_date,
+            gender=gender,
+        )
+
+        if full_context.context_valid:
+            serial_votes.append(
+                (
+                    full_context.value[-4:],
+                    float(
+                        full.confidence
+                    ),
+                )
+            )
+
+    for start_ratio in (
+        0.735,
+        0.750,
+        0.765,
+    ):
+        serial_crop = nik_image[
+            :,
+            max(
+                0,
+                min(
+                    width - 1,
+                    int(
+                        round(
+                            width
+                            * start_ratio
+                        )
+                    ),
+                ),
+            ):
+            width,
+        ]
+
+        serial = read_segmented_digits(
+            serial_crop,
+            digit_count=4,
+            backend=backend,
+        )
+        serial_digits = "".join(
+            char
+            for char in serial.raw_text
+            if char.isdigit()
+        )
+
+        if len(serial_digits) == 4:
+            serial_votes.append(
+                (
+                    serial_digits,
+                    float(
+                        serial.confidence
+                    ),
+                )
+            )
+
+    if len(serial_votes) < 2:
+        return None
+
+    grouped = {}
+
+    for serial, confidence in serial_votes:
+        stats = grouped.setdefault(
+            serial,
+            {
+                "count": 0,
+                "confidence_sum": 0.0,
+                "max_confidence": 0.0,
+            },
+        )
+        stats["count"] += 1
+        stats["confidence_sum"] += confidence
+        stats["max_confidence"] = max(
+            stats["max_confidence"],
+            confidence,
+        )
+
+    best_serial, stats = max(
+        grouped.items(),
+        key=lambda item: (
+            item[1]["count"],
+            item[1]["confidence_sum"],
+            item[1]["max_confidence"],
+        ),
+    )
+
+    if stats["count"] < 2:
+        return None
+
+    refined = (
+        base_context.value[:12]
+        + best_serial
+    )
+
+    if refined == base_context.value:
+        return None
+
+    return OcrReadResult(
+        raw_text=refined,
+        confidence=(
+            stats["confidence_sum"]
+            / stats["count"]
+        ),
+        used_fallback=True,
+    )
+
+
 def _recover_nik_from_fragments(
     nik_image,
     backend,
@@ -620,7 +785,7 @@ def _recover_nik_from_fragments(
             0,
             int(
                 round(
-                    width * 0.72
+                    width * 0.75
                 )
             ),
         ):
@@ -1494,6 +1659,68 @@ def extract_tracking_data(
                 value=recovered_nik.raw_text,
                 confidence=(
                     recovered_nik.confidence
+                ),
+                used_fallback=True,
+                needs_review=True,
+            )
+
+            if "nik" not in review_fields:
+                review_fields.append(
+                    "nik"
+                )
+
+    nik_before_serial_refine = fields.get(
+        "nik"
+    )
+
+    if (
+        nik_before_serial_refine is not None
+        and str(
+            nik_before_serial_refine.value or ""
+        ).strip()
+        and isinstance(
+            backend,
+            TesseractBackend,
+        )
+    ):
+        serial_refined = (
+            _refine_nik_serial_with_segments(
+                nik_source_image,
+                backend,
+                base_nik=(
+                    nik_before_serial_refine.value
+                ),
+                province=(
+                    province_for_nik.value
+                    if province_for_nik is not None
+                    else ""
+                ),
+                birth_date=(
+                    ttl_value_for_nik.get(
+                        "tanggal_lahir",
+                        "",
+                    )
+                ),
+                gender=(
+                    gender_for_nik.value
+                    if gender_for_nik is not None
+                    else ""
+                ),
+            )
+        )
+
+        if serial_refined is not None:
+            fields["nik"] = TrackedField(
+                name="nik",
+                raw_text=serial_refined.raw_text,
+                value=serial_refined.raw_text,
+                confidence=max(
+                    float(
+                        nik_before_serial_refine.confidence
+                    ),
+                    float(
+                        serial_refined.confidence
+                    ),
                 ),
                 used_fallback=True,
                 needs_review=True,
