@@ -884,6 +884,88 @@ def read_field_ocr(
     return primary
 
 
+def read_nik_ocr_candidates(
+    image,
+    backend=None,
+):
+    backend = (
+        backend
+        if backend is not None
+        else TesseractBackend()
+    )
+
+    if not hasattr(
+        backend,
+        "read_configured",
+    ):
+        return []
+
+    prepared_images = (
+        preprocess_field(
+            image,
+            "nik",
+            fallback=False,
+        ),
+        preprocess_field_otsu(
+            image,
+        ),
+        preprocess_field_strong(
+            image,
+            "nik",
+        ),
+    )
+
+    results = []
+
+    for prepared in prepared_images:
+        for psm in (
+            7,
+            8,
+            13,
+        ):
+            config = (
+                f"--psm {psm} "
+                "-c tessedit_char_whitelist=0123456789"
+            )
+
+            text, confidence = (
+                backend.read_configured(
+                    prepared,
+                    config=config,
+                )
+            )
+
+            digits = "".join(
+                char
+                for char in str(
+                    text or ""
+                )
+                if char.isdigit()
+            )
+
+            if not digits:
+                continue
+
+            results.append(
+                OcrReadResult(
+                    raw_text=digits,
+                    confidence=max(
+                        0.0,
+                        min(
+                            100.0,
+                            float(
+                                confidence
+                                or 0.0
+                            ),
+                        ),
+                    ),
+                    used_fallback=True,
+                )
+            )
+
+    return results
+
+
 def read_name_ocr_candidates(
     image,
     backend=None,
