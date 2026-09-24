@@ -5,9 +5,13 @@ import numpy as np
 from autodocscanner.ktp.field_detection import (
     FieldDetection,
 )
-from autodocscanner.ktp.ocr import OcrWord
+from autodocscanner.ktp.ocr import (
+    OcrReadResult,
+    OcrWord,
+)
 from autodocscanner.ktp.tracking import (
     KtpTrackingResult,
+    _nik_consensus_candidate,
     extract_tracking_data,
 )
 
@@ -52,6 +56,37 @@ class TestKtpTracking(unittest.TestCase):
             (540, 856, 3),
             170,
             dtype=np.uint8,
+        )
+
+    def test_nik_consensus_prefers_majority_digit_per_position(self):
+        candidates = [
+            OcrReadResult(
+                "5172020503800002",
+                92.0,
+                False,
+            ),
+            OcrReadResult(
+                "6172020503800002",
+                88.0,
+                True,
+            ),
+            OcrReadResult(
+                "6172020503800002",
+                85.0,
+                True,
+            ),
+        ]
+
+        result = _nik_consensus_candidate(
+            candidates
+        )
+
+        self.assertIsNotNone(
+            result
+        )
+        self.assertEqual(
+            result.raw_text,
+            "6172020503800002",
         )
 
     def test_tracking_extracts_structured_identity(self):
