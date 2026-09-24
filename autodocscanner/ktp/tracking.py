@@ -30,6 +30,7 @@ from autodocscanner.ktp.ocr import (
     OcrReadResult,
     TesseractBackend,
     read_field_ocr_candidates,
+    read_name_ocr_candidates,
     read_numeric_fragment,
 )
 from autodocscanner.ktp.parsing import (
@@ -734,6 +735,212 @@ def _candidate_is_valid(
     )
 
 
+def _best_name_candidate(
+    candidates,
+):
+    valid = [
+        candidate
+        for candidate in candidates
+        if _candidate_is_valid(
+            "nama",
+            candidate.raw_text,
+        )
+    ]
+
+    if not valid:
+        return None
+
+    best_confidence = max(
+        candidate.confidence
+        for candidate in valid
+    )
+
+    preferred = [
+        candidate
+        for candidate in valid
+        if (
+            len(
+                str(
+                    candidate.raw_text
+                    or ""
+                ).split()
+            )
+            >= 2
+            and candidate.confidence
+            >= best_confidence
+            - 25.0
+        )
+    ]
+
+    pool = (
+        preferred
+        if preferred
+        else valid
+    )
+
+    return max(
+        pool,
+        key=lambda candidate: (
+            candidate.confidence,
+            len(
+                str(
+                    candidate.raw_text
+                    or ""
+                ).split()
+            ),
+            len(
+                str(
+                    candidate.raw_text
+                    or ""
+                )
+            ),
+        ),
+    )
+
+
+def _nik_windows(
+    candidate,
+):
+    digits = "".join(
+        char
+        for char in str(
+            candidate.raw_text
+            or ""
+        )
+        if char.isdigit()
+    )
+
+    if len(digits) < 16:
+        return []
+
+    return [
+        digits[
+            index:
+            index + 16
+        ]
+        for index in range(
+            0,
+            len(digits) - 15,
+        )
+    ]
+
+
+def _select_nik_candidate_with_context(
+    candidates,
+    province,
+    birth_date,
+    gender,
+):
+    province_text = normalize_province_value(
+        province
+    )
+    province_name = (
+        province_text
+        .replace(
+            "PROVINSI ",
+            "",
+            1,
+        )
+        .strip()
+    )
+    expected_prefix = PROVINCE_NIK_PREFIXES.get(
+        province_name,
+        "",
+    )
+    expected_birth = birth_segment_from_context(
+        birth_date,
+        gender,
+    )
+
+    ranked = []
+
+    for candidate in candidates:
+        for window in _nik_windows(
+            candidate
+        ):
+            score = float(
+                candidate.confidence
+            )
+
+            prefix_match = (
+                bool(
+                    expected_prefix
+                )
+                and window[:2]
+                == expected_prefix
+            )
+            birth_match = (
+                bool(
+                    expected_birth
+                )
+                and window[6:12]
+                == expected_birth
+            )
+
+            if prefix_match:
+                score += 120.0
+
+            if birth_match:
+                score += 180.0
+
+            if (
+                expected_prefix
+                and expected_birth
+                and not (
+                    prefix_match
+                    and birth_match
+                )
+            ):
+                score -= 160.0
+
+            ranked.append(
+                (
+                    score,
+                    window,
+                    candidate,
+                    prefix_match,
+                    birth_match,
+                )
+            )
+
+    if not ranked:
+        return None
+
+    ranked.sort(
+        key=lambda item: (
+            item[0],
+            item[2].confidence,
+        ),
+        reverse=True,
+    )
+
+    (
+        _score,
+        value,
+        source,
+        prefix_match,
+        birth_match,
+    ) = ranked[0]
+
+    if (
+        expected_prefix
+        and expected_birth
+        and not (
+            prefix_match
+            and birth_match
+        )
+    ):
+        return None
+
+    return OcrReadResult(
+        raw_text=value,
+        confidence=source.confidence,
+        used_fallback=(
+            source.used_fallback
+        ),
+    )
+
+
 def _nik_consensus_candidate(
     candidates,
 ):
@@ -822,6 +1029,16 @@ def _best_valid_ocr_candidate(
     field_name,
     candidates,
 ):
+    if field_name == "nama":
+        name_candidate = (
+            _best_name_candidate(
+                candidates
+            )
+        )
+
+        if name_candidate is not None:
+            return name_candidate
+
     if field_name == "nik":
         consensus = _nik_consensus_candidate(
             candidates
@@ -949,6 +1166,7 @@ def extract_tracking_data(
     fields = {}
     review_fields = []
     nik_source_image = None
+    nik_ocr_candidates = []
 
     for name in (
         extraction.fields
@@ -981,13 +1199,26 @@ def extract_tracking_data(
             ocr_detection,
         )
 
-        ocr_candidates = (
+        ocr_candidates = list(
             read_field_ocr_candidates(
                 value_image,
                 name,
                 backend=backend,
             )
         )
+
+        if name == "nama":
+            ocr_candidates.extend(
+                read_name_ocr_candidates(
+                    value_image,
+                    backend=backend,
+                )
+            )
+
+        if name == "nik":
+            nik_ocr_candidates = list(
+                ocr_candidates
+            )
 
         best_ocr = (
             _best_valid_ocr_candidate(
@@ -1159,9 +1390,6 @@ def extract_tracking_data(
                 name
             )
 
-    current_nik = fields.get(
-        "nik"
-    )
     ttl_for_nik = fields.get(
         "ttl"
     )
@@ -1172,6 +1400,58 @@ def extract_tracking_data(
         "jenis_kelamin"
     )
 
+    ttl_value_for_nik = (
+        ttl_for_nik.value
+        if ttl_for_nik is not None
+        and isinstance(
+            ttl_for_nik.value,
+            dict,
+        )
+        else {}
+    )
+
+    contextual_nik = (
+        _select_nik_candidate_with_context(
+            nik_ocr_candidates,
+            province=(
+                province_for_nik.value
+                if province_for_nik is not None
+                else ""
+            ),
+            birth_date=(
+                ttl_value_for_nik.get(
+                    "tanggal_lahir",
+                    "",
+                )
+            ),
+            gender=(
+                gender_for_nik.value
+                if gender_for_nik is not None
+                else ""
+            ),
+        )
+    )
+
+    if contextual_nik is not None:
+        fields["nik"] = TrackedField(
+            name="nik",
+            raw_text=contextual_nik.raw_text,
+            value=contextual_nik.raw_text,
+            confidence=contextual_nik.confidence,
+            used_fallback=(
+                contextual_nik.used_fallback
+            ),
+            needs_review=False,
+        )
+
+        if "nik" in review_fields:
+            review_fields.remove(
+                "nik"
+            )
+
+    current_nik = fields.get(
+        "nik"
+    )
     if (
         current_nik is not None
         and not str(
