@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from autodocscanner.ktp.tracking import (
     _ocr_detection_for_field,
     _prefer_corroborated_text,
     _recover_nik_from_fragments,
+    _refine_nik_serial_with_segments,
     _select_nik_candidate_with_context,
     extract_tracking_data,
 )
@@ -232,6 +234,60 @@ class TestKtpTracking(unittest.TestCase):
         self.assertEqual(
             result.raw_text,
             "SITI ISNAINI",
+        )
+
+    def test_nik_serial_refinement_votes_for_consistent_last_four_digits(self):
+        image = np.zeros(
+            (40, 320, 3),
+            dtype=np.uint8,
+        )
+
+        mocked_reads = [
+            OcrReadResult(
+                "6110014101980004",
+                75.0,
+                True,
+            ),
+            OcrReadResult(
+                "0004",
+                80.0,
+                True,
+            ),
+            OcrReadResult(
+                "0008",
+                92.0,
+                True,
+            ),
+            OcrReadResult(
+                "0004",
+                78.0,
+                True,
+            ),
+        ]
+
+        with patch(
+            "autodocscanner.ktp.tracking.read_segmented_digits",
+            side_effect=mocked_reads,
+        ):
+            result = (
+                _refine_nik_serial_with_segments(
+                    image,
+                    backend=object(),
+                    base_nik="6110014101980008",
+                    province=(
+                        "PROVINSI KALIMANTAN BARAT"
+                    ),
+                    birth_date="1998-01-01",
+                    gender="PEREMPUAN",
+                )
+            )
+
+        self.assertIsNotNone(
+            result
+        )
+        self.assertEqual(
+            result.raw_text,
+            "6110014101980004",
         )
 
     def test_contextual_nik_prefers_candidate_matching_birth_and_province(self):
