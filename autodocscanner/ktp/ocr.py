@@ -150,8 +150,12 @@ def preprocess_field(
 
     height, width = gray.shape[:2]
     target_height = max(
-        48,
-        height * 3,
+        72,
+        height * (
+            5
+            if field_name == "nik"
+            else 4
+        ),
     )
     scale = (
         target_height
@@ -229,6 +233,79 @@ def preprocess_field_otsu(
         + cv2.THRESH_OTSU,
     )
     return binary
+
+
+def preprocess_field_strong(
+    image,
+    field_name,
+):
+    _validate_image(image)
+    gray = _to_gray(image)
+
+    height, width = gray.shape[:2]
+    target_height = max(
+        96,
+        height * (
+            6
+            if field_name == "nik"
+            else 4
+        ),
+    )
+    scale = (
+        target_height
+        / max(height, 1)
+    )
+    target_width = max(
+        2,
+        int(
+            round(
+                width * scale
+            )
+        ),
+    )
+
+    enlarged = cv2.resize(
+        gray,
+        (
+            target_width,
+            target_height,
+        ),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+    clahe = cv2.createCLAHE(
+        clipLimit=2.6,
+        tileGridSize=(8, 8),
+    )
+    enhanced = clahe.apply(
+        enlarged
+    )
+
+    blurred = cv2.GaussianBlur(
+        enhanced,
+        (0, 0),
+        1.0,
+    )
+    sharpened = cv2.addWeighted(
+        enhanced,
+        1.8,
+        blurred,
+        -0.8,
+        0,
+    )
+
+    if field_name == "nik":
+        _threshold, sharpened = (
+            cv2.threshold(
+                sharpened,
+                0,
+                255,
+                cv2.THRESH_BINARY
+                + cv2.THRESH_OTSU,
+            )
+        )
+
+    return sharpened
 
 
 class TesseractBackend:
@@ -744,6 +821,10 @@ def read_field_ocr_candidates(
         ),
         preprocess_field_otsu(
             image,
+        ),
+        preprocess_field_strong(
+            image,
+            field_name,
         ),
     )
 
