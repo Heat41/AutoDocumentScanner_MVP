@@ -164,7 +164,7 @@ class TestTemplateFieldDetector(unittest.TestCase):
                 / "default.txt"
             )
             template_path.write_text(
-                "12 0.420000 0.600000 0.360000 0.050000\n",
+                "11 0.420000 0.600000 0.360000 0.050000\n",
                 encoding="utf-8",
             )
 
