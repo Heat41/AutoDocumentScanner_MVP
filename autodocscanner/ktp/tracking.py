@@ -29,6 +29,7 @@ from autodocscanner.ktp.nik_validation import (
 from autodocscanner.ktp.ocr import (
     OcrReadResult,
     TesseractBackend,
+    read_field_ocr,
     read_field_ocr_candidates,
     read_name_ocr_candidates,
     read_nik_ocr_candidates,
@@ -1296,10 +1297,24 @@ def extract_tracking_data(
         )
     )
 
-    if hasattr(
-        backend,
-        "read_document",
-    ):
+    document_loaded = False
+
+    def ensure_document_candidates():
+        nonlocal document_loaded
+        nonlocal document_candidates
+        nonlocal document_confidence
+
+        if document_loaded:
+            return
+
+        document_loaded = True
+
+        if not hasattr(
+            backend,
+            "read_document",
+        ):
+            return
+
         try:
             (
                 document_text,
@@ -1352,28 +1367,58 @@ def extract_tracking_data(
             ocr_detection,
         )
 
-        ocr_candidates = list(
-            read_field_ocr_candidates(
-                value_image,
+        primary_ocr = read_field_ocr(
+            value_image,
+            name,
+            backend=backend,
+            confidence_threshold=(
+                confidence_threshold
+            ),
+        )
+        ocr_candidates = [
+            primary_ocr
+        ]
+
+        primary_valid = (
+            _candidate_is_valid(
                 name,
-                backend=backend,
+                primary_ocr.raw_text,
             )
         )
 
+        if (
+            not primary_valid
+            or primary_ocr.confidence
+            < confidence_threshold
+        ):
+            ocr_candidates = list(
+                read_field_ocr_candidates(
+                    value_image,
+                    name,
+                    backend=backend,
+                )
+            )
+
         if name == "nama":
-            ocr_candidates.extend(
+            specialized_name = (
                 read_name_ocr_candidates(
                     value_image,
                     backend=backend,
                 )
             )
+            ocr_candidates.extend(
+                specialized_name
+            )
 
         if name == "nik":
-            ocr_candidates.extend(
+            specialized_nik = (
                 read_nik_ocr_candidates(
                     value_image,
                     backend=backend,
                 )
+            )
+            ocr_candidates.extend(
+                specialized_nik
             )
             nik_ocr_candidates = list(
                 ocr_candidates
@@ -1412,12 +1457,28 @@ def extract_tracking_data(
                 name
             ]
 
-        document_raw = (
-            document_candidates.get(
+        document_raw = ""
+
+        if (
+            not _candidate_is_valid(
                 name,
-                "",
+                raw_text,
             )
-        )
+            and not (
+                anchor_raw
+                and _candidate_is_valid(
+                    name,
+                    anchor_raw,
+                )
+            )
+        ):
+            ensure_document_candidates()
+            document_raw = (
+                document_candidates.get(
+                    name,
+                    "",
+                )
+            )
 
         bbox_candidate_valid = (
             _candidate_is_valid(
