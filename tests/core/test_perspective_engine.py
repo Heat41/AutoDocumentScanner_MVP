@@ -261,6 +261,105 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
             40.0,
         )
 
+    def test_post_warp_geometry_prefers_straight_card(self):
+        straight = np.full(
+            (340, 540, 3),
+            235,
+            dtype=np.uint8,
+        )
+
+        for y in range(
+            80,
+            270,
+            28,
+        ):
+            cv2.line(
+                straight,
+                (35, y),
+                (330, y),
+                (30, 30, 30),
+                3,
+            )
+
+        cv2.rectangle(
+            straight,
+            (390, 85),
+            (500, 245),
+            (40, 40, 40),
+            3,
+        )
+
+        matrix = cv2.getRotationMatrix2D(
+            (270.0, 170.0),
+            2.0,
+            1.0,
+        )
+        tilted = cv2.warpAffine(
+            straight,
+            matrix,
+            (540, 340),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        straight_score, straight_meta = (
+            self.engine
+            ._post_warp_geometry_score(
+                straight
+            )
+        )
+        tilted_score, tilted_meta = (
+            self.engine
+            ._post_warp_geometry_score(
+                tilted
+            )
+        )
+
+        self.assertGreater(
+            straight_score,
+            tilted_score,
+        )
+        self.assertGreaterEqual(
+            straight_score,
+            0.70,
+        )
+        self.assertIsNotNone(
+            straight_meta[
+                "horizontal"
+            ]
+        )
+        self.assertIsNotNone(
+            tilted_meta[
+                "horizontal"
+            ]
+        )
+
+    def test_post_warp_geometry_is_neutral_without_enough_lines(self):
+        blank = np.full(
+            (340, 540, 3),
+            220,
+            dtype=np.uint8,
+        )
+
+        score, metadata = (
+            self.engine
+            ._post_warp_geometry_score(
+                blank
+            )
+        )
+
+        self.assertAlmostEqual(
+            score,
+            0.50,
+            places=3,
+        )
+        self.assertEqual(
+            metadata[
+                "line_count"
+            ],
+            0,
+        )
+
     def test_color_refined_candidate_can_use_snapped_boundary_variant(self):
         image = np.zeros(
             (400, 640, 3),
