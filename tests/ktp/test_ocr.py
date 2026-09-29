@@ -243,8 +243,9 @@ class TestKtpOcr(unittest.TestCase):
             backend=backend,
         )
 
-        self.assertTrue(
-            results
+        self.assertEqual(
+            len(results),
+            2,
         )
         self.assertEqual(
             results[0].raw_text,
@@ -267,8 +268,9 @@ class TestKtpOcr(unittest.TestCase):
             backend=backend,
         )
 
-        self.assertTrue(
-            results
+        self.assertEqual(
+            len(results),
+            2,
         )
         self.assertEqual(
             results[0].raw_text,
