@@ -430,15 +430,52 @@ def locate_label_anchors(
                     for item in value_words
                 )
             )
+            value_top = min(
+                item.top
+                for item in value_words
+            )
+            value_bottom = max(
+                item.bottom
+                for item in value_words
+            )
+            anchor_y = (
+                value_top
+                + value_bottom
+            ) / 2.0
+            value_confidence = (
+                _mean_confidence(
+                    value_words
+                )
+            )
+            anchor_confidence = (
+                0.70
+                * float(
+                    confidence
+                )
+                + 0.30
+                * float(
+                    value_confidence
+                )
+            )
         else:
             anchor_x = float(
                 right
             )
+            anchor_y = (
+                top + bottom
+            ) / 2.0
+            anchor_confidence = float(
+                confidence
+            )
 
         candidate = (
             anchor_x,
-            (top + bottom) / 2.0,
-            float(confidence),
+            float(
+                anchor_y
+            ),
+            float(
+                anchor_confidence
+            ),
         )
 
         if (
