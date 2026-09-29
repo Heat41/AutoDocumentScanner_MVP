@@ -1880,6 +1880,7 @@ class AutoPerspectiveEngine:
         )
 
         horizontal_angles = []
+        horizontal_samples = []
 
         if lines is not None:
             for line in np.asarray(
@@ -1918,6 +1919,15 @@ class AutoPerspectiveEngine:
                 if -8.0 <= angle <= 8.0:
                     horizontal_angles.append(
                         angle
+                    )
+                    horizontal_samples.append(
+                        (
+                            (
+                                y1 + y2
+                            )
+                            / 2.0,
+                            angle,
+                        )
                     )
 
         horizontal = (
@@ -1967,6 +1977,7 @@ class AutoPerspectiveEngine:
         )
 
         vertical_angles = []
+        vertical_samples = []
 
         if vertical_lines is not None:
             for line in np.asarray(
@@ -2014,12 +2025,34 @@ class AutoPerspectiveEngine:
                     vertical_angles.append(
                         angle
                     )
+                    vertical_samples.append(
+                        (
+                            (
+                                x1 + x2
+                            )
+                            / 2.0,
+                            angle,
+                        )
+                    )
 
         vertical = (
             self._robust_angle_summary(
                 vertical_angles,
                 target=90.0,
                 min_count=2,
+            )
+        )
+
+        horizontal_trend = (
+            self._angle_trend_score(
+                horizontal_samples,
+                axis_span=edges.shape[0],
+            )
+        )
+        vertical_trend = (
+            self._angle_trend_score(
+                vertical_samples,
+                axis_span=full_edges.shape[1],
             )
         )
 
@@ -2070,6 +2103,36 @@ class AutoPerspectiveEngine:
                 + 0.25
             )
 
+        trend_items = [
+            item
+            for item in (
+                horizontal_trend,
+                vertical_trend,
+            )
+            if item[
+                "available"
+            ]
+        ]
+
+        if trend_items:
+            trend_score = float(
+                np.mean(
+                    [
+                        item[
+                            "score"
+                        ]
+                        for item
+                        in trend_items
+                    ]
+                )
+            )
+            score = (
+                score * 0.78
+                + trend_score * 0.22
+            )
+        else:
+            trend_score = 0.50
+
         return float(
             max(
                 0.0,
@@ -2081,6 +2144,15 @@ class AutoPerspectiveEngine:
         ), {
             "horizontal": horizontal,
             "vertical": vertical,
+            "horizontal_trend": (
+                horizontal_trend
+            ),
+            "vertical_trend": (
+                vertical_trend
+            ),
+            "projective_shear_score": float(
+                trend_score
+            ),
             "line_count": (
                 len(
                     horizontal_angles
@@ -2090,6 +2162,466 @@ class AutoPerspectiveEngine:
                 )
             ),
         }
+
+
+    @staticmethod
+    def _angle_trend_score(
+        samples,
+        axis_span,
+    ):
+        """
+        Ukur perubahan sudut secara sistematis sepanjang kartu.
+
+        Residual projective shear biasanya membuat sudut baris/kolom
+        berubah dari satu sisi ke sisi lain. Skor 1 berarti hampir tidak
+        ada trend; skor rendah berarti masih ada efek jajargenjang/trapesium.
+        """
+        samples = list(
+            samples or []
+        )
+
+        if len(samples) < 4:
+            return {
+                "available": False,
+                "slope_deg": None,
+                "score": 0.50,
+                "count": len(
+                    samples
+                ),
+            }
+
+        positions = np.asarray(
+            [
+                float(
+                    item[0]
+                )
+                for item in samples
+            ],
+            dtype=np.float32,
+        )
+        angles = np.asarray(
+            [
+                float(
+                    item[1]
+                )
+                for item in samples
+            ],
+            dtype=np.float32,
+        )
+
+        span = max(
+            float(
+                axis_span
+            ),
+            1.0,
+        )
+        normalized = (
+            positions
+            / span
+        )
+
+        # Robust sederhana: median slope dari semua pasangan yang cukup jauh.
+        slopes = []
+
+        for i in range(
+            len(samples)
+        ):
+            for j in range(
+                i + 1,
+                len(samples)
+            ):
+                dx = float(
+                    normalized[j]
+                    - normalized[i]
+                )
+
+                if abs(dx) < 0.12:
+                    continue
+
+                slopes.append(
+                    float(
+                        (
+                            angles[j]
+                            - angles[i]
+                        )
+                        / dx
+                    )
+                )
+
+        if len(slopes) < 3:
+            return {
+                "available": False,
+                "slope_deg": None,
+                "score": 0.50,
+                "count": len(
+                    samples
+                ),
+            }
+
+        slope = float(
+            np.median(
+                np.asarray(
+                    slopes,
+                    dtype=np.float32,
+                )
+            )
+        )
+
+        # Perubahan sekitar 2.5 derajat dari satu sisi ke sisi lain
+        # sudah dianggap projective shear kuat.
+        score = max(
+            0.0,
+            min(
+                1.0,
+                1.0
+                - abs(
+                    slope
+                )
+                / 2.5,
+            ),
+        )
+
+        return {
+            "available": True,
+            "slope_deg": slope,
+            "score": float(
+                score
+            ),
+            "count": len(
+                samples
+            ),
+        }
+
+    def _projective_rectify_best_quad(
+        self,
+        image,
+        base_points,
+        base_geometry_score,
+    ):
+        """
+        Stage A.4: bounded local search pada empat corner kandidat terbaik.
+
+        Search dilakukan pada downsampled image dan hanya satu putaran.
+        Hasil diterima bila geometry score meningkat cukup jelas.
+        """
+        points = self.order_points(
+            base_points
+        ).astype(
+            np.float32
+        )
+
+        h, w = image.shape[:2]
+        max_side = max(
+            h,
+            w,
+        )
+        scale = min(
+            1.0,
+            720.0
+            / max(
+                max_side,
+                1,
+            ),
+        )
+
+        if scale < 1.0:
+            small = cv2.resize(
+                image,
+                (
+                    max(
+                        2,
+                        int(
+                            round(
+                                w * scale
+                            )
+                        ),
+                    ),
+                    max(
+                        2,
+                        int(
+                            round(
+                                h * scale
+                            )
+                        ),
+                    ),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
+            small_points = (
+                points * scale
+            )
+        else:
+            small = image
+            small_points = (
+                points.copy()
+            )
+
+        rect = self.order_points(
+            small_points
+        )
+        tl, tr, br, bl = rect
+        short_side = max(
+            1.0,
+            min(
+                float(
+                    np.linalg.norm(
+                        tr - tl
+                    )
+                ),
+                float(
+                    np.linalg.norm(
+                        br - bl
+                    )
+                ),
+                float(
+                    np.linalg.norm(
+                        bl - tl
+                    )
+                ),
+                float(
+                    np.linalg.norm(
+                        br - tr
+                    )
+                ),
+            ),
+        )
+
+        step = float(
+            np.clip(
+                short_side * 0.012,
+                2.0,
+                8.0,
+            )
+        )
+
+        baseline_warp = self.warp(
+            small,
+            rect,
+        )
+        baseline_geometry, baseline_meta = (
+            self._post_warp_geometry_score(
+                baseline_warp
+            )
+        )
+
+        baseline_quality = self._warp_quality(
+            baseline_warp
+        )
+        baseline_total = (
+            baseline_geometry * 0.78
+            + baseline_quality * 0.22
+        )
+
+        best_points = rect.copy()
+        best_total = float(
+            baseline_total
+        )
+        best_geometry = float(
+            baseline_geometry
+        )
+        best_meta = baseline_meta
+
+        # 8 DOF, masing-masing +/- sekali = maksimal 16 warp kecil.
+        for corner_index in range(
+            4
+        ):
+            for axis in (
+                0,
+                1,
+            ):
+                for direction in (
+                    -1.0,
+                    1.0,
+                ):
+                    trial = rect.copy()
+                    trial[
+                        corner_index,
+                        axis,
+                    ] += (
+                        direction
+                        * step
+                    )
+
+                    if not cv2.isContourConvex(
+                        trial.astype(
+                            np.int32
+                        )
+                    ):
+                        continue
+
+                    area_base = abs(
+                        cv2.contourArea(
+                            rect.astype(
+                                np.float32
+                            )
+                        )
+                    )
+                    area_trial = abs(
+                        cv2.contourArea(
+                            trial.astype(
+                                np.float32
+                            )
+                        )
+                    )
+
+                    if (
+                        area_base <= 1.0
+                        or not (
+                            0.94
+                            <= area_trial
+                            / area_base
+                            <= 1.06
+                        )
+                    ):
+                        continue
+
+                    warped = self.warp(
+                        small,
+                        trial,
+                    )
+                    geometry, meta = (
+                        self._post_warp_geometry_score(
+                            warped
+                        )
+                    )
+                    quality = self._warp_quality(
+                        warped
+                    )
+
+                    movement = float(
+                        np.mean(
+                            np.linalg.norm(
+                                trial - rect,
+                                axis=1,
+                            )
+                        )
+                        / max(
+                            float(
+                                np.hypot(
+                                    small.shape[1],
+                                    small.shape[0],
+                                )
+                            ),
+                            1.0,
+                        )
+                    )
+
+                    total = (
+                        geometry * 0.78
+                        + quality * 0.22
+                        - movement * 0.35
+                    )
+
+                    if total > best_total:
+                        best_total = float(
+                            total
+                        )
+                        best_geometry = float(
+                            geometry
+                        )
+                        best_points = (
+                            trial.copy()
+                        )
+                        best_meta = meta
+
+        improvement = (
+            best_total
+            - baseline_total
+        )
+
+        # Jangan menyentuh KTP yang sudah baik atau improvement terlalu kecil.
+        if (
+            improvement < 0.025
+            or best_geometry
+            < baseline_geometry
+            + 0.015
+        ):
+            return (
+                points,
+                {
+                    "applied": False,
+                    "improvement": float(
+                        improvement
+                    ),
+                    "before_geometry": float(
+                        baseline_geometry
+                    ),
+                    "after_geometry": float(
+                        best_geometry
+                    ),
+                    "geometry": baseline_meta,
+                },
+            )
+
+        optimized = (
+            best_points
+            / max(
+                scale,
+                1e-6,
+            )
+        ).astype(
+            np.float32
+        )
+
+        diagonal = max(
+            float(
+                np.hypot(
+                    w,
+                    h,
+                )
+            ),
+            1.0,
+        )
+        movement = float(
+            np.mean(
+                np.linalg.norm(
+                    optimized - points,
+                    axis=1,
+                )
+            )
+            / diagonal
+        )
+
+        if movement > 0.025:
+            return (
+                points,
+                {
+                    "applied": False,
+                    "improvement": float(
+                        improvement
+                    ),
+                    "before_geometry": float(
+                        baseline_geometry
+                    ),
+                    "after_geometry": float(
+                        best_geometry
+                    ),
+                    "geometry": baseline_meta,
+                    "reason": "movement_too_large",
+                },
+            )
+
+        return (
+            self.order_points(
+                optimized
+            ),
+            {
+                "applied": True,
+                "improvement": float(
+                    improvement
+                ),
+                "before_geometry": float(
+                    baseline_geometry
+                ),
+                "after_geometry": float(
+                    best_geometry
+                ),
+                "geometry": best_meta,
+                "movement": float(
+                    movement
+                ),
+            },
+        )
 
 
     def _warp_quality(self, warped):
@@ -2368,6 +2900,42 @@ class AutoPerspectiveEngine:
                 "score": max(best_total, 0.0),
             }
 
+        (
+            rectified_points,
+            projective_rectification,
+        ) = self._projective_rectify_best_quad(
+            image,
+            best.points,
+            best_geometry_score,
+        )
+
+        if projective_rectification.get(
+            "applied",
+            False,
+        ):
+            best = PerspectiveCandidate(
+                points=rectified_points,
+                score=best.score,
+                source=(
+                    f"{best.source}"
+                    "_projective_rectified"
+                ),
+            )
+
+            rectified_warp = self.warp(
+                image,
+                rectified_points,
+            )
+            (
+                best_geometry_score,
+                best_geometry,
+            ) = self._post_warp_geometry_score(
+                rectified_warp
+            )
+            best_warp_quality = self._warp_quality(
+                rectified_warp
+            )
+
         return best.points, {
             "candidate_count": len(candidates),
             "selected_source": best.source,
@@ -2380,6 +2948,9 @@ class AutoPerspectiveEngine:
             ),
             "post_warp_geometry": (
                 best_geometry
+            ),
+            "projective_rectification": (
+                projective_rectification
             ),
         }
 
