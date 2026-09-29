@@ -435,6 +435,123 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
             places=3,
         )
 
+    def test_projective_rectification_can_use_coupled_shear_pattern(self):
+        source = np.full(
+            (340, 540, 3),
+            235,
+            dtype=np.uint8,
+        )
+
+        for y in range(
+            80,
+            270,
+            28,
+        ):
+            cv2.line(
+                source,
+                (40, y),
+                (335, y),
+                (30, 30, 30),
+                3,
+            )
+
+        cv2.rectangle(
+            source,
+            (390, 85),
+            (500, 245),
+            (40, 40, 40),
+            3,
+        )
+
+        destination = np.array(
+            [
+                [45, 25],
+                [520, 45],
+                [500, 320],
+                [25, 300],
+            ],
+            dtype=np.float32,
+        )
+        source_points = np.array(
+            [
+                [0, 0],
+                [539, 0],
+                [539, 339],
+                [0, 339],
+            ],
+            dtype=np.float32,
+        )
+
+        matrix = cv2.getPerspectiveTransform(
+            source_points,
+            destination,
+        )
+
+        canvas = cv2.warpPerspective(
+            source,
+            matrix,
+            (560, 350),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        # Quad sengaja sedikit salah sehingga menyisakan shear.
+        base_quad = destination.copy()
+        base_quad[0, 0] += 7.0
+        base_quad[1, 0] += 7.0
+        base_quad[2, 0] -= 7.0
+        base_quad[3, 0] -= 7.0
+
+        before_warp = self.engine.warp(
+            canvas,
+            base_quad,
+        )
+        before_score, _before_meta = (
+            self.engine
+            ._post_warp_geometry_score(
+                before_warp
+            )
+        )
+
+        optimized, metadata = (
+            self.engine
+            ._projective_rectify_best_quad(
+                canvas,
+                base_quad,
+                base_geometry_score=(
+                    before_score
+                ),
+            )
+        )
+
+        self.assertEqual(
+            optimized.shape,
+            (4, 2),
+        )
+        self.assertIn(
+            "applied",
+            metadata,
+        )
+
+        if metadata[
+            "applied"
+        ]:
+            after_warp = self.engine.warp(
+                canvas,
+                optimized,
+            )
+            after_score, _after_meta = (
+                self.engine
+                ._post_warp_geometry_score(
+                    after_warp
+                )
+            )
+
+            self.assertGreater(
+                after_score,
+                before_score,
+            )
+
     def test_projective_rectification_keeps_good_quad_when_no_clear_gain(self):
         image = np.full(
             (400, 640, 3),
