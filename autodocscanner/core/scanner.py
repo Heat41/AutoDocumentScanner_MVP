@@ -280,42 +280,118 @@ class AutoDocumentScanner:
             cv2.COLOR_BGR2GRAY,
         )
 
-        # Sedikit blur menekan pola guilloche/security background.
-        gray = cv2.GaussianBlur(
-            gray,
+        height, width = image.shape[:2]
+
+        # Fokus ke area teks kiri/utama. Ini menghindari tepi foto,
+        # tanda tangan, dan sebagian besar security pattern kanan.
+        roi_x1 = max(
+            0,
+            int(
+                round(
+                    width * 0.035
+                )
+            ),
+        )
+        roi_x2 = min(
+            width,
+            int(
+                round(
+                    width * 0.73
+                )
+            ),
+        )
+        roi_y1 = max(
+            0,
+            int(
+                round(
+                    height * 0.10
+                )
+            ),
+        )
+        roi_y2 = min(
+            height,
+            int(
+                round(
+                    height * 0.82
+                )
+            ),
+        )
+
+        gray_roi = gray[
+            roi_y1:roi_y2,
+            roi_x1:roi_x2,
+        ]
+
+        # Downsample ringan bila perlu agar Stage A tetap murah di CPU.
+        roi_height, roi_width = gray_roi.shape[:2]
+        scale = min(
+            1.0,
+            640.0
+            / max(
+                roi_width,
+                1,
+            ),
+        )
+
+        if scale < 1.0:
+            gray_roi = cv2.resize(
+                gray_roi,
+                (
+                    max(
+                        2,
+                        int(
+                            round(
+                                roi_width * scale
+                            )
+                        ),
+                    ),
+                    max(
+                        2,
+                        int(
+                            round(
+                                roi_height * scale
+                            )
+                        ),
+                    ),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        gray_roi = cv2.GaussianBlur(
+            gray_roi,
             (3, 3),
             0,
         )
 
         edges = cv2.Canny(
-            gray,
-            70,
-            170,
+            gray_roi,
+            65,
+            155,
         )
 
-        height, width = image.shape[:2]
+        analysis_width = edges.shape[1]
 
         lines = cv2.HoughLinesP(
             edges,
             1,
             np.pi / 180.0,
             threshold=max(
-                45,
-                width // 12,
+                24,
+                analysis_width // 18,
             ),
             minLineLength=max(
-                70,
+                42,
                 int(
                     round(
-                        width * 0.18
+                        analysis_width * 0.08
                     )
                 ),
             ),
             maxLineGap=max(
-                10,
+                8,
                 int(
                     round(
-                        width * 0.025
+                        analysis_width * 0.018
                     )
                 ),
             ),
@@ -354,7 +430,7 @@ class AutoDocumentScanner:
                 )
             )
 
-            if length < width * 0.18:
+            if length < analysis_width * 0.08:
                 continue
 
             angle = float(
@@ -374,18 +450,8 @@ class AutoDocumentScanner:
             ):
                 continue
 
-            # Hindari garis sangat dekat border hasil warp.
-            center_y = (
-                y1 + y2
-            ) / 2.0
-
-            if (
-                center_y
-                < height * 0.08
-                or center_y
-                > height * 0.92
-            ):
-                continue
+            # ROI analisis sudah membuang border/foto; tidak perlu filter
+            # tambahan yang berisiko membuang baris teks valid.
 
             angles.append(
                 angle
