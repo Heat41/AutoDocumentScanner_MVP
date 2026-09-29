@@ -151,6 +151,116 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
         )
 
 
+    def test_line_refinement_keeps_quad_when_boundary_support_does_not_improve(self):
+        image = np.zeros(
+            (400, 640, 3),
+            dtype=np.uint8,
+        )
+        edge_map = np.zeros(
+            (400, 640),
+            dtype=np.uint8,
+        )
+        quad = np.array(
+            [
+                [80, 70],
+                [560, 70],
+                [560, 330],
+                [80, 330],
+            ],
+            dtype=np.float32,
+        )
+
+        refined = (
+            self.engine
+            ._refine_quad_from_edge_lines(
+                image,
+                quad,
+                edge_map,
+            )
+        )
+
+        self.assertTrue(
+            np.allclose(
+                refined,
+                quad,
+            )
+        )
+
+    def test_line_refinement_can_improve_small_shifted_boundary(self):
+        image = np.zeros(
+            (400, 640, 3),
+            dtype=np.uint8,
+        )
+        edge_map = np.zeros(
+            (400, 640),
+            dtype=np.uint8,
+        )
+
+        # Boundary aktual sedikit di luar quad awal.
+        cv2.line(
+            edge_map,
+            (76, 66),
+            (564, 66),
+            255,
+            2,
+        )
+        cv2.line(
+            edge_map,
+            (564, 66),
+            (564, 334),
+            255,
+            2,
+        )
+        cv2.line(
+            edge_map,
+            (564, 334),
+            (76, 334),
+            255,
+            2,
+        )
+        cv2.line(
+            edge_map,
+            (76, 334),
+            (76, 66),
+            255,
+            2,
+        )
+
+        quad = np.array(
+            [
+                [80, 70],
+                [560, 70],
+                [560, 330],
+                [80, 330],
+            ],
+            dtype=np.float32,
+        )
+
+        refined = (
+            self.engine
+            ._refine_quad_from_edge_lines(
+                image,
+                quad,
+                edge_map,
+            )
+        )
+
+        self.assertEqual(
+            refined.shape,
+            (4, 2),
+        )
+        self.assertLessEqual(
+            float(
+                np.mean(
+                    np.linalg.norm(
+                        refined - quad,
+                        axis=1,
+                    )
+                )
+            ),
+            40.0,
+        )
+
     def test_color_refined_candidate_can_use_snapped_boundary_variant(self):
         image = np.zeros(
             (400, 640, 3),
