@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import multiprocessing
 
 from autodocscanner.services.batch import BatchScanRunner
 from autodocscanner.core.scanner import AutoDocumentScanner
@@ -195,4 +196,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
