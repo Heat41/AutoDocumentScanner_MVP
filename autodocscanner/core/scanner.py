@@ -13,6 +13,10 @@ class AutoDocumentScanner:
     KTP_ASPECT_RATIO = 85.60 / 53.98
     KTP_CANONICAL_WIDTH = 856
     KTP_CANONICAL_HEIGHT = 540
+    KTP_RESIDUAL_SKEW_MIN_DEG = 0.45
+    KTP_RESIDUAL_SKEW_MAX_DEG = 2.50
+    KTP_RESIDUAL_SKEW_MAX_SPREAD_DEG = 0.80
+    KTP_RESIDUAL_SKEW_MIN_LINES = 4
 
     def __init__(
         self,
@@ -248,6 +252,342 @@ class AutoDocumentScanner:
             flags=cv2.INTER_CUBIC,
             borderMode=cv2.BORDER_REPLICATE,
         )
+
+    @classmethod
+    def estimate_ktp_residual_skew(
+        cls,
+        image,
+    ):
+        """
+        Estimasi residual skew kecil sesudah perspective warp.
+
+        Hanya garis horizontal panjang dan konsisten yang dipakai agar
+        tekstur/security pattern KTP tidak memicu rotasi palsu.
+        """
+        if (
+            not isinstance(
+                image,
+                np.ndarray,
+            )
+            or image.size == 0
+        ):
+            raise ValueError(
+                "image residual skew tidak boleh kosong."
+            )
+
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+        # Sedikit blur menekan pola guilloche/security background.
+        gray = cv2.GaussianBlur(
+            gray,
+            (3, 3),
+            0,
+        )
+
+        edges = cv2.Canny(
+            gray,
+            70,
+            170,
+        )
+
+        height, width = image.shape[:2]
+
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            np.pi / 180.0,
+            threshold=max(
+                45,
+                width // 12,
+            ),
+            minLineLength=max(
+                70,
+                int(
+                    round(
+                        width * 0.18
+                    )
+                ),
+            ),
+            maxLineGap=max(
+                10,
+                int(
+                    round(
+                        width * 0.025
+                    )
+                ),
+            ),
+        )
+
+        if lines is None:
+            return {
+                "angle": 0.0,
+                "applied": False,
+                "line_count": 0,
+                "spread": None,
+                "reason": "no_lines",
+            }
+
+        angles = []
+        weights = []
+
+        for line in np.asarray(
+            lines
+        ).reshape(-1, 4):
+            x1, y1, x2, y2 = [
+                float(value)
+                for value in line
+            ]
+
+            dx = x2 - x1
+            dy = y2 - y1
+
+            if abs(dx) < 1.0:
+                continue
+
+            length = float(
+                np.hypot(
+                    dx,
+                    dy,
+                )
+            )
+
+            if length < width * 0.18:
+                continue
+
+            angle = float(
+                np.degrees(
+                    np.arctan2(
+                        dy,
+                        dx,
+                    )
+                )
+            )
+
+            # Residual KTP setelah homography seharusnya kecil.
+            if not (
+                -cls.KTP_RESIDUAL_SKEW_MAX_DEG
+                <= angle
+                <= cls.KTP_RESIDUAL_SKEW_MAX_DEG
+            ):
+                continue
+
+            # Hindari garis sangat dekat border hasil warp.
+            center_y = (
+                y1 + y2
+            ) / 2.0
+
+            if (
+                center_y
+                < height * 0.08
+                or center_y
+                > height * 0.92
+            ):
+                continue
+
+            angles.append(
+                angle
+            )
+            weights.append(
+                max(
+                    length,
+                    1.0,
+                )
+            )
+
+        if len(angles) < cls.KTP_RESIDUAL_SKEW_MIN_LINES:
+            return {
+                "angle": 0.0,
+                "applied": False,
+                "line_count": len(
+                    angles
+                ),
+                "spread": None,
+                "reason": "insufficient_lines",
+            }
+
+        angle_array = np.asarray(
+            angles,
+            dtype=np.float32,
+        )
+
+        median = float(
+            np.median(
+                angle_array
+            )
+        )
+        deviation = np.abs(
+            angle_array
+            - median
+        )
+        mad = float(
+            np.median(
+                deviation
+            )
+        )
+
+        tolerance = max(
+            0.35,
+            3.0 * mad,
+        )
+        keep = (
+            deviation
+            <= tolerance
+        )
+
+        filtered_angles = angle_array[
+            keep
+        ]
+        filtered_weights = np.asarray(
+            weights,
+            dtype=np.float32,
+        )[
+            keep
+        ]
+
+        if (
+            filtered_angles.size
+            < cls.KTP_RESIDUAL_SKEW_MIN_LINES
+        ):
+            return {
+                "angle": 0.0,
+                "applied": False,
+                "line_count": int(
+                    filtered_angles.size
+                ),
+                "spread": mad,
+                "reason": "inconsistent_lines",
+            }
+
+        # Weighted mean setelah robust median rejection.
+        angle = float(
+            np.average(
+                filtered_angles,
+                weights=filtered_weights,
+            )
+        )
+        spread = float(
+            np.median(
+                np.abs(
+                    filtered_angles
+                    - np.median(
+                        filtered_angles
+                    )
+                )
+            )
+        )
+
+        if (
+            spread
+            > cls.KTP_RESIDUAL_SKEW_MAX_SPREAD_DEG
+        ):
+            return {
+                "angle": angle,
+                "applied": False,
+                "line_count": int(
+                    filtered_angles.size
+                ),
+                "spread": spread,
+                "reason": "spread_too_high",
+            }
+
+        if (
+            abs(angle)
+            < cls.KTP_RESIDUAL_SKEW_MIN_DEG
+        ):
+            return {
+                "angle": angle,
+                "applied": False,
+                "line_count": int(
+                    filtered_angles.size
+                ),
+                "spread": spread,
+                "reason": "already_straight",
+            }
+
+        if (
+            abs(angle)
+            > cls.KTP_RESIDUAL_SKEW_MAX_DEG
+        ):
+            return {
+                "angle": angle,
+                "applied": False,
+                "line_count": int(
+                    filtered_angles.size
+                ),
+                "spread": spread,
+                "reason": "angle_too_large",
+            }
+
+        return {
+            "angle": angle,
+            "applied": True,
+            "line_count": int(
+                filtered_angles.size
+            ),
+            "spread": spread,
+            "reason": "residual_skew",
+        }
+
+    @classmethod
+    def stabilize_ktp_residual_skew(
+        cls,
+        image,
+    ):
+        metadata = (
+            cls.estimate_ktp_residual_skew(
+                image
+            )
+        )
+
+        if not metadata.get(
+            "applied",
+            False,
+        ):
+            return (
+                image.copy(),
+                metadata,
+            )
+
+        angle = float(
+            metadata.get(
+                "angle",
+                0.0,
+            )
+        )
+
+        height, width = image.shape[:2]
+        matrix = cv2.getRotationMatrix2D(
+            (
+                width / 2.0,
+                height / 2.0,
+            ),
+            angle,
+            1.0,
+        )
+
+        corrected = cv2.warpAffine(
+            image,
+            matrix,
+            (
+                width,
+                height,
+            ),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        corrected = cls.normalize_ktp_canvas(
+            corrected
+        )
+
+        return (
+            corrected,
+            metadata,
+        )
+
 
     def trim_edges(self, image):
         if self.ktp_edge_trim <= 0:
@@ -493,6 +833,21 @@ class AutoDocumentScanner:
             result = self.normalize_ktp_ratio(
                 result
             )
+            result = self.normalize_ktp_canvas(
+                result
+            )
+
+            (
+                result,
+                residual_skew,
+            ) = self.stabilize_ktp_residual_skew(
+                result
+            )
+            self.last_detection[
+                "residual_skew"
+            ] = residual_skew
+
+            # Contract akhir KTP selalu exact canonical canvas.
             result = self.normalize_ktp_canvas(
                 result
             )
