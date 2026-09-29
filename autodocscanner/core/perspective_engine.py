@@ -1037,6 +1037,407 @@ class AutoPerspectiveEngine:
             snapped
         )
 
+    def _refine_quad_from_edge_lines(
+        self,
+        image,
+        quad,
+        edge_map,
+    ):
+        """
+        Fit ulang empat sisi fisik kartu dari edge pixels lokal.
+
+        Refinement ini konservatif: quad lama tetap menjadi baseline dan
+        hasil baru ditolak bila perpindahan terlalu besar atau edge support
+        tidak membaik.
+        """
+        quad = self.order_points(
+            quad
+        )
+
+        h, w = edge_map.shape[:2]
+        diagonal = max(
+            float(
+                np.hypot(
+                    w,
+                    h,
+                )
+            ),
+            1.0,
+        )
+
+        original_support = (
+            self._edge_support(
+                edge_map,
+                quad,
+            )
+        )
+
+        fitted_lines = []
+
+        for index in range(4):
+            p1 = quad[
+                index
+            ].astype(
+                np.float32
+            )
+            p2 = quad[
+                (index + 1) % 4
+            ].astype(
+                np.float32
+            )
+
+            vector = (
+                p2 - p1
+            )
+            length = float(
+                np.linalg.norm(
+                    vector
+                )
+            )
+
+            if length < 20.0:
+                return quad
+
+            tangent = (
+                vector
+                / length
+            )
+            normal = np.array(
+                [
+                    -tangent[1],
+                    tangent[0],
+                ],
+                dtype=np.float32,
+            )
+
+            # Pita lokal di sekitar sisi kandidat.
+            band_half_width = float(
+                np.clip(
+                    length * 0.035,
+                    5.0,
+                    24.0,
+                )
+            )
+
+            x_min = max(
+                0,
+                int(
+                    np.floor(
+                        min(
+                            p1[0],
+                            p2[0],
+                        )
+                        - band_half_width
+                        - 2
+                    )
+                ),
+            )
+            x_max = min(
+                w,
+                int(
+                    np.ceil(
+                        max(
+                            p1[0],
+                            p2[0],
+                        )
+                        + band_half_width
+                        + 2
+                    )
+                ),
+            )
+            y_min = max(
+                0,
+                int(
+                    np.floor(
+                        min(
+                            p1[1],
+                            p2[1],
+                        )
+                        - band_half_width
+                        - 2
+                    )
+                ),
+            )
+            y_max = min(
+                h,
+                int(
+                    np.ceil(
+                        max(
+                            p1[1],
+                            p2[1],
+                        )
+                        + band_half_width
+                        + 2
+                    )
+                ),
+            )
+
+            if (
+                x_max - x_min < 4
+                or y_max - y_min < 4
+            ):
+                return quad
+
+            ys, xs = np.nonzero(
+                edge_map[
+                    y_min:y_max,
+                    x_min:x_max,
+                ]
+                > 0
+            )
+
+            if xs.size < 18:
+                return quad
+
+            points = np.column_stack(
+                (
+                    xs.astype(
+                        np.float32
+                    )
+                    + float(
+                        x_min
+                    ),
+                    ys.astype(
+                        np.float32
+                    )
+                    + float(
+                        y_min
+                    ),
+                )
+            )
+
+            relative = (
+                points - p1
+            )
+            along = (
+                relative
+                @ tangent
+            )
+            distance = np.abs(
+                relative[:, 0]
+                * normal[0]
+                + relative[:, 1]
+                * normal[1]
+            )
+
+            selected = (
+                (along >= length * 0.10)
+                & (
+                    along
+                    <= length * 0.90
+                )
+                & (
+                    distance
+                    <= band_half_width
+                )
+            )
+
+            points = points[
+                selected
+            ]
+
+            if len(points) < 14:
+                return quad
+
+            # Buang edge internal yang terlalu jauh dari sisi kandidat.
+            signed_distance = (
+                (
+                    points - p1
+                )
+                @ normal
+            )
+            median_distance = float(
+                np.median(
+                    signed_distance
+                )
+            )
+            deviation = np.abs(
+                signed_distance
+                - median_distance
+            )
+            mad = float(
+                np.median(
+                    deviation
+                )
+            )
+            tolerance = max(
+                2.5,
+                3.0 * mad,
+            )
+            points = points[
+                deviation
+                <= tolerance
+            ]
+
+            if len(points) < 10:
+                return quad
+
+            vx, vy, x0, y0 = (
+                cv2.fitLine(
+                    points.reshape(
+                        -1,
+                        1,
+                        2,
+                    ),
+                    cv2.DIST_HUBER,
+                    0,
+                    0.01,
+                    0.01,
+                ).flatten()
+            )
+
+            direction = np.array(
+                [
+                    vx,
+                    vy,
+                ],
+                dtype=np.float32,
+            )
+
+            # Garis hasil fit harus hampir sejajar sisi awal.
+            alignment = abs(
+                float(
+                    np.dot(
+                        direction
+                        / max(
+                            float(
+                                np.linalg.norm(
+                                    direction
+                                )
+                            ),
+                            1e-6,
+                        ),
+                        tangent,
+                    )
+                )
+            )
+
+            if alignment < 0.94:
+                return quad
+
+            fitted_lines.append(
+                (
+                    np.array(
+                        [
+                            x0,
+                            y0,
+                        ],
+                        dtype=np.float32,
+                    ),
+                    direction,
+                )
+            )
+
+        tl = self._intersect_lines(
+            fitted_lines[3],
+            fitted_lines[0],
+        )
+        tr = self._intersect_lines(
+            fitted_lines[0],
+            fitted_lines[1],
+        )
+        br = self._intersect_lines(
+            fitted_lines[1],
+            fitted_lines[2],
+        )
+        bl = self._intersect_lines(
+            fitted_lines[2],
+            fitted_lines[3],
+        )
+
+        if any(
+            point is None
+            for point in (
+                tl,
+                tr,
+                br,
+                bl,
+            )
+        ):
+            return quad
+
+        refined = self.order_points(
+            np.array(
+                [
+                    tl,
+                    tr,
+                    br,
+                    bl,
+                ],
+                dtype=np.float32,
+            )
+        )
+
+        if not cv2.isContourConvex(
+            refined.astype(
+                np.int32
+            )
+        ):
+            return quad
+
+        movement = float(
+            np.mean(
+                np.linalg.norm(
+                    refined - quad,
+                    axis=1,
+                )
+            )
+            / diagonal
+        )
+
+        # Maksimum sekitar 4.5% diagonal: cukup untuk boundary Sintang,
+        # tetapi terlalu kecil untuk melompat ke object lain.
+        if movement > 0.045:
+            return quad
+
+        original_area = abs(
+            cv2.contourArea(
+                quad.astype(
+                    np.float32
+                )
+            )
+        )
+        refined_area = abs(
+            cv2.contourArea(
+                refined.astype(
+                    np.float32
+                )
+            )
+        )
+
+        if original_area <= 1.0:
+            return quad
+
+        area_ratio = (
+            refined_area
+            / original_area
+        )
+
+        if not (
+            0.88
+            <= area_ratio
+            <= 1.12
+        ):
+            return quad
+
+        refined_support = (
+            self._edge_support(
+                edge_map,
+                refined,
+            )
+        )
+
+        # Jangan ganti corner jika boundary support tidak meningkat.
+        if (
+            refined_support
+            < original_support
+            + 0.015
+        ):
+            return quad
+
+        return refined
+
+
     def _candidate_score(self, candidate, image, edge_map):
         h, w = image.shape[:2]
         image_area = float(h * w)
@@ -1378,6 +1779,48 @@ class AutoPerspectiveEngine:
             )
 
         candidates = expanded_candidates
+
+        # Stage A.2: line-fit boundary refinement sebagai kandidat tambahan.
+        # Kandidat lama selalu dipertahankan agar KTP yang sudah bagus tidak
+        # dipaksa memakai refinement baru.
+        boundary_refined = []
+
+        for candidate in list(
+            candidates
+        ):
+            refined_points = (
+                self._refine_quad_from_edge_lines(
+                    resized,
+                    candidate.points,
+                    union_edges,
+                )
+            )
+
+            movement = float(
+                np.mean(
+                    np.linalg.norm(
+                        refined_points
+                        - candidate.points,
+                        axis=1,
+                    )
+                )
+            )
+
+            if movement >= 1.0:
+                boundary_refined.append(
+                    PerspectiveCandidate(
+                        points=refined_points,
+                        score=0.0,
+                        source=(
+                            f"{candidate.source}"
+                            "_line_refined"
+                        ),
+                    )
+                )
+
+        candidates.extend(
+            boundary_refined
+        )
 
         for candidate in candidates:
             candidate.score = self._candidate_score(
