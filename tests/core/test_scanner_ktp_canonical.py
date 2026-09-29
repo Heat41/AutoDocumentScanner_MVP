@@ -69,6 +69,129 @@ class TestKtpCanonicalCanvas(unittest.TestCase):
             borderMode=cv2.BORDER_REPLICATE,
         )
 
+    def test_internal_affine_keeps_orthogonal_card_unchanged(self):
+        image = np.full(
+            (540, 856, 3),
+            245,
+            dtype=np.uint8,
+        )
+
+        for y in range(
+            120,
+            420,
+            45,
+        ):
+            cv2.line(
+                image,
+                (90, y),
+                (560, y),
+                (25, 25, 25),
+                3,
+            )
+
+        cv2.rectangle(
+            image,
+            (620, 140),
+            (760, 360),
+            (25, 25, 25),
+            3,
+        )
+
+        scanner = AutoDocumentScanner()
+        corrected, metadata = (
+            scanner.rectify_ktp_internal_affine(
+                image
+            )
+        )
+
+        self.assertFalse(
+            metadata["applied"]
+        )
+        self.assertEqual(
+            corrected.shape[:2],
+            (540, 856),
+        )
+
+    def test_internal_affine_can_reduce_small_shear(self):
+        base = np.full(
+            (540, 856, 3),
+            245,
+            dtype=np.uint8,
+        )
+
+        for y in range(
+            120,
+            420,
+            45,
+        ):
+            cv2.line(
+                base,
+                (90, y),
+                (560, y),
+                (25, 25, 25),
+                3,
+            )
+
+        cv2.rectangle(
+            base,
+            (620, 140),
+            (760, 360),
+            (25, 25, 25),
+            3,
+        )
+
+        shear = np.array(
+            [
+                [1.0, 0.035, -9.0],
+                [0.020, 1.0, -8.0],
+            ],
+            dtype=np.float32,
+        )
+
+        image = cv2.warpAffine(
+            base,
+            shear,
+            (856, 540),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        scanner = AutoDocumentScanner()
+        before = scanner.estimate_ktp_internal_axes(
+            image
+        )
+        corrected, metadata = (
+            scanner.rectify_ktp_internal_affine(
+                image
+            )
+        )
+        after = scanner.estimate_ktp_internal_axes(
+            corrected
+        )
+
+        self.assertEqual(
+            corrected.shape[:2],
+            (540, 856),
+        )
+
+        if (
+            before.get("available")
+            and after.get("available")
+            and metadata.get("applied")
+        ):
+            self.assertLessEqual(
+                float(
+                    after[
+                        "orthogonality_error"
+                    ]
+                ),
+                float(
+                    before[
+                        "orthogonality_error"
+                    ]
+                ),
+            )
+
     def test_residual_skew_keeps_straight_ktp_unchanged(self):
         image = self._synthetic_horizontal_card(
             angle=0.0
