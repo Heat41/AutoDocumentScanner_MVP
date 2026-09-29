@@ -1,7 +1,9 @@
 from pathlib import Path
 import os
+import multiprocessing as mp
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -16,6 +18,9 @@ from autodocscanner.ktp.roi_debug import (
 )
 from autodocscanner.services.pdf_preview import (
     build_tracking_report_pdf,
+)
+from autodocscanner.services.ktp_tracking import (
+    tracking_process_entry,
 )
 
 
@@ -1346,6 +1351,101 @@ class TrackingKtpPage(ttk.Frame):
         )
         worker.start()
 
+    @staticmethod
+    def _run_tracking_in_process(
+        corrected_image,
+        timeout_seconds=180.0,
+    ):
+        context = mp.get_context(
+            "spawn"
+        )
+        result_queue = context.Queue(
+            maxsize=1
+        )
+        process = context.Process(
+            target=tracking_process_entry,
+            args=(
+                corrected_image,
+                result_queue,
+            ),
+            daemon=True,
+        )
+
+        process.start()
+        started_at = time.monotonic()
+
+        try:
+            while True:
+                try:
+                    status, payload = (
+                        result_queue.get(
+                            timeout=0.25
+                        )
+                    )
+
+                    process.join(
+                        timeout=2.0
+                    )
+
+                    if status == "success":
+                        return payload
+
+                    raise RuntimeError(
+                        str(payload)
+                    )
+
+                except queue.Empty:
+                    pass
+
+                if not process.is_alive():
+                    exit_code = process.exitcode
+
+                    try:
+                        status, payload = (
+                            result_queue.get_nowait()
+                        )
+
+                        if status == "success":
+                            return payload
+
+                        raise RuntimeError(
+                            str(payload)
+                        )
+                    except queue.Empty:
+                        raise RuntimeError(
+                            "Worker OCR/Tracking berhenti "
+                            f"secara tidak normal (exit code {exit_code}). "
+                            "Proses utama tetap aman."
+                        )
+
+                if (
+                    time.monotonic()
+                    - started_at
+                    > float(
+                        timeout_seconds
+                    )
+                ):
+                    process.terminate()
+                    process.join(
+                        timeout=2.0
+                    )
+                    raise RuntimeError(
+                        "OCR/Tracking melebihi batas waktu "
+                        f"{int(timeout_seconds)} detik."
+                    )
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join(
+                    timeout=2.0
+                )
+
+            try:
+                result_queue.close()
+            except Exception:
+                pass
+
+
     def _process_worker(
         self,
         input_path,
@@ -1379,8 +1479,10 @@ class TrackingKtpPage(ttk.Frame):
         )
 
         try:
-            tracking = extract_tracking_data(
-                corrected_image
+            tracking = (
+                self._run_tracking_in_process(
+                    corrected_image
+                )
             )
         except Exception as exc:
             self._worker_queue.put(
