@@ -655,6 +655,632 @@ class AutoDocumentScanner:
         )
 
 
+    @classmethod
+    def estimate_ktp_internal_axes(
+        cls,
+        image,
+    ):
+        """
+        Estimasi sumbu internal KTP setelah homography.
+
+        Horizontal diambil terutama dari baris teks kiri, sedangkan vertical
+        diambil dari garis panjang seperti sisi foto/batas internal.
+        """
+        if (
+            not isinstance(
+                image,
+                np.ndarray,
+            )
+            or image.size == 0
+        ):
+            raise ValueError(
+                "image internal axis tidak boleh kosong."
+            )
+
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+        height, width = gray.shape[:2]
+        scale = min(
+            1.0,
+            640.0
+            / max(
+                width,
+                1,
+            ),
+        )
+
+        if scale < 1.0:
+            gray = cv2.resize(
+                gray,
+                (
+                    max(
+                        2,
+                        int(
+                            round(
+                                width * scale
+                            )
+                        ),
+                    ),
+                    max(
+                        2,
+                        int(
+                            round(
+                                height * scale
+                            )
+                        ),
+                    ),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        h, w = gray.shape[:2]
+        blurred = cv2.GaussianBlur(
+            gray,
+            (3, 3),
+            0,
+        )
+        edges = cv2.Canny(
+            blurred,
+            60,
+            150,
+        )
+
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            np.pi / 180.0,
+            threshold=max(
+                24,
+                w // 24,
+            ),
+            minLineLength=max(
+                34,
+                int(
+                    round(
+                        w * 0.065
+                    )
+                ),
+            ),
+            maxLineGap=max(
+                8,
+                int(
+                    round(
+                        w * 0.018
+                    )
+                ),
+            ),
+        )
+
+        horizontal = []
+        vertical = []
+
+        if lines is not None:
+            for line in np.asarray(
+                lines
+            ).reshape(-1, 4):
+                x1, y1, x2, y2 = [
+                    float(
+                        value
+                    )
+                    for value in line
+                ]
+
+                dx = x2 - x1
+                dy = y2 - y1
+                length = float(
+                    np.hypot(
+                        dx,
+                        dy,
+                    )
+                )
+
+                if length < 10.0:
+                    continue
+
+                angle = float(
+                    np.degrees(
+                        np.arctan2(
+                            dy,
+                            dx,
+                        )
+                    )
+                )
+
+                # Horizontal evidence utama di area teks kiri.
+                center_x = (
+                    x1 + x2
+                ) / 2.0
+                center_y = (
+                    y1 + y2
+                ) / 2.0
+
+                if (
+                    center_x
+                    <= w * 0.74
+                    and h * 0.10
+                    <= center_y
+                    <= h * 0.84
+                    and -6.0
+                    <= angle
+                    <= 6.0
+                ):
+                    horizontal.append(
+                        (
+                            angle,
+                            length,
+                        )
+                    )
+
+                # Vertical evidence boleh dari seluruh kartu, terutama foto.
+                vertical_angle = angle
+
+                if vertical_angle < -90.0:
+                    vertical_angle += 180.0
+
+                if vertical_angle > 90.0:
+                    vertical_angle -= 180.0
+
+                if (
+                    abs(
+                        abs(
+                            vertical_angle
+                        )
+                        - 90.0
+                    )
+                    <= 7.0
+                    and length
+                    >= h * 0.13
+                ):
+                    # Samakan orientasi ke +90 agar median stabil.
+                    if vertical_angle < 0.0:
+                        vertical_angle += 180.0
+
+                    vertical.append(
+                        (
+                            vertical_angle,
+                            length,
+                        )
+                    )
+
+        def robust_weighted_angle(
+            samples,
+            minimum,
+        ):
+            if len(
+                samples
+            ) < minimum:
+                return None
+
+            values = np.asarray(
+                [
+                    item[0]
+                    for item
+                    in samples
+                ],
+                dtype=np.float32,
+            )
+            weights = np.asarray(
+                [
+                    max(
+                        item[1],
+                        1.0,
+                    )
+                    for item
+                    in samples
+                ],
+                dtype=np.float32,
+            )
+
+            median = float(
+                np.median(
+                    values
+                )
+            )
+            deviation = np.abs(
+                values
+                - median
+            )
+            mad = float(
+                np.median(
+                    deviation
+                )
+            )
+            keep = (
+                deviation
+                <= max(
+                    0.45,
+                    3.0 * mad,
+                )
+            )
+
+            if int(
+                np.count_nonzero(
+                    keep
+                )
+            ) < minimum:
+                return None
+
+            return float(
+                np.average(
+                    values[
+                        keep
+                    ],
+                    weights=weights[
+                        keep
+                    ],
+                )
+            )
+
+        horizontal_angle = (
+            robust_weighted_angle(
+                horizontal,
+                minimum=4,
+            )
+        )
+        vertical_angle = (
+            robust_weighted_angle(
+                vertical,
+                minimum=2,
+            )
+        )
+
+        if (
+            horizontal_angle is None
+            or vertical_angle is None
+        ):
+            return {
+                "available": False,
+                "horizontal_angle": (
+                    horizontal_angle
+                ),
+                "vertical_angle": (
+                    vertical_angle
+                ),
+                "horizontal_count": len(
+                    horizontal
+                ),
+                "vertical_count": len(
+                    vertical
+                ),
+                "orthogonality_error": None,
+            }
+
+        orthogonality_error = abs(
+            (
+                vertical_angle
+                - horizontal_angle
+            )
+            - 90.0
+        )
+
+        return {
+            "available": True,
+            "horizontal_angle": float(
+                horizontal_angle
+            ),
+            "vertical_angle": float(
+                vertical_angle
+            ),
+            "horizontal_count": len(
+                horizontal
+            ),
+            "vertical_count": len(
+                vertical
+            ),
+            "orthogonality_error": float(
+                orthogonality_error
+            ),
+        }
+
+    def rectify_ktp_internal_affine(
+        self,
+        image,
+    ):
+        """
+        Hilangkan residual affine shear pada isi KTP tanpa mengubah corner.
+
+        Hasil hanya diterima jika sumbu internal membaik dan post-warp
+        geometry tidak turun.
+        """
+        before_axes = (
+            self.estimate_ktp_internal_axes(
+                image
+            )
+        )
+
+        if not before_axes.get(
+            "available",
+            False,
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "insufficient_axes",
+                    "before": before_axes,
+                },
+            )
+
+        horizontal_angle = float(
+            before_axes[
+                "horizontal_angle"
+            ]
+        )
+        vertical_angle = float(
+            before_axes[
+                "vertical_angle"
+            ]
+        )
+        orthogonality_error = float(
+            before_axes[
+                "orthogonality_error"
+            ]
+        )
+
+        # KTP yang sudah cukup ortogonal tidak disentuh.
+        if (
+            abs(
+                horizontal_angle
+            ) < 0.40
+            and orthogonality_error
+            < 0.55
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "already_orthogonal",
+                    "before": before_axes,
+                },
+            )
+
+        # Jangan gunakan affine correction untuk geometri ekstrem.
+        if (
+            abs(
+                horizontal_angle
+            ) > 4.0
+            or orthogonality_error
+            > 4.0
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "axis_error_too_large",
+                    "before": before_axes,
+                },
+            )
+
+        horizontal_rad = np.radians(
+            horizontal_angle
+        )
+        vertical_rad = np.radians(
+            vertical_angle
+        )
+
+        basis = np.array(
+            [
+                [
+                    np.cos(
+                        horizontal_rad
+                    ),
+                    np.cos(
+                        vertical_rad
+                    ),
+                ],
+                [
+                    np.sin(
+                        horizontal_rad
+                    ),
+                    np.sin(
+                        vertical_rad
+                    ),
+                ],
+            ],
+            dtype=np.float32,
+        )
+
+        determinant = float(
+            np.linalg.det(
+                basis
+            )
+        )
+
+        if abs(
+            determinant
+        ) < 0.90:
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "unstable_basis",
+                    "before": before_axes,
+                },
+            )
+
+        affine_2x2 = np.linalg.inv(
+            basis
+        ).astype(
+            np.float32
+        )
+
+        # Batasi perubahan affine agar tidak over-correct.
+        if (
+            np.max(
+                np.abs(
+                    affine_2x2
+                    - np.eye(
+                        2,
+                        dtype=np.float32,
+                    )
+                )
+            )
+            > 0.09
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "affine_change_too_large",
+                    "before": before_axes,
+                },
+            )
+
+        height, width = image.shape[:2]
+        center = np.array(
+            [
+                width / 2.0,
+                height / 2.0,
+            ],
+            dtype=np.float32,
+        )
+
+        translation = (
+            center
+            - affine_2x2
+            @ center
+        )
+
+        matrix = np.column_stack(
+            (
+                affine_2x2,
+                translation,
+            )
+        ).astype(
+            np.float32
+        )
+
+        corrected = cv2.warpAffine(
+            image,
+            matrix,
+            (
+                width,
+                height,
+            ),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        corrected = self.normalize_ktp_canvas(
+            corrected
+        )
+
+        after_axes = (
+            self.estimate_ktp_internal_axes(
+                corrected
+            )
+        )
+
+        if not after_axes.get(
+            "available",
+            False,
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "after_axes_unavailable",
+                    "before": before_axes,
+                    "after": after_axes,
+                },
+            )
+
+        before_orth = float(
+            before_axes[
+                "orthogonality_error"
+            ]
+        )
+        after_orth = float(
+            after_axes[
+                "orthogonality_error"
+            ]
+        )
+        before_horizontal = abs(
+            float(
+                before_axes[
+                    "horizontal_angle"
+                ]
+            )
+        )
+        after_horizontal = abs(
+            float(
+                after_axes[
+                    "horizontal_angle"
+                ]
+            )
+        )
+
+        before_geometry, _ = (
+            self.perspective_engine
+            ._post_warp_geometry_score(
+                image
+            )
+        )
+        after_geometry, _ = (
+            self.perspective_engine
+            ._post_warp_geometry_score(
+                corrected
+            )
+        )
+
+        improved_axes = (
+            (
+                after_orth
+                <= before_orth
+                - 0.20
+            )
+            or (
+                after_horizontal
+                <= before_horizontal
+                - 0.20
+            )
+        )
+
+        if (
+            not improved_axes
+            or after_geometry
+            < before_geometry
+            - 0.01
+        ):
+            return (
+                image.copy(),
+                {
+                    "applied": False,
+                    "reason": "no_clear_internal_gain",
+                    "before": before_axes,
+                    "after": after_axes,
+                    "before_geometry": float(
+                        before_geometry
+                    ),
+                    "after_geometry": float(
+                        after_geometry
+                    ),
+                },
+            )
+
+        return (
+            corrected,
+            {
+                "applied": True,
+                "reason": "internal_axes_rectified",
+                "before": before_axes,
+                "after": after_axes,
+                "before_geometry": float(
+                    before_geometry
+                ),
+                "after_geometry": float(
+                    after_geometry
+                ),
+                "matrix": (
+                    matrix.tolist()
+                ),
+            },
+        )
+
+
     def trim_edges(self, image):
         if self.ktp_edge_trim <= 0:
             return image
@@ -902,6 +1528,16 @@ class AutoDocumentScanner:
             result = self.normalize_ktp_canvas(
                 result
             )
+
+            (
+                result,
+                internal_affine,
+            ) = self.rectify_ktp_internal_affine(
+                result
+            )
+            self.last_detection[
+                "internal_affine_rectification"
+            ] = internal_affine
 
             (
                 result,
