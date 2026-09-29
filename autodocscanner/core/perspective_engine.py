@@ -2299,10 +2299,11 @@ class AutoPerspectiveEngine:
         base_geometry_score,
     ):
         """
-        Stage A.4: bounded local search pada empat corner kandidat terbaik.
+        Stage A.4: iterative coupled-corner rectification.
 
-        Search dilakukan pada downsampled image dan hanya satu putaran.
-        Hasil diterima bila geometry score meningkat cukup jelas.
+        Hanya kandidat terbaik A.3 yang diproses. Search dilakukan pada
+        gambar downsampled, dua putaran kecil, dan dihentikan lebih awal
+        bila geometri sudah baik.
         """
         points = self.order_points(
             base_points
@@ -2347,341 +2348,130 @@ class AutoPerspectiveEngine:
                 ),
                 interpolation=cv2.INTER_AREA,
             )
-            small_points = (
+            rect = self.order_points(
                 points * scale
             )
         else:
             small = image
-            small_points = (
+            rect = self.order_points(
                 points.copy()
             )
-
-        rect = self.order_points(
-            small_points
-        )
-        tl, tr, br, bl = rect
-        short_side = max(
-            1.0,
-            min(
-                float(
-                    np.linalg.norm(
-                        tr - tl
-                    )
-                ),
-                float(
-                    np.linalg.norm(
-                        br - bl
-                    )
-                ),
-                float(
-                    np.linalg.norm(
-                        bl - tl
-                    )
-                ),
-                float(
-                    np.linalg.norm(
-                        br - tr
-                    )
-                ),
-            ),
-        )
-
-        step = float(
-            np.clip(
-                short_side * 0.012,
-                2.0,
-                8.0,
-            )
-        )
 
         baseline_warp = self.warp(
             small,
             rect,
         )
-        baseline_geometry, baseline_meta = (
-            self._post_warp_geometry_score(
-                baseline_warp
-            )
+        (
+            baseline_geometry,
+            baseline_meta,
+        ) = self._post_warp_geometry_score(
+            baseline_warp
         )
-
         baseline_quality = self._warp_quality(
             baseline_warp
         )
-        baseline_total = (
-            baseline_geometry * 0.78
-            + baseline_quality * 0.22
+
+        # Bila hasil A.3 sudah lurus dan shear-nya rendah, jangan sentuh lagi.
+        horizontal = (
+            baseline_meta.get(
+                "horizontal"
+            )
+            or {}
+        )
+        horizontal_error = (
+            horizontal.get(
+                "error"
+            )
+        )
+        shear_score = float(
+            baseline_meta.get(
+                "projective_shear_score",
+                0.50,
+            )
+            or 0.50
         )
 
-        best_points = rect.copy()
-        best_total = float(
-            baseline_total
-        )
-        best_geometry = float(
-            baseline_geometry
-        )
-        best_meta = baseline_meta
-
-        # 8 DOF, masing-masing +/- sekali = maksimal 16 warp kecil.
-        for corner_index in range(
-            4
+        if (
+            baseline_geometry >= 0.90
+            and shear_score >= 0.80
+            and (
+                horizontal_error is None
+                or float(
+                    horizontal_error
+                )
+                <= 0.45
+            )
         ):
-            for axis in (
-                0,
-                1,
-            ):
-                for direction in (
-                    -1.0,
-                    1.0,
-                ):
-                    trial = rect.copy()
-                    trial[
-                        corner_index,
-                        axis,
-                    ] += (
-                        direction
-                        * step
-                    )
-
-                    if not cv2.isContourConvex(
-                        trial.astype(
-                            np.int32
-                        )
-                    ):
-                        continue
-
-                    area_base = abs(
-                        cv2.contourArea(
-                            rect.astype(
-                                np.float32
-                            )
-                        )
-                    )
-                    area_trial = abs(
-                        cv2.contourArea(
-                            trial.astype(
-                                np.float32
-                            )
-                        )
-                    )
-
-                    if (
-                        area_base <= 1.0
-                        or not (
-                            0.94
-                            <= area_trial
-                            / area_base
-                            <= 1.06
-                        )
-                    ):
-                        continue
-
-                    warped = self.warp(
-                        small,
-                        trial,
-                    )
-                    geometry, meta = (
-                        self._post_warp_geometry_score(
-                            warped
-                        )
-                    )
-                    quality = self._warp_quality(
-                        warped
-                    )
-
-                    movement = float(
-                        np.mean(
-                            np.linalg.norm(
-                                trial - rect,
-                                axis=1,
-                            )
-                        )
-                        / max(
-                            float(
-                                np.hypot(
-                                    small.shape[1],
-                                    small.shape[0],
-                                )
-                            ),
-                            1.0,
-                        )
-                    )
-
-                    total = (
-                        geometry * 0.78
-                        + quality * 0.22
-                        - movement * 0.35
-                    )
-
-                    if total > best_total:
-                        best_total = float(
-                            total
-                        )
-                        best_geometry = float(
-                            geometry
-                        )
-                        best_points = (
-                            trial.copy()
-                        )
-                        best_meta = meta
-
-        # Fase kedua A.4: coupled-corner search.
-        # Residual jajargenjang/trapesium biasanya membutuhkan dua atau
-        # empat corner bergerak bersama; single-corner search tidak cukup.
-        coupled_patterns = []
-
-        def add_pattern(
-            name,
-            deltas,
-        ):
-            trial = rect.copy()
-
-            for corner_index, (
-                dx,
-                dy,
-            ) in deltas.items():
-                trial[
-                    int(
-                        corner_index
+            return (
+                points,
+                {
+                    "applied": False,
+                    "reason": "already_stable",
+                    "improvement": 0.0,
+                    "before_geometry": float(
+                        baseline_geometry
                     ),
-                    0,
-                ] += float(
-                    dx
-                )
-                trial[
-                    int(
-                        corner_index
+                    "after_geometry": float(
+                        baseline_geometry
                     ),
-                    1,
-                ] += float(
-                    dy
-                )
-
-            coupled_patterns.append(
-                (
-                    str(
-                        name
-                    ),
-                    trial,
-                )
+                    "geometry": baseline_meta,
+                },
             )
 
-        # Horizontal shear: sisi atas relatif terhadap sisi bawah.
-        add_pattern(
-            "top_right_bottom_left",
-            {
-                0: (step, 0.0),
-                1: (step, 0.0),
-                2: (-step, 0.0),
-                3: (-step, 0.0),
-            },
-        )
-        add_pattern(
-            "top_left_bottom_right",
-            {
-                0: (-step, 0.0),
-                1: (-step, 0.0),
-                2: (step, 0.0),
-                3: (step, 0.0),
-            },
+        baseline_total = (
+            baseline_geometry * 0.84
+            + baseline_quality * 0.16
         )
 
-        # Vertical shear: sisi kiri relatif terhadap sisi kanan.
-        add_pattern(
-            "left_down_right_up",
-            {
-                0: (0.0, step),
-                3: (0.0, step),
-                1: (0.0, -step),
-                2: (0.0, -step),
-            },
+        diagonal_small = max(
+            float(
+                np.hypot(
+                    small.shape[1],
+                    small.shape[0],
+                )
+            ),
+            1.0,
         )
-        add_pattern(
-            "left_up_right_down",
-            {
-                0: (0.0, -step),
-                3: (0.0, -step),
-                1: (0.0, step),
-                2: (0.0, step),
-            },
-        )
-
-        # Trapezoid horizontal: satu sisi kartu sedikit lebih lebar.
-        add_pattern(
-            "top_expand_bottom_contract",
-            {
-                0: (-step, 0.0),
-                1: (step, 0.0),
-                2: (-step, 0.0),
-                3: (step, 0.0),
-            },
-        )
-        add_pattern(
-            "top_contract_bottom_expand",
-            {
-                0: (step, 0.0),
-                1: (-step, 0.0),
-                2: (step, 0.0),
-                3: (-step, 0.0),
-            },
+        area_reference = max(
+            abs(
+                cv2.contourArea(
+                    rect.astype(
+                        np.float32
+                    )
+                )
+            ),
+            1.0,
         )
 
-        # Trapezoid vertical: sisi kiri/kanan memiliki tinggi berbeda.
-        add_pattern(
-            "left_expand_right_contract",
-            {
-                0: (0.0, -step),
-                3: (0.0, step),
-                1: (0.0, step),
-                2: (0.0, -step),
-            },
-        )
-        add_pattern(
-            "left_contract_right_expand",
-            {
-                0: (0.0, step),
-                3: (0.0, -step),
-                1: (0.0, -step),
-                2: (0.0, step),
-            },
-        )
-
-        best_pattern = None
-
-        for pattern_name, trial in (
-            coupled_patterns
+        def evaluate(
+            trial,
+            reference,
         ):
             if not cv2.isContourConvex(
                 trial.astype(
                     np.int32
                 )
             ):
-                continue
+                return None
 
-            area_base = abs(
-                cv2.contourArea(
-                    rect.astype(
-                        np.float32
-                    )
-                )
-            )
-            area_trial = abs(
+            area = abs(
                 cv2.contourArea(
                     trial.astype(
                         np.float32
                     )
                 )
             )
+            area_ratio = (
+                area
+                / area_reference
+            )
 
-            if (
-                area_base <= 1.0
-                or not (
-                    0.92
-                    <= area_trial
-                    / area_base
-                    <= 1.08
-                )
+            if not (
+                0.90
+                <= area_ratio
+                <= 1.10
             ):
-                continue
+                return None
 
             warped = self.warp(
                 small,
@@ -2703,56 +2493,360 @@ class AutoPerspectiveEngine:
                         axis=1,
                     )
                 )
-                / max(
-                    float(
-                        np.hypot(
-                            small.shape[1],
-                            small.shape[0],
-                        )
-                    ),
-                    1.0,
+                / diagonal_small
+            )
+
+            # Geometri dominan; movement hanya penalti kecil.
+            total = (
+                geometry * 0.86
+                + quality * 0.14
+                - movement * 0.22
+            )
+
+            return (
+                float(
+                    total
+                ),
+                float(
+                    geometry
+                ),
+                meta,
+                float(
+                    quality
+                ),
+                float(
+                    movement
+                ),
+            )
+
+        best_points = rect.copy()
+        best_total = float(
+            baseline_total
+        )
+        best_geometry = float(
+            baseline_geometry
+        )
+        best_meta = baseline_meta
+        best_pattern = None
+
+        side_lengths = [
+            float(
+                np.linalg.norm(
+                    rect[
+                        (index + 1)
+                        % 4
+                    ]
+                    - rect[
+                        index
+                    ]
                 )
             )
+            for index in range(
+                4
+            )
+        ]
+        short_side = max(
+            min(
+                side_lengths
+            ),
+            1.0,
+        )
+        initial_step = float(
+            np.clip(
+                short_side * 0.018,
+                3.0,
+                10.0,
+            )
+        )
 
-            total = (
-                geometry * 0.82
-                + quality * 0.18
-                - movement * 0.30
+        # Dua putaran: kasar lalu halus. Setiap putaran dimulai dari hasil
+        # terbaik putaran sebelumnya sehingga koreksi shear bisa terakumulasi.
+        for pass_index, step_scale in enumerate(
+            (
+                1.0,
+                0.50,
+            )
+        ):
+            step = max(
+                1.5,
+                initial_step
+                * step_scale,
+            )
+            center = best_points.copy()
+            trials = []
+
+            def add_trial(
+                name,
+                deltas,
+            ):
+                trial = center.copy()
+
+                for corner_index, (
+                    dx,
+                    dy,
+                ) in deltas.items():
+                    trial[
+                        int(
+                            corner_index
+                        ),
+                        0,
+                    ] += float(
+                        dx
+                    )
+                    trial[
+                        int(
+                            corner_index
+                        ),
+                        1,
+                    ] += float(
+                        dy
+                    )
+
+                trials.append(
+                    (
+                        str(
+                            name
+                        ),
+                        trial,
+                    )
+                )
+
+            # Coupled horizontal shear.
+            add_trial(
+                "top_right_bottom_left",
+                {
+                    0: (step, 0.0),
+                    1: (step, 0.0),
+                    2: (-step, 0.0),
+                    3: (-step, 0.0),
+                },
+            )
+            add_trial(
+                "top_left_bottom_right",
+                {
+                    0: (-step, 0.0),
+                    1: (-step, 0.0),
+                    2: (step, 0.0),
+                    3: (step, 0.0),
+                },
             )
 
-            if total > best_total:
+            # Coupled vertical shear.
+            add_trial(
+                "left_down_right_up",
+                {
+                    0: (0.0, step),
+                    3: (0.0, step),
+                    1: (0.0, -step),
+                    2: (0.0, -step),
+                },
+            )
+            add_trial(
+                "left_up_right_down",
+                {
+                    0: (0.0, -step),
+                    3: (0.0, -step),
+                    1: (0.0, step),
+                    2: (0.0, step),
+                },
+            )
+
+            # Trapezoid horizontal.
+            add_trial(
+                "top_expand_bottom_contract",
+                {
+                    0: (-step, 0.0),
+                    1: (step, 0.0),
+                    2: (-step, 0.0),
+                    3: (step, 0.0),
+                },
+            )
+            add_trial(
+                "top_contract_bottom_expand",
+                {
+                    0: (step, 0.0),
+                    1: (-step, 0.0),
+                    2: (step, 0.0),
+                    3: (-step, 0.0),
+                },
+            )
+
+            # Trapezoid vertical.
+            add_trial(
+                "left_expand_right_contract",
+                {
+                    0: (0.0, -step),
+                    3: (0.0, step),
+                    1: (0.0, step),
+                    2: (0.0, -step),
+                },
+            )
+            add_trial(
+                "left_contract_right_expand",
+                {
+                    0: (0.0, step),
+                    3: (0.0, -step),
+                    1: (0.0, -step),
+                    2: (0.0, step),
+                },
+            )
+
+            # Dua pola diagonal untuk kasus jajargenjang yang tidak simetris.
+            add_trial(
+                "diag_tl_br",
+                {
+                    0: (-step, -step * 0.35),
+                    2: (step, step * 0.35),
+                },
+            )
+            add_trial(
+                "diag_tr_bl",
+                {
+                    1: (step, -step * 0.35),
+                    3: (-step, step * 0.35),
+                },
+            )
+
+            # Single-corner micro adjustment hanya pada pass halus.
+            if pass_index == 1:
+                for corner_index in range(
+                    4
+                ):
+                    for axis in (
+                        0,
+                        1,
+                    ):
+                        for direction in (
+                            -1.0,
+                            1.0,
+                        ):
+                            delta = (
+                                direction
+                                * step
+                            )
+                            deltas = {
+                                corner_index: (
+                                    (
+                                        delta
+                                        if axis == 0
+                                        else 0.0
+                                    ),
+                                    (
+                                        delta
+                                        if axis == 1
+                                        else 0.0
+                                    ),
+                                )
+                            }
+                            add_trial(
+                                (
+                                    "micro_"
+                                    f"{corner_index}_"
+                                    f"{axis}_"
+                                    f"{direction:+.0f}"
+                                ),
+                                deltas,
+                            )
+
+            pass_best_total = best_total
+            pass_best = None
+
+            for pattern_name, trial in (
+                trials
+            ):
+                result = evaluate(
+                    trial,
+                    center,
+                )
+
+                if result is None:
+                    continue
+
+                (
+                    total,
+                    geometry,
+                    meta,
+                    _quality,
+                    _movement,
+                ) = result
+
+                if total > pass_best_total:
+                    pass_best_total = (
+                        total
+                    )
+                    pass_best = (
+                        pattern_name,
+                        trial.copy(),
+                        geometry,
+                        meta,
+                    )
+
+            if pass_best is not None:
+                (
+                    pattern_name,
+                    candidate_points,
+                    geometry,
+                    meta,
+                ) = pass_best
+
                 best_total = float(
-                    total
+                    pass_best_total
+                )
+                best_points = (
+                    candidate_points
                 )
                 best_geometry = float(
                     geometry
                 )
-                best_points = (
-                    trial.copy()
-                )
                 best_meta = meta
                 best_pattern = (
-                    pattern_name
+                    f"pass{pass_index + 1}:"
+                    f"{pattern_name}"
                 )
 
         improvement = (
             best_total
             - baseline_total
         )
+        geometry_gain = (
+            best_geometry
+            - baseline_geometry
+        )
 
-        # Jangan menyentuh KTP yang sudah baik atau improvement terlalu kecil.
+        # Untuk kasus shear yang terdeteksi jelas, izinkan gain lebih kecil.
+        baseline_shear = float(
+            baseline_meta.get(
+                "projective_shear_score",
+                0.50,
+            )
+            or 0.50
+        )
+        min_total_gain = (
+            0.010
+            if baseline_shear < 0.72
+            else 0.018
+        )
+        min_geometry_gain = (
+            0.008
+            if baseline_shear < 0.72
+            else 0.012
+        )
+
         if (
-            improvement < 0.025
-            or best_geometry
-            < baseline_geometry
-            + 0.015
+            improvement < min_total_gain
+            or geometry_gain
+            < min_geometry_gain
         ):
             return (
                 points,
                 {
                     "applied": False,
+                    "reason": "no_clear_gain",
                     "improvement": float(
                         improvement
+                    ),
+                    "geometry_gain": float(
+                        geometry_gain
                     ),
                     "before_geometry": float(
                         baseline_geometry
@@ -2761,6 +2855,9 @@ class AutoPerspectiveEngine:
                         best_geometry
                     ),
                     "geometry": baseline_meta,
+                    "pattern": (
+                        best_pattern
+                    ),
                 },
             )
 
@@ -2793,13 +2890,17 @@ class AutoPerspectiveEngine:
             / diagonal
         )
 
-        if movement > 0.025:
+        if movement > 0.035:
             return (
                 points,
                 {
                     "applied": False,
+                    "reason": "movement_too_large",
                     "improvement": float(
                         improvement
+                    ),
+                    "geometry_gain": float(
+                        geometry_gain
                     ),
                     "before_geometry": float(
                         baseline_geometry
@@ -2808,7 +2909,9 @@ class AutoPerspectiveEngine:
                         best_geometry
                     ),
                     "geometry": baseline_meta,
-                    "reason": "movement_too_large",
+                    "pattern": (
+                        best_pattern
+                    ),
                 },
             )
 
@@ -2818,8 +2921,12 @@ class AutoPerspectiveEngine:
             ),
             {
                 "applied": True,
+                "reason": "geometry_improved",
                 "improvement": float(
                     improvement
+                ),
+                "geometry_gain": float(
+                    geometry_gain
                 ),
                 "before_geometry": float(
                     baseline_geometry
@@ -2836,7 +2943,6 @@ class AutoPerspectiveEngine:
                 ),
             },
         )
-
 
     def _warp_quality(self, warped):
         if warped is None or warped.size == 0:
