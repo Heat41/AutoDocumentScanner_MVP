@@ -360,6 +360,140 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
             0,
         )
 
+    def test_angle_trend_detects_projective_shear(self):
+        stable = [
+            (20.0, 0.1),
+            (60.0, 0.0),
+            (100.0, 0.1),
+            (140.0, -0.1),
+            (180.0, 0.0),
+        ]
+        sheared = [
+            (20.0, -1.0),
+            (60.0, -0.5),
+            (100.0, 0.0),
+            (140.0, 0.6),
+            (180.0, 1.2),
+        ]
+
+        stable_result = (
+            self.engine
+            ._angle_trend_score(
+                stable,
+                axis_span=200.0,
+            )
+        )
+        shear_result = (
+            self.engine
+            ._angle_trend_score(
+                sheared,
+                axis_span=200.0,
+            )
+        )
+
+        self.assertTrue(
+            stable_result[
+                "available"
+            ]
+        )
+        self.assertTrue(
+            shear_result[
+                "available"
+            ]
+        )
+        self.assertGreater(
+            stable_result[
+                "score"
+            ],
+            shear_result[
+                "score"
+            ],
+        )
+
+    def test_angle_trend_is_neutral_with_too_few_samples(self):
+        result = (
+            self.engine
+            ._angle_trend_score(
+                [
+                    (20.0, 0.0),
+                    (80.0, 0.4),
+                ],
+                axis_span=200.0,
+            )
+        )
+
+        self.assertFalse(
+            result[
+                "available"
+            ]
+        )
+        self.assertAlmostEqual(
+            result[
+                "score"
+            ],
+            0.50,
+            places=3,
+        )
+
+    def test_projective_rectification_keeps_good_quad_when_no_clear_gain(self):
+        image = np.full(
+            (400, 640, 3),
+            235,
+            dtype=np.uint8,
+        )
+
+        for y in range(
+            100,
+            300,
+            30,
+        ):
+            cv2.line(
+                image,
+                (100, y),
+                (430, y),
+                (30, 30, 30),
+                3,
+            )
+
+        quad = np.array(
+            [
+                [70, 55],
+                [570, 55],
+                [570, 345],
+                [70, 345],
+            ],
+            dtype=np.float32,
+        )
+
+        optimized, metadata = (
+            self.engine
+            ._projective_rectify_best_quad(
+                image,
+                quad,
+                base_geometry_score=1.0,
+            )
+        )
+
+        self.assertEqual(
+            optimized.shape,
+            (4, 2),
+        )
+        self.assertLessEqual(
+            float(
+                np.mean(
+                    np.linalg.norm(
+                        optimized - quad,
+                        axis=1,
+                    )
+                )
+            ),
+            30.0,
+        )
+        self.assertIn(
+            "applied",
+            metadata,
+        )
+
     def test_color_refined_candidate_can_use_snapped_boundary_variant(self):
         image = np.zeros(
             (400, 640, 3),
