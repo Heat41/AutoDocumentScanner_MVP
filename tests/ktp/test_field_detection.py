@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
+from autodocscanner.ktp.anchors import ValueAnchor
 from autodocscanner.ktp.field_detection import (
     FIELD_CLASSES,
     AutoFieldDetector,
@@ -154,6 +155,85 @@ class TestTemplateFieldDetector(unittest.TestCase):
                     0.73 * width
                 )
             ),
+        )
+
+    def test_local_anchor_value_bbox_tightens_overlay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template_path = (
+                Path(tmp)
+                / "default.txt"
+            )
+            template_path.write_text(
+                "12 0.420000 0.600000 0.360000 0.050000\n",
+                encoding="utf-8",
+            )
+
+            detector = TemplateFieldDetector(
+                template_path=template_path
+            )
+
+            baseline = best_detection_by_class(
+                detector.detect(
+                    self.image,
+                    anchors={},
+                )
+            )["agama"]
+
+            anchored = best_detection_by_class(
+                detector.detect(
+                    self.image,
+                    anchors={
+                        "agama": ValueAnchor(
+                            180.0,
+                            250.0,
+                            95.0,
+                            value_bbox=(
+                                180.0,
+                                242.0,
+                                245.0,
+                                258.0,
+                            ),
+                        )
+                    },
+                )
+            )["agama"]
+
+        baseline_width = (
+            baseline.bbox[2]
+            - baseline.bbox[0]
+        )
+        anchored_width = (
+            anchored.bbox[2]
+            - anchored.bbox[0]
+        )
+        baseline_height = (
+            baseline.bbox[3]
+            - baseline.bbox[1]
+        )
+        anchored_height = (
+            anchored.bbox[3]
+            - anchored.bbox[1]
+        )
+
+        self.assertEqual(
+            anchored.source,
+            "annotation_template_local",
+        )
+        self.assertLess(
+            anchored_width,
+            baseline_width,
+        )
+        self.assertLessEqual(
+            anchored_height,
+            baseline_height,
+        )
+        self.assertLessEqual(
+            anchored.bbox[0],
+            180,
+        )
+        self.assertGreaterEqual(
+            anchored.bbox[2],
+            245,
         )
 
     def test_saved_template_local_anchor_moves_only_target_field(self):
