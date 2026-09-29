@@ -35,3 +35,33 @@ def process_tracking_input(
         "corners": corners,
         "tracking": tracking,
     }
+
+
+
+def tracking_process_entry(
+    corrected_image,
+    result_queue,
+):
+    """
+    Entry point process terisolasi untuk OCR/Tracking KTP.
+
+    Native crash pada OpenCV/Tesseract hanya akan menghentikan process ini,
+    bukan proses Tkinter utama.
+    """
+    try:
+        tracking = extract_tracking_data(
+            corrected_image
+        )
+        result_queue.put(
+            (
+                "success",
+                tracking,
+            )
+        )
+    except BaseException as exc:
+        result_queue.put(
+            (
+                "failure",
+                f"{type(exc).__name__}: {exc}",
+            )
+        )
