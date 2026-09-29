@@ -2,6 +2,40 @@ from difflib import SequenceMatcher
 import re
 
 
+class ValueAnchor(tuple):
+    """
+    Anchor kompatibel tuple (x, y, confidence) dengan metadata bbox value.
+
+    Kode lama tetap bisa unpack/index seperti tuple biasa, sedangkan
+    detector baru dapat memakai value_bbox untuk membuat overlay lebih rapat.
+    """
+
+    def __new__(
+        cls,
+        x,
+        y,
+        confidence,
+        value_bbox=None,
+    ):
+        obj = super().__new__(
+            cls,
+            (
+                float(x),
+                float(y),
+                float(confidence),
+            ),
+        )
+        obj.value_bbox = (
+            tuple(
+                float(value)
+                for value in value_bbox
+            )
+            if value_bbox is not None
+            else None
+        )
+        return obj
+
+
 LABEL_ALIASES = {
     "nik": (
         "NIK",
@@ -423,12 +457,16 @@ def locate_label_anchors(
             )
         )
 
+        value_bbox = None
+
         if value_words:
-            anchor_x = float(
-                min(
-                    item.left
-                    for item in value_words
-                )
+            value_left = min(
+                item.left
+                for item in value_words
+            )
+            value_right = max(
+                item.right
+                for item in value_words
             )
             value_top = min(
                 item.top
@@ -438,10 +476,20 @@ def locate_label_anchors(
                 item.bottom
                 for item in value_words
             )
+
+            anchor_x = float(
+                value_left
+            )
             anchor_y = (
                 value_top
                 + value_bottom
             ) / 2.0
+            value_bbox = (
+                value_left,
+                value_top,
+                value_right,
+                value_bottom,
+            )
             value_confidence = (
                 _mean_confidence(
                     value_words
@@ -468,7 +516,7 @@ def locate_label_anchors(
                 confidence
             )
 
-        candidate = (
+        candidate = ValueAnchor(
             anchor_x,
             float(
                 anchor_y
@@ -476,6 +524,7 @@ def locate_label_anchors(
             float(
                 anchor_confidence
             ),
+            value_bbox=value_bbox,
         )
 
         if (
