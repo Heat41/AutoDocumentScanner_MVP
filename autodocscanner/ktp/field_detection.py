@@ -518,36 +518,177 @@ def _local_anchor_bbox(
         for value in bbox
     ]
 
-    box_width = max(
+    template_width = max(
         x2 - x1,
         1.0,
     )
-    box_height = max(
+    template_height = max(
         y2 - y1,
         1.0,
     )
 
-    # Anchor X menunjuk awal value aktual pada baris label.
-    # Sisakan sedikit ruang kiri agar karakter pertama tidak terpotong.
-    left_padding = max(
-        2.0,
-        min(
-            8.0,
-            box_width * 0.025,
-        ),
+    value_bbox = getattr(
+        anchor,
+        "value_bbox",
+        None,
     )
 
-    local_x1 = (
-        anchor_x
-        - left_padding
-    )
-    local_y1 = (
-        anchor_y
-        - box_height / 2.0
-    )
+    if (
+        value_bbox is not None
+        and len(
+            value_bbox
+        ) == 4
+    ):
+        (
+            value_x1,
+            value_y1,
+            value_x2,
+            value_y2,
+        ) = [
+            float(
+                value
+            )
+            for value in value_bbox
+        ]
 
-    # Local anchor tidak boleh liar. Template tetap menjadi batas kewajaran,
-    # tetapi toleransinya cukup besar untuk variasi cetak KTP yang valid.
+        value_width = max(
+            value_x2 - value_x1,
+            1.0,
+        )
+        value_height = max(
+            value_y2 - value_y1,
+            1.0,
+        )
+
+        pad_left = max(
+            2.0,
+            min(
+                5.0,
+                value_height * 0.22,
+            ),
+        )
+        pad_right = max(
+            4.0,
+            min(
+                10.0,
+                value_height * 0.45,
+            ),
+        )
+        pad_y = max(
+            2.0,
+            min(
+                5.0,
+                value_height * 0.28,
+            ),
+        )
+
+        local_x1 = (
+            value_x1
+            - pad_left
+        )
+        local_x2 = (
+            value_x2
+            + pad_right
+        )
+        local_y1 = (
+            value_y1
+            - pad_y
+        )
+        local_y2 = (
+            value_y2
+            + pad_y
+        )
+
+        # Overlay mengikuti value aktual, tetapi jangan sampai menjadi
+        # sangat kecil akibat Tesseract hanya menangkap satu karakter.
+        min_width = min(
+            template_width,
+            max(
+                24.0,
+                template_width * 0.28,
+            ),
+        )
+        current_width = (
+            local_x2
+            - local_x1
+        )
+
+        if current_width < min_width:
+            local_x2 = (
+                local_x1
+                + min_width
+            )
+
+        # Jangan melampaui lebar template terlalu jauh.
+        max_width = (
+            template_width
+            * 1.05
+        )
+
+        if (
+            local_x2
+            - local_x1
+            > max_width
+        ):
+            local_x2 = (
+                local_x1
+                + max_width
+            )
+
+        # Tinggi overlay dibuat rapat ke glyph, tetapi tetap cukup aman.
+        min_height = max(
+            10.0,
+            min(
+                template_height,
+                template_height * 0.55,
+            ),
+        )
+
+        if (
+            local_y2
+            - local_y1
+            < min_height
+        ):
+            center_y = (
+                local_y1
+                + local_y2
+            ) / 2.0
+            local_y1 = (
+                center_y
+                - min_height / 2.0
+            )
+            local_y2 = (
+                center_y
+                + min_height / 2.0
+            )
+
+    else:
+        # Fallback kompatibel untuk anchor lama/tanpa word bounds.
+        left_padding = max(
+            2.0,
+            min(
+                8.0,
+                template_width * 0.025,
+            ),
+        )
+
+        local_x1 = (
+            anchor_x
+            - left_padding
+        )
+        local_x2 = (
+            local_x1
+            + template_width
+        )
+        local_y1 = (
+            anchor_y
+            - template_height / 2.0
+        )
+        local_y2 = (
+            local_y1
+            + template_height
+        )
+
     max_x_shift = (
         0.12
         * float(
@@ -576,6 +717,15 @@ def _local_anchor_bbox(
         ),
     )
 
+    # Pertahankan ukuran tight box setelah clamp posisi.
+    box_width = max(
+        local_x2 - local_x1,
+        1.0,
+    )
+    box_height = max(
+        local_y2 - local_y1,
+        1.0,
+    )
     local_x2 = (
         local_x1
         + box_width
@@ -595,7 +745,6 @@ def _local_anchor_bbox(
         image_width,
         image_height,
     )
-
 
 def _align_saved_bbox(
     class_name,
