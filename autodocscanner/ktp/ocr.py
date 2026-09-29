@@ -100,9 +100,15 @@ def preprocess_document(
     gray = _to_gray(image)
 
     height, width = gray.shape[:2]
+    # CPU-only profile: layout OCR tidak perlu dibesarkan sampai 2x/1600.
+    # Canvas canonical 856 px tetap cukup jelas pada sekitar 1.5x.
     target_width = max(
-        1600,
-        width * 2,
+        1200,
+        int(
+            round(
+                width * 1.5
+            )
+        ),
     )
     scale = (
         target_width
@@ -152,9 +158,9 @@ def preprocess_field(
     target_height = max(
         72,
         height * (
-            5
+            4
             if field_name == "nik"
-            else 4
+            else 3
         ),
     )
     scale = (
@@ -246,9 +252,9 @@ def preprocess_field_strong(
     target_height = max(
         96,
         height * (
-            6
+            5
             if field_name == "nik"
-            else 4
+            else 3
         ),
     )
     scale = (
