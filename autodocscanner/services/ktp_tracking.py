@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from autodocscanner.ktp.tracking import (
     extract_tracking_data,
@@ -45,9 +46,30 @@ def tracking_process_entry(
     """
     Entry point process terisolasi untuk OCR/Tracking KTP.
 
-    Native crash pada OpenCV/Tesseract hanya akan menghentikan process ini,
-    bukan proses Tkinter utama.
+    Worker memakai CPU budget konservatif agar aplikasi tetap nyaman
+    dipakai offline pada laptop CPU-only.
     """
+    # Tesseract memakai OpenMP. Batasi satu thread supaya satu proses OCR
+    # tidak mengambil seluruh core CPU laptop.
+    os.environ["OMP_THREAD_LIMIT"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+
+    try:
+        import cv2
+
+        cv2.setNumThreads(1)
+
+        try:
+            cv2.ocl.setUseOpenCL(
+                False
+            )
+        except Exception:
+            pass
+    except Exception:
+        pass
+
     try:
         tracking = extract_tracking_data(
             corrected_image
