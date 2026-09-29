@@ -2524,6 +2524,217 @@ class AutoPerspectiveEngine:
                         )
                         best_meta = meta
 
+        # Fase kedua A.4: coupled-corner search.
+        # Residual jajargenjang/trapesium biasanya membutuhkan dua atau
+        # empat corner bergerak bersama; single-corner search tidak cukup.
+        coupled_patterns = []
+
+        def add_pattern(
+            name,
+            deltas,
+        ):
+            trial = rect.copy()
+
+            for corner_index, (
+                dx,
+                dy,
+            ) in deltas.items():
+                trial[
+                    int(
+                        corner_index
+                    ),
+                    0,
+                ] += float(
+                    dx
+                )
+                trial[
+                    int(
+                        corner_index
+                    ),
+                    1,
+                ] += float(
+                    dy
+                )
+
+            coupled_patterns.append(
+                (
+                    str(
+                        name
+                    ),
+                    trial,
+                )
+            )
+
+        # Horizontal shear: sisi atas relatif terhadap sisi bawah.
+        add_pattern(
+            "top_right_bottom_left",
+            {
+                0: (step, 0.0),
+                1: (step, 0.0),
+                2: (-step, 0.0),
+                3: (-step, 0.0),
+            },
+        )
+        add_pattern(
+            "top_left_bottom_right",
+            {
+                0: (-step, 0.0),
+                1: (-step, 0.0),
+                2: (step, 0.0),
+                3: (step, 0.0),
+            },
+        )
+
+        # Vertical shear: sisi kiri relatif terhadap sisi kanan.
+        add_pattern(
+            "left_down_right_up",
+            {
+                0: (0.0, step),
+                3: (0.0, step),
+                1: (0.0, -step),
+                2: (0.0, -step),
+            },
+        )
+        add_pattern(
+            "left_up_right_down",
+            {
+                0: (0.0, -step),
+                3: (0.0, -step),
+                1: (0.0, step),
+                2: (0.0, step),
+            },
+        )
+
+        # Trapezoid horizontal: satu sisi kartu sedikit lebih lebar.
+        add_pattern(
+            "top_expand_bottom_contract",
+            {
+                0: (-step, 0.0),
+                1: (step, 0.0),
+                2: (-step, 0.0),
+                3: (step, 0.0),
+            },
+        )
+        add_pattern(
+            "top_contract_bottom_expand",
+            {
+                0: (step, 0.0),
+                1: (-step, 0.0),
+                2: (step, 0.0),
+                3: (-step, 0.0),
+            },
+        )
+
+        # Trapezoid vertical: sisi kiri/kanan memiliki tinggi berbeda.
+        add_pattern(
+            "left_expand_right_contract",
+            {
+                0: (0.0, -step),
+                3: (0.0, step),
+                1: (0.0, step),
+                2: (0.0, -step),
+            },
+        )
+        add_pattern(
+            "left_contract_right_expand",
+            {
+                0: (0.0, step),
+                3: (0.0, -step),
+                1: (0.0, -step),
+                2: (0.0, step),
+            },
+        )
+
+        best_pattern = None
+
+        for pattern_name, trial in (
+            coupled_patterns
+        ):
+            if not cv2.isContourConvex(
+                trial.astype(
+                    np.int32
+                )
+            ):
+                continue
+
+            area_base = abs(
+                cv2.contourArea(
+                    rect.astype(
+                        np.float32
+                    )
+                )
+            )
+            area_trial = abs(
+                cv2.contourArea(
+                    trial.astype(
+                        np.float32
+                    )
+                )
+            )
+
+            if (
+                area_base <= 1.0
+                or not (
+                    0.92
+                    <= area_trial
+                    / area_base
+                    <= 1.08
+                )
+            ):
+                continue
+
+            warped = self.warp(
+                small,
+                trial,
+            )
+            geometry, meta = (
+                self._post_warp_geometry_score(
+                    warped
+                )
+            )
+            quality = self._warp_quality(
+                warped
+            )
+
+            movement = float(
+                np.mean(
+                    np.linalg.norm(
+                        trial - rect,
+                        axis=1,
+                    )
+                )
+                / max(
+                    float(
+                        np.hypot(
+                            small.shape[1],
+                            small.shape[0],
+                        )
+                    ),
+                    1.0,
+                )
+            )
+
+            total = (
+                geometry * 0.82
+                + quality * 0.18
+                - movement * 0.30
+            )
+
+            if total > best_total:
+                best_total = float(
+                    total
+                )
+                best_geometry = float(
+                    geometry
+                )
+                best_points = (
+                    trial.copy()
+                )
+                best_meta = meta
+                best_pattern = (
+                    pattern_name
+                )
+
         improvement = (
             best_total
             - baseline_total
@@ -2619,6 +2830,9 @@ class AutoPerspectiveEngine:
                 "geometry": best_meta,
                 "movement": float(
                     movement
+                ),
+                "pattern": (
+                    best_pattern
                 ),
             },
         )
