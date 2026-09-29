@@ -1622,6 +1622,476 @@ class AutoPerspectiveEngine:
             borderMode=cv2.BORDER_REPLICATE,
         )
 
+    @staticmethod
+    def _robust_angle_summary(
+        angles,
+        target,
+        min_count=3,
+    ):
+        values = np.asarray(
+            list(angles),
+            dtype=np.float32,
+        )
+
+        if values.size < int(
+            min_count
+        ):
+            return {
+                "available": False,
+                "error": None,
+                "spread": None,
+                "count": int(
+                    values.size
+                ),
+                "score": 0.50,
+            }
+
+        errors = np.abs(
+            values
+            - float(
+                target
+            )
+        )
+
+        median_error = float(
+            np.median(
+                errors
+            )
+        )
+        deviation = np.abs(
+            errors
+            - median_error
+        )
+        mad = float(
+            np.median(
+                deviation
+            )
+        )
+
+        tolerance = max(
+            0.45,
+            3.0 * mad,
+        )
+        keep = (
+            deviation
+            <= tolerance
+        )
+        filtered = errors[
+            keep
+        ]
+
+        if filtered.size < int(
+            min_count
+        ):
+            return {
+                "available": False,
+                "error": None,
+                "spread": mad,
+                "count": int(
+                    filtered.size
+                ),
+                "score": 0.50,
+            }
+
+        error = float(
+            np.median(
+                filtered
+            )
+        )
+        spread = float(
+            np.median(
+                np.abs(
+                    filtered
+                    - np.median(
+                        filtered
+                    )
+                )
+            )
+        )
+
+        # <=0.35 derajat hampir ideal. Sekitar 3 derajat sudah buruk.
+        score = max(
+            0.0,
+            min(
+                1.0,
+                1.0
+                - error / 3.0,
+            ),
+        )
+
+        # Sebaran besar berarti garis tidak sepakat pada satu geometri.
+        score *= max(
+            0.45,
+            min(
+                1.0,
+                1.0
+                - spread / 2.0,
+            ),
+        )
+
+        return {
+            "available": True,
+            "error": error,
+            "spread": spread,
+            "count": int(
+                filtered.size
+            ),
+            "score": float(
+                score
+            ),
+        }
+
+    def _post_warp_geometry_score(
+        self,
+        warped,
+    ):
+        """
+        Nilai apakah hasil warp benar-benar lurus.
+
+        Tidak menjalankan OCR. Hanya analisis garis murah pada hasil warp
+        yang sudah berukuran relatif kecil.
+        """
+        if (
+            warped is None
+            or not isinstance(
+                warped,
+                np.ndarray,
+            )
+            or warped.size == 0
+        ):
+            return 0.0, {
+                "horizontal": None,
+                "vertical": None,
+                "line_count": 0,
+            }
+
+        gray = cv2.cvtColor(
+            warped,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+        h, w = gray.shape[:2]
+
+        # Downsample untuk menjaga A.3 ringan pada CPU-only.
+        scale = min(
+            1.0,
+            640.0
+            / max(
+                w,
+                1,
+            ),
+        )
+
+        if scale < 1.0:
+            gray = cv2.resize(
+                gray,
+                (
+                    max(
+                        2,
+                        int(
+                            round(
+                                w * scale
+                            )
+                        ),
+                    ),
+                    max(
+                        2,
+                        int(
+                            round(
+                                h * scale
+                            )
+                        ),
+                    ),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        ah, aw = gray.shape[:2]
+
+        # Fokus utama area teks kiri; vertical juga boleh memakai seluruh
+        # bagian tengah agar sisi foto dapat ikut memberi evidence.
+        text_roi = gray[
+            int(
+                round(
+                    ah * 0.10
+                )
+            ):
+            int(
+                round(
+                    ah * 0.82
+                )
+            ),
+            int(
+                round(
+                    aw * 0.035
+                )
+            ):
+            int(
+                round(
+                    aw * 0.73
+                )
+            ),
+        ]
+
+        if text_roi.size == 0:
+            return 0.50, {
+                "horizontal": None,
+                "vertical": None,
+                "line_count": 0,
+            }
+
+        text_roi = cv2.GaussianBlur(
+            text_roi,
+            (3, 3),
+            0,
+        )
+        edges = cv2.Canny(
+            text_roi,
+            60,
+            150,
+        )
+
+        lines = cv2.HoughLinesP(
+            edges,
+            1,
+            np.pi / 180.0,
+            threshold=max(
+                20,
+                edges.shape[1] // 22,
+            ),
+            minLineLength=max(
+                34,
+                int(
+                    round(
+                        edges.shape[1]
+                        * 0.07
+                    )
+                ),
+            ),
+            maxLineGap=max(
+                8,
+                int(
+                    round(
+                        edges.shape[1]
+                        * 0.02
+                    )
+                ),
+            ),
+        )
+
+        horizontal_angles = []
+
+        if lines is not None:
+            for line in np.asarray(
+                lines
+            ).reshape(-1, 4):
+                x1, y1, x2, y2 = [
+                    float(v)
+                    for v in line
+                ]
+
+                dx = x2 - x1
+                dy = y2 - y1
+
+                if abs(dx) < 1.0:
+                    continue
+
+                length = float(
+                    np.hypot(
+                        dx,
+                        dy,
+                    )
+                )
+
+                if length < edges.shape[1] * 0.07:
+                    continue
+
+                angle = float(
+                    np.degrees(
+                        np.arctan2(
+                            dy,
+                            dx,
+                        )
+                    )
+                )
+
+                if -8.0 <= angle <= 8.0:
+                    horizontal_angles.append(
+                        angle
+                    )
+
+        horizontal = (
+            self._robust_angle_summary(
+                horizontal_angles,
+                target=0.0,
+                min_count=4,
+            )
+        )
+
+        # Vertical evidence dari full-card, terutama sisi foto/garis batas.
+        full = cv2.GaussianBlur(
+            gray,
+            (3, 3),
+            0,
+        )
+        full_edges = cv2.Canny(
+            full,
+            65,
+            155,
+        )
+
+        vertical_lines = cv2.HoughLinesP(
+            full_edges,
+            1,
+            np.pi / 180.0,
+            threshold=max(
+                28,
+                aw // 22,
+            ),
+            minLineLength=max(
+                45,
+                int(
+                    round(
+                        ah * 0.16
+                    )
+                ),
+            ),
+            maxLineGap=max(
+                8,
+                int(
+                    round(
+                        aw * 0.018
+                    )
+                ),
+            ),
+        )
+
+        vertical_angles = []
+
+        if vertical_lines is not None:
+            for line in np.asarray(
+                vertical_lines
+            ).reshape(-1, 4):
+                x1, y1, x2, y2 = [
+                    float(v)
+                    for v in line
+                ]
+
+                dx = x2 - x1
+                dy = y2 - y1
+
+                if abs(dy) < 1.0:
+                    continue
+
+                length = float(
+                    np.hypot(
+                        dx,
+                        dy,
+                    )
+                )
+
+                if length < ah * 0.16:
+                    continue
+
+                angle = abs(
+                    float(
+                        np.degrees(
+                            np.arctan2(
+                                dy,
+                                dx,
+                            )
+                        )
+                    )
+                )
+
+                # Normalize ke 0..90 untuk error terhadap vertikal.
+                if angle > 90.0:
+                    angle = (
+                        180.0 - angle
+                    )
+
+                if 82.0 <= angle <= 90.0:
+                    vertical_angles.append(
+                        angle
+                    )
+
+        vertical = (
+            self._robust_angle_summary(
+                vertical_angles,
+                target=90.0,
+                min_count=2,
+            )
+        )
+
+        available = [
+            item
+            for item in (
+                horizontal,
+                vertical,
+            )
+            if item[
+                "available"
+            ]
+        ]
+
+        if not available:
+            return 0.50, {
+                "horizontal": horizontal,
+                "vertical": vertical,
+                "line_count": (
+                    len(
+                        horizontal_angles
+                    )
+                    + len(
+                        vertical_angles
+                    )
+                ),
+            }
+
+        # Horizontal lebih relevan untuk keterbacaan field KTP.
+        if (
+            horizontal["available"]
+            and vertical["available"]
+        ):
+            score = (
+                horizontal["score"]
+                * 0.72
+                + vertical["score"]
+                * 0.28
+            )
+        elif horizontal["available"]:
+            score = (
+                horizontal["score"]
+            )
+        else:
+            score = (
+                0.75
+                * vertical["score"]
+                + 0.25
+            )
+
+        return float(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    score,
+                ),
+            )
+        ), {
+            "horizontal": horizontal,
+            "vertical": vertical,
+            "line_count": (
+                len(
+                    horizontal_angles
+                )
+                + len(
+                    vertical_angles
+                )
+            ),
+        }
+
+
     def _warp_quality(self, warped):
         if warped is None or warped.size == 0:
             return -1.0
@@ -1842,9 +2312,12 @@ class AutoPerspectiveEngine:
 
         best = None
         best_total = -1.0
+        best_geometry = None
+        best_geometry_score = 0.50
+        best_warp_quality = 0.0
 
-        # Jangan langsung percaya kandidat #1. Coba beberapa kandidat terbaik,
-        # warp, lalu validasi hasilnya.
+        # Stage A.3: setiap kandidat dinilai lagi sesudah warp. Ini mencegah
+        # boundary yang tampak bagus tetapi masih menghasilkan isi KTP miring.
         for candidate in candidates[:14]:
             points_original = (
                 candidate.points / scale
@@ -1858,10 +2331,17 @@ class AutoPerspectiveEngine:
             quality = self._warp_quality(
                 warped
             )
+            (
+                geometry_score,
+                geometry_metadata,
+            ) = self._post_warp_geometry_score(
+                warped
+            )
 
             total = (
-                candidate.score * 0.58
-                + quality * 0.42
+                candidate.score * 0.50
+                + quality * 0.32
+                + geometry_score * 0.18
             )
 
             if total > best_total:
@@ -1870,6 +2350,15 @@ class AutoPerspectiveEngine:
                     points=points_original,
                     score=total,
                     source=candidate.source,
+                )
+                best_geometry = (
+                    geometry_metadata
+                )
+                best_geometry_score = float(
+                    geometry_score
+                )
+                best_warp_quality = float(
+                    quality
                 )
 
         if best is None or best.score < 0.32:
@@ -1883,6 +2372,15 @@ class AutoPerspectiveEngine:
             "candidate_count": len(candidates),
             "selected_source": best.source,
             "score": float(best.score),
+            "warp_quality": float(
+                best_warp_quality
+            ),
+            "post_warp_geometry_score": float(
+                best_geometry_score
+            ),
+            "post_warp_geometry": (
+                best_geometry
+            ),
         }
 
     def correct(self, image):
