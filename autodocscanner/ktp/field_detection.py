@@ -689,6 +689,16 @@ def _local_anchor_bbox(
             + template_height
         )
 
+    # Simpan ukuran tight box sebelum posisi dibatasi.
+    tight_width = max(
+        local_x2 - local_x1,
+        1.0,
+    )
+    tight_height = max(
+        local_y2 - local_y1,
+        1.0,
+    )
+
     max_x_shift = (
         0.12
         * float(
@@ -718,21 +728,13 @@ def _local_anchor_bbox(
     )
 
     # Pertahankan ukuran tight box setelah clamp posisi.
-    box_width = max(
-        local_x2 - local_x1,
-        1.0,
-    )
-    box_height = max(
-        local_y2 - local_y1,
-        1.0,
-    )
     local_x2 = (
         local_x1
-        + box_width
+        + tight_width
     )
     local_y2 = (
         local_y1
-        + box_height
+        + tight_height
     )
 
     return _clamp_bbox(
