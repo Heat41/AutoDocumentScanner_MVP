@@ -53,6 +53,64 @@ class TestKtpLabelAnchors(unittest.TestCase):
             0,
         )
 
+    def test_anchor_keeps_tuple_compatibility_and_value_bbox(self):
+        label = OcrWord(
+            text="Agama",
+            confidence=96.0,
+            left=30,
+            top=120,
+            width=45,
+            height=16,
+            block=1,
+            paragraph=1,
+            line=1,
+        )
+        value = OcrWord(
+            text="KRISTEN",
+            confidence=92.0,
+            left=105,
+            top=122,
+            width=58,
+            height=17,
+            block=1,
+            paragraph=1,
+            line=1,
+        )
+
+        anchors = locate_label_anchors(
+            [
+                label,
+                value,
+            ]
+        )
+
+        anchor = anchors["agama"]
+
+        self.assertEqual(
+            len(anchor),
+            3,
+        )
+        x, y, confidence = anchor
+        self.assertEqual(
+            x,
+            105.0,
+        )
+        self.assertGreater(
+            confidence,
+            0.0,
+        )
+        self.assertEqual(
+            tuple(
+                anchor.value_bbox
+            ),
+            (
+                105.0,
+                122.0,
+                163.0,
+                139.0,
+            ),
+        )
+
     def test_anchor_uses_value_row_center_when_value_is_offset(self):
         label = OcrWord(
             text="Nama",
