@@ -473,6 +473,130 @@ def _estimate_saved_template_transform(
     }
 
 
+def _local_anchor_bbox(
+    class_name,
+    bbox,
+    anchors,
+    image_width,
+    image_height,
+):
+    anchor = dict(
+        anchors or {}
+    ).get(
+        class_name
+    )
+
+    if anchor is None:
+        return None
+
+    try:
+        anchor_x, anchor_y, confidence = (
+            anchor
+        )
+        anchor_x = float(
+            anchor_x
+        )
+        anchor_y = float(
+            anchor_y
+        )
+        confidence = float(
+            confidence
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+    if confidence < 50.0:
+        return None
+
+    x1, y1, x2, y2 = [
+        float(
+            value
+        )
+        for value in bbox
+    ]
+
+    box_width = max(
+        x2 - x1,
+        1.0,
+    )
+    box_height = max(
+        y2 - y1,
+        1.0,
+    )
+
+    # Anchor X menunjuk awal value aktual pada baris label.
+    # Sisakan sedikit ruang kiri agar karakter pertama tidak terpotong.
+    left_padding = max(
+        2.0,
+        min(
+            8.0,
+            box_width * 0.025,
+        ),
+    )
+
+    local_x1 = (
+        anchor_x
+        - left_padding
+    )
+    local_y1 = (
+        anchor_y
+        - box_height / 2.0
+    )
+
+    # Local anchor tidak boleh liar. Template tetap menjadi batas kewajaran,
+    # tetapi toleransinya cukup besar untuk variasi cetak KTP yang valid.
+    max_x_shift = (
+        0.12
+        * float(
+            image_width
+        )
+    )
+    max_y_shift = (
+        0.10
+        * float(
+            image_height
+        )
+    )
+
+    local_x1 = max(
+        x1 - max_x_shift,
+        min(
+            x1 + max_x_shift,
+            local_x1,
+        ),
+    )
+    local_y1 = max(
+        y1 - max_y_shift,
+        min(
+            y1 + max_y_shift,
+            local_y1,
+        ),
+    )
+
+    local_x2 = (
+        local_x1
+        + box_width
+    )
+    local_y2 = (
+        local_y1
+        + box_height
+    )
+
+    return _clamp_bbox(
+        (
+            local_x1,
+            local_y1,
+            local_x2,
+            local_y2,
+        ),
+        image_width,
+        image_height,
+    )
+
+
 def _align_saved_bbox(
     class_name,
     bbox,
@@ -788,6 +912,27 @@ class TemplateFieldDetector:
             )
 
             if saved_bbox is not None:
+                local_bbox = (
+                    _local_anchor_bbox(
+                        class_name,
+                        saved_bbox,
+                        anchors,
+                        image_width=width,
+                        image_height=height,
+                    )
+                )
+
+                if local_bbox is not None:
+                    detections.append(
+                        FieldDetection(
+                            class_name=class_name,
+                            bbox=local_bbox,
+                            confidence=0.97,
+                            source="annotation_template_local",
+                        )
+                    )
+                    continue
+
                 aligned_bbox = (
                     _align_saved_bbox(
                         class_name,
