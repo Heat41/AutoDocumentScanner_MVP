@@ -901,14 +901,6 @@ def read_nik_ocr_candidates(
         return []
 
     prepared_images = (
-        preprocess_field(
-            image,
-            "nik",
-            fallback=False,
-        ),
-        preprocess_field_otsu(
-            image,
-        ),
         preprocess_field_strong(
             image,
             "nik",
@@ -920,7 +912,6 @@ def read_nik_ocr_candidates(
     for prepared in prepared_images:
         for psm in (
             7,
-            8,
             13,
         ):
             config = (
@@ -983,14 +974,6 @@ def read_name_ocr_candidates(
         return []
 
     prepared_images = (
-        preprocess_field(
-            image,
-            "nama",
-            fallback=False,
-        ),
-        preprocess_field_otsu(
-            image,
-        ),
         preprocess_field_strong(
             image,
             "nama",
@@ -1002,7 +985,6 @@ def read_name_ocr_candidates(
     for prepared in prepared_images:
         for psm in (
             7,
-            8,
             13,
         ):
             config = (
