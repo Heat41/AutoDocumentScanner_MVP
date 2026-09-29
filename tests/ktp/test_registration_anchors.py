@@ -53,6 +53,67 @@ class TestKtpLabelAnchors(unittest.TestCase):
             0,
         )
 
+    def test_anchor_uses_value_row_center_when_value_is_offset(self):
+        label = OcrWord(
+            text="Nama",
+            confidence=95.0,
+            left=30,
+            top=100,
+            width=40,
+            height=16,
+            block=1,
+            paragraph=1,
+            line=1,
+        )
+        separator = OcrWord(
+            text=":",
+            confidence=95.0,
+            left=75,
+            top=100,
+            width=8,
+            height=16,
+            block=1,
+            paragraph=1,
+            line=1,
+        )
+        value = OcrWord(
+            text="CONTOH",
+            confidence=90.0,
+            left=100,
+            top=106,
+            width=70,
+            height=20,
+            block=1,
+            paragraph=1,
+            line=1,
+        )
+
+        anchors = locate_label_anchors(
+            [
+                label,
+                separator,
+                value,
+            ]
+        )
+
+        x, y, confidence = anchors[
+            "nama"
+        ]
+
+        self.assertEqual(
+            x,
+            100.0,
+        )
+        self.assertAlmostEqual(
+            y,
+            116.0,
+            places=3,
+        )
+        self.assertGreater(
+            confidence,
+            0.0,
+        )
+
     def test_locates_multiple_standard_labels(self):
         words = [
             w("NIK", 20, 80, 1),
