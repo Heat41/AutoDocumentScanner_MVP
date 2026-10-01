@@ -7,7 +7,7 @@ import cv2
 
 from autodocscanner.output.manager import (
     build_output_path,
-    save_pdf_pages,
+    save_ktp_sheet_pdf,
 )
 from autodocscanner.services.ktp_output import process_ktp_output
 from autodocscanner.ui.manual_document import ManualDocumentPage
@@ -506,7 +506,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             return
 
         try:
-            saved_path = save_pdf_pages(
+            saved_path = save_ktp_sheet_pdf(
                 target,
                 images,
             )
@@ -523,8 +523,9 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         messagebox.showinfo(
             "Simpan PDF",
             (
-                f"{len(images)} halaman berhasil "
-                f"disimpan ke PDF.\n\n{saved_path}"
+                f"{len(images)} KTP berhasil disusun "
+                f"ke PDF A4 (maks. 4 kartu per halaman)."
+                f"\n\n{saved_path}"
             ),
         )
 
