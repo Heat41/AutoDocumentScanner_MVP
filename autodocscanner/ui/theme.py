@@ -1,5 +1,3 @@
-import ctypes
-import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -47,91 +45,14 @@ def get_theme(mode):
     return DARK_THEME if str(mode).lower() == "dark" else LIGHT_THEME
 
 
-def _window_handles(root):
-    try:
-        root.update_idletasks()
-        child = int(root.winfo_id())
-    except (tk.TclError, TypeError, ValueError):
-        return ()
-
-    try:
-        parent = int(
-            ctypes.windll.user32.GetParent(
-                ctypes.c_void_p(child)
-            )
-            or 0
-        )
-        if parent:
-            return (parent,)
-    except Exception:
-        pass
-
-    return (child,)
-
-
 def apply_windows_titlebar(root, palette):
-    """Ask Windows to use native light/dark caption rendering.
+    """Keep the native Windows title bar fully system-managed.
 
-    We intentionally do not force caption/text/border colors. Windows owns
-    those system buttons and forcing their colors can make minimize/maximize/
-    close unreadable on some Windows 10/11 builds.
+    Tkinter's native window chrome can render inconsistently when DWM
+    attributes are forced across different Windows builds and scaling setups.
+    The application theme therefore affects only the client area.
     """
-    if sys.platform != "win32":
-        return False
-
-    try:
-        dwm = ctypes.windll.dwmapi
-        user32 = ctypes.windll.user32
-    except Exception:
-        return False
-
-    dark_value = ctypes.c_int(
-        1 if palette.get("name") == "dark" else 0
-    )
-    applied = False
-
-    for hwnd in _window_handles(root):
-        handle = ctypes.c_void_p(hwnd)
-
-        for attribute in (20, 19):
-            try:
-                result = dwm.DwmSetWindowAttribute(
-                    handle,
-                    attribute,
-                    ctypes.byref(dark_value),
-                    ctypes.sizeof(dark_value),
-                )
-                if result == 0:
-                    applied = True
-                    break
-            except Exception:
-                continue
-
-        # Refresh the non-client area so Windows redraws the native caption
-        # and system buttons immediately.
-        try:
-            SWP_NOMOVE = 0x0002
-            SWP_NOSIZE = 0x0001
-            SWP_NOZORDER = 0x0004
-            SWP_NOACTIVATE = 0x0010
-            SWP_FRAMECHANGED = 0x0020
-            user32.SetWindowPos(
-                handle,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE
-                | SWP_NOSIZE
-                | SWP_NOZORDER
-                | SWP_NOACTIVATE
-                | SWP_FRAMECHANGED,
-            )
-        except Exception:
-            pass
-
-    return applied
+    return False
 
 
 def apply_theme(root, mode):
