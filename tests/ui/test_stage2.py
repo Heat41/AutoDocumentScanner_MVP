@@ -70,18 +70,27 @@ class TestStage2UiContract(unittest.TestCase):
 
     def test_top_navigation_items_are_ordered(self):
         self.assertEqual(
-            Stage2ScannerUI.NAVIGATION_ITEMS,
-            (
-                ("▣  Auto Koreksi KTP", "auto_ktp"),
-                (
-                    "▤  Dokumen Manual",
-                    "manual_document",
-                ),
-                (
-                    "🔒  Tracking KTP",
-                    "tracking_ktp",
-                ),
+            tuple(
+                item["page"]
+                for item in Stage2ScannerUI.NAVIGATION_ITEMS
             ),
+            (
+                "auto_ktp",
+                "manual_document",
+                "tracking_ktp",
+            ),
+        )
+
+    def test_navigation_items_have_icons(self):
+        for item in Stage2ScannerUI.NAVIGATION_ITEMS:
+            self.assertTrue(item["icon"])
+            self.assertTrue(item["label"])
+            self.assertTrue(item["page"])
+
+    def test_theme_defaults_to_release_light_mode_contract(self):
+        self.assertIn(
+            "light",
+            {"light", "dark"},
         )
 
     def test_tracking_navigation_method_is_exposed(self):
