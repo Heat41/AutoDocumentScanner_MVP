@@ -40,7 +40,7 @@ class CollapsibleSidebar(ttk.Frame):
             child.destroy()
 
         top = ttk.Frame(self, style="Sidebar.TFrame")
-        top.pack(fill="x", pady=(0, 18))
+        top.pack(fill="x", pady=(0, 12))
 
         toggle = ttk.Button(
             top,
@@ -56,27 +56,25 @@ class CollapsibleSidebar(ttk.Frame):
 
         if not self.collapsed:
             brand = ttk.Frame(
-                top,
+                self,
                 style="Sidebar.TFrame",
-                width=150,
             )
             brand.pack(
-                side="left",
                 fill="x",
-                expand=True,
-                padx=(10, 0),
+                pady=(0, 18),
             )
-            brand.pack_propagate(False)
+
             ttk.Label(
                 brand,
                 text="AUTODOCUMENT",
                 style="SidebarTitle.TLabel",
-            ).pack(anchor="w", fill="x")
+            ).pack(anchor="w")
+
             ttk.Label(
                 brand,
                 text="Office Scanner",
                 style="SidebarMuted.TLabel",
-            ).pack(anchor="w")
+            ).pack(anchor="w", pady=(2, 0))
 
             ttk.Label(
                 self,
