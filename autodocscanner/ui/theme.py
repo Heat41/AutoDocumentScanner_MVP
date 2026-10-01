@@ -328,6 +328,56 @@ def apply_theme(root, mode):
         background=palette["border"],
     )
 
+    # Global scrollbar styling. Every ttk.Scrollbar in the application
+    # inherits these styles automatically.
+    style.configure(
+        "Vertical.TScrollbar",
+        background=palette["surface_soft"],
+        troughcolor=palette["surface"],
+        bordercolor=palette["border"],
+        arrowcolor=palette["muted"],
+        lightcolor=palette["surface_soft"],
+        darkcolor=palette["surface_soft"],
+        relief="flat",
+        borderwidth=0,
+        width=12,
+    )
+    style.map(
+        "Vertical.TScrollbar",
+        background=[
+            ("active", palette["accent"]),
+            ("pressed", palette["accent_hover"]),
+        ],
+        arrowcolor=[
+            ("active", "#FFFFFF"),
+            ("pressed", "#FFFFFF"),
+        ],
+    )
+
+    style.configure(
+        "Horizontal.TScrollbar",
+        background=palette["surface_soft"],
+        troughcolor=palette["surface"],
+        bordercolor=palette["border"],
+        arrowcolor=palette["muted"],
+        lightcolor=palette["surface_soft"],
+        darkcolor=palette["surface_soft"],
+        relief="flat",
+        borderwidth=0,
+        width=12,
+    )
+    style.map(
+        "Horizontal.TScrollbar",
+        background=[
+            ("active", palette["accent"]),
+            ("pressed", palette["accent_hover"]),
+        ],
+        arrowcolor=[
+            ("active", "#FFFFFF"),
+            ("pressed", "#FFFFFF"),
+        ],
+    )
+
     apply_windows_titlebar(
         root,
         palette,
