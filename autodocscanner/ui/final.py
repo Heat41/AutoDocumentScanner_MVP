@@ -163,6 +163,12 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Label(
             title_column,
+            text="WORKSPACE KTP",
+            style="Eyebrow.TLabel",
+        ).pack(anchor="w", pady=(0, 3))
+
+        ttk.Label(
+            title_column,
             text="Auto Koreksi KTP",
             style="Header.TLabel",
         ).pack(anchor="w")
@@ -201,44 +207,44 @@ class FinalScannerUI(SafeScannerUI):
 
         self._drop_zone = tk.Frame(
             root,
-            bg="#F8FAFB",
-            highlightbackground=self.BORDER,
+            bg="#EFF6FF",
+            highlightbackground="#BFDBFE",
             highlightthickness=1,
             bd=0,
-            padx=18,
+            padx=20,
             pady=18,
         )
         self._drop_zone.pack(fill="x", pady=(6, 16))
 
         drop_text = tk.Frame(
             self._drop_zone,
-            bg="#F8FAFB",
+            bg="#EFF6FF",
         )
         drop_text.pack(side="left", fill="x", expand=True)
 
         self._drop_zone_title = tk.Label(
             drop_text,
-            text="↓  Tarik & Lepas Foto KTP di sini",
-            bg="#F8FAFB",
-            fg=self.TEXT,
-            font=("Segoe UI Semibold", 10),
+            text="⇧  Upload Foto KTP",
+            bg="#EFF6FF",
+            fg="#1D4ED8",
+            font=("Segoe UI Semibold", 11),
         )
         self._drop_zone_title.pack(anchor="w")
 
         tk.Label(
             drop_text,
             text=(
-                "JPG, JPEG, PNG, BMP, WEBP  •  "
-                "bisa satu file, banyak file, atau satu folder"
+                "Tarik & lepas file di area ini, atau gunakan tombol di kanan.  "
+                "JPG • JPEG • PNG • BMP • WEBP"
             ),
-            bg="#F8FAFB",
-            fg=self.MUTED,
+            bg="#EFF6FF",
+            fg="#64748B",
             font=("Segoe UI", 8),
         ).pack(anchor="w", pady=(4, 0))
 
         drop_actions = tk.Frame(
             self._drop_zone,
-            bg="#F8FAFB",
+            bg="#EFF6FF",
         )
         drop_actions.pack(side="right", padx=(16, 0))
 
