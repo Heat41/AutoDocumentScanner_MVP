@@ -107,6 +107,19 @@ class TexturedScannerUI(FinalScannerUI):
             padding=(8, 3),
         )
         style.configure(
+            "StatusGood.TLabel",
+            background="#ECFDF5",
+            foreground="#047857",
+            font=("Segoe UI Semibold", 8),
+            padding=(8, 4),
+        )
+        style.configure(
+            "Eyebrow.TLabel",
+            background=self.BG,
+            foreground="#2563EB",
+            font=("Segoe UI Semibold", 8),
+        )
+        style.configure(
             "Subheader.TLabel",
             background=self.BG,
             foreground=self.MUTED,
@@ -286,20 +299,33 @@ class TexturedScannerUI(FinalScannerUI):
             )
 
     def _preview_card(self, parent, title):
-        frame = tk.Frame(
+        shadow = tk.Frame(
             parent,
-            bg=self.CARD,
+            bg="#E2E8F0",
             bd=0,
-            highlightbackground=self.BORDER,
-            highlightthickness=1,
         )
-        frame.pack(
+        shadow.pack(
             side="left",
             fill="both",
             expand=True,
             padx=(0, 7)
             if title.startswith("Original")
             else (7, 0),
+            pady=(0, 2),
+        )
+
+        frame = tk.Frame(
+            shadow,
+            bg=self.CARD,
+            bd=0,
+            highlightbackground=self.BORDER,
+            highlightthickness=1,
+        )
+        frame.pack(
+            fill="both",
+            expand=True,
+            padx=(0, 2),
+            pady=(0, 2),
         )
 
         header = tk.Frame(
@@ -340,12 +366,16 @@ class TexturedScannerUI(FinalScannerUI):
 
         label = tk.Label(
             content,
-            text="Belum ada gambar",
+            text=(
+                "Belum ada preview\n"
+                "Pilih file untuk memulai"
+            ),
             bg="#F8FAFC",
             fg="#94A3B8",
             bd=0,
             relief="flat",
             font=("Segoe UI", 9),
+            justify="center",
         )
         label.pack(fill="both", expand=True)
         return label
