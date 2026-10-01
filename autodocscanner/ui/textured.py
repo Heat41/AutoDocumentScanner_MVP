@@ -286,42 +286,27 @@ class TexturedScannerUI(FinalScannerUI):
             )
 
     def _preview_card(self, parent, title):
-        # A small shadow plus a micro-pattern strip gives the UI texture and
-        # depth without turning it into a visually heavy dashboard.
-        shadow = tk.Frame(
-            parent,
-            bg=self.SHADOW,
-            bd=0,
-        )
-        shadow.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(0, 7)
-            if title.startswith("Original")
-            else (7, 0),
-            pady=(0, 2),
-        )
-
         frame = tk.Frame(
-            shadow,
+            parent,
             bg=self.CARD,
             bd=0,
             highlightbackground=self.BORDER,
             highlightthickness=1,
         )
         frame.pack(
+            side="left",
             fill="both",
             expand=True,
-            padx=(0, 2),
-            pady=(0, 2),
+            padx=(0, 7)
+            if title.startswith("Original")
+            else (7, 0),
         )
 
         header = tk.Frame(
             frame,
             bg=self.CARD,
-            padx=13,
-            pady=11,
+            padx=14,
+            pady=12,
         )
         header.pack(fill="x")
 
@@ -336,41 +321,28 @@ class TexturedScannerUI(FinalScannerUI):
         tk.Label(
             header,
             text=(
-                "Area deteksi fisik"
+                "Deteksi sudut KTP"
                 if title.startswith("Original")
-                else "Perspective corrected"
+                else "Hasil koreksi perspektif"
             ),
             bg=self.CARD,
             fg=self.MUTED,
-            font=("Segoe UI", 9),
-        ).pack(anchor="w", pady=(2, 0))
-
-        texture = tk.Canvas(
-            frame,
-            height=8,
-            bg=self.TEXTURE_LIGHT,
-            bd=0,
-            highlightthickness=0,
-        )
-        texture.pack(fill="x")
-        texture.bind(
-            "<Configure>",
-            lambda _event, target=texture: self._paint_texture_strip(target),
-        )
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(3, 0))
 
         content = tk.Frame(
             frame,
             bg=self.CARD,
             padx=12,
-            pady=12,
+            pady=(0, 12),
         )
         content.pack(fill="both", expand=True)
 
         label = tk.Label(
             content,
             text="Belum ada gambar",
-            bg="#E9EDF0",
-            fg="#737D85",
+            bg="#F8FAFC",
+            fg="#94A3B8",
             bd=0,
             relief="flat",
             font=("Segoe UI", 9),
