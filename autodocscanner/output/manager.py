@@ -142,6 +142,144 @@ def save_pdf_pages(output_path, images):
     )
 
 
+
+def save_ktp_sheet_pdf(
+    output_path,
+    images,
+    dpi=300,
+):
+    """Save KTP results to A4 portrait, max four cards per page.
+
+    Layout is fixed at 2 columns x 2 rows. Each KTP is rendered at the
+    physical ID-1 card size (85.60 x 53.98 mm) while preserving aspect ratio.
+    """
+    images = list(images or [])
+    if not images:
+        raise ValueError(
+            "Minimal satu KTP diperlukan untuk PDF."
+        )
+
+    dpi = int(dpi)
+    if dpi <= 0:
+        raise ValueError("dpi harus lebih besar dari 0.")
+
+    mm_per_inch = 25.4
+
+    page_width = int(
+        round(210.0 / mm_per_inch * dpi)
+    )
+    page_height = int(
+        round(297.0 / mm_per_inch * dpi)
+    )
+
+    card_width = int(
+        round(85.60 / mm_per_inch * dpi)
+    )
+    card_height = int(
+        round(53.98 / mm_per_inch * dpi)
+    )
+
+    slot_width = page_width // 2
+    slot_height = page_height // 2
+
+    pages = []
+
+    for page_start in range(0, len(images), 4):
+        page = Image.new(
+            "RGB",
+            (page_width, page_height),
+            "white",
+        )
+
+        for local_index, image in enumerate(
+            images[page_start:page_start + 4]
+        ):
+            card = _to_rgb_pillow(image)
+
+            card_ratio = (
+                card.width / max(card.height, 1)
+            )
+            target_ratio = (
+                card_width / max(card_height, 1)
+            )
+
+            if card_ratio >= target_ratio:
+                render_width = card_width
+                render_height = max(
+                    1,
+                    int(round(
+                        card_width / card_ratio
+                    )),
+                )
+            else:
+                render_height = card_height
+                render_width = max(
+                    1,
+                    int(round(
+                        card_height * card_ratio
+                    )),
+                )
+
+            card = card.resize(
+                (render_width, render_height),
+                Image.Resampling.LANCZOS,
+            )
+
+            row = local_index // 2
+            column = local_index % 2
+
+            slot_x = column * slot_width
+            slot_y = row * slot_height
+
+            x = (
+                slot_x
+                + (slot_width - render_width) // 2
+            )
+            y = (
+                slot_y
+                + (slot_height - render_height) // 2
+            )
+
+            page.paste(
+                card,
+                (x, y),
+            )
+
+        pages.append(page)
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    temp_path = output_path.with_name(
+        f".{output_path.stem}."
+        f"{uuid4().hex}.tmp.pdf"
+    )
+
+    try:
+        pages[0].save(
+            temp_path,
+            format="PDF",
+            resolution=float(dpi),
+            save_all=len(pages) > 1,
+            append_images=pages[1:],
+        )
+        os.replace(
+            temp_path,
+            output_path,
+        )
+    finally:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except OSError:
+            pass
+
+    return output_path
+
+
 def save_document_images(
     output_dir,
     source_paths,
