@@ -98,20 +98,20 @@ class ManualDocumentPage(ttk.Frame):
 
         self._drop_zone = tk.Frame(
             self,
-            bg="#F8FAFB",
-            highlightbackground="#D7DDE1",
+            bg="#EFF6FF",
+            highlightbackground="#BFDBFE",
             highlightthickness=1,
             bd=0,
-            padx=14,
-            pady=12,
+            padx=16,
+            pady=13,
         )
         self._drop_zone.pack(fill="x", pady=(0, 12))
 
         self._drop_zone_title = tk.Label(
             self._drop_zone,
             text="↓  Tarik & Lepas Dokumen di sini",
-            bg="#F8FAFB",
-            fg="#273038",
+            bg="#EFF6FF",
+            fg="#1D4ED8",
             font=("Segoe UI Semibold", 9),
         )
         self._drop_zone_title.pack(side="left")
@@ -119,8 +119,8 @@ class ManualDocumentPage(ttk.Frame):
         tk.Label(
             self._drop_zone,
             text="JPG • PNG • JPEG • BMP • WEBP",
-            bg="#F8FAFB",
-            fg="#6F7880",
+            bg="#EFF6FF",
+            fg="#64748B",
             font=("Segoe UI", 8),
         ).pack(side="right")
 
