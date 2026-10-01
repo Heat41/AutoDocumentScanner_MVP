@@ -37,6 +37,10 @@ class ManualDocumentPage(ttk.Frame):
             master=self,
             value=self.DEFAULT_OUTPUT_FORMAT,
         )
+        self.image_mode = tk.StringVar(
+            master=self,
+            value="color",
+        )
         self.status_text = tk.StringVar(
             master=self,
             value="Pilih satu atau beberapa gambar dokumen untuk memulai.",
@@ -334,6 +338,28 @@ class ManualDocumentPage(ttk.Frame):
             style="Accent.TButton",
             command=self.apply_current,
         ).pack(side="left", padx=(12, 0))
+
+        image_mode_group = ttk.Frame(controls)
+        image_mode_group.pack(side="right", padx=(0, 18))
+
+        ttk.Label(
+            image_mode_group,
+            text="Mode",
+            style="Subheader.TLabel",
+        ).pack(side="left", padx=(0, 8))
+
+        for label, value in (
+            ("Warna", "color"),
+            ("Grayscale", "grayscale"),
+            ("B&W", "bw"),
+        ):
+            ttk.Radiobutton(
+                image_mode_group,
+                text=label,
+                variable=self.image_mode,
+                value=value,
+                command=self._on_image_mode_change,
+            ).pack(side="left", padx=(0, 8))
 
         export_group = ttk.Frame(controls)
         export_group.pack(side="right")
@@ -734,8 +760,16 @@ class ManualDocumentPage(ttk.Frame):
             padding=22,
         )
 
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil = Image.fromarray(rgb)
+        rendered = self._apply_image_mode(image)
+
+        if rendered.ndim == 2:
+            pil = Image.fromarray(rendered)
+        else:
+            rgb = cv2.cvtColor(
+                rendered,
+                cv2.COLOR_BGR2RGB,
+            )
+            pil = Image.fromarray(rgb)
         pil = pil.resize(
             (display_width, display_height),
             Image.Resampling.LANCZOS,
@@ -906,6 +940,51 @@ class ManualDocumentPage(ttk.Frame):
             f"Halaman {self.current_index + 1} berhasil dikoreksi."
         )
 
+    def _apply_image_mode(self, image):
+        if image is None:
+            return None
+
+        mode = self.image_mode.get()
+
+        if mode == "color":
+            return image.copy()
+
+        if image.ndim == 2:
+            gray = image.copy()
+        else:
+            gray = cv2.cvtColor(
+                image,
+                cv2.COLOR_BGR2GRAY,
+            )
+
+        if mode == "grayscale":
+            return gray
+
+        if mode == "bw":
+            blurred = cv2.GaussianBlur(
+                gray,
+                (3, 3),
+                0,
+            )
+            _, bw = cv2.threshold(
+                blurred,
+                0,
+                255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+            )
+            return bw
+
+        return image.copy()
+
+    def _on_image_mode_change(self):
+        if self.current_index is None:
+            return
+
+        page = self.session.pages[self.current_index]
+        self._render_result(
+            page.corrected_image
+        )
+
     def _render_result(self, image):
         if image is None:
             self._result_photo = None
@@ -983,7 +1062,10 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
-        images = self.session.corrected_images()
+        images = [
+            self._apply_image_mode(image)
+            for image in self.session.corrected_images()
+        ]
 
         try:
             if self.output_format.get() == "pdf":
