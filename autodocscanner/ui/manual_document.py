@@ -34,6 +34,10 @@ class ManualDocumentPage(ttk.Frame):
             master=self,
             value="Pilih satu atau beberapa gambar dokumen untuk memulai.",
         )
+        self.page_position_text = tk.StringVar(
+            master=self,
+            value="Halaman 0 / 0",
+        )
         self._canvas_photo = None
         self._result_photo = None
         self._display_size = None
@@ -108,7 +112,12 @@ class ManualDocumentPage(ttk.Frame):
             sidebar,
             text="✓ = sudah dikoreksi",
             style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(2, 8))
+        ).pack(anchor="w", pady=(2, 4))
+        ttk.Label(
+            sidebar,
+            textvariable=self.page_position_text,
+            style="SidebarMuted.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
         list_wrap = tk.Frame(sidebar, bg="#FFFFFF")
         list_wrap.pack(fill="both", expand=True)
@@ -131,6 +140,19 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.page_list.yview)
         self.page_list.bind("<<ListboxSelect>>", self._on_page_select)
+
+        page_nav = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        page_nav.pack(fill="x", pady=(10, 0))
+        ttk.Button(
+            page_nav,
+            text="← Sebelumnya",
+            command=self.select_previous_page,
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            page_nav,
+            text="Berikutnya →",
+            command=self.select_next_page,
+        ).pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         ttk.Button(
             sidebar,
@@ -306,6 +328,7 @@ class ManualDocumentPage(ttk.Frame):
         self._canvas_photo = None
         self._result_photo = None
         self.result_label.configure(image="", text="Belum dikoreksi")
+        self._update_page_position()
         self.status_text.set("Daftar halaman dikosongkan.")
 
     def choose_output_dir(self):
@@ -334,6 +357,8 @@ class ManualDocumentPage(ttk.Frame):
         ):
             self.page_list.selection_set(selected)
 
+        self._update_page_position()
+
     def _select_page(self, index):
         index = int(index)
         if not 0 <= index < len(self.session.pages):
@@ -343,6 +368,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.selection_clear(0, tk.END)
         self.page_list.selection_set(index)
         self.page_list.see(index)
+        self._update_page_position()
         self._render_current()
 
     def _on_page_select(self, _event=None):
@@ -350,7 +376,43 @@ class ManualDocumentPage(ttk.Frame):
         if not selection:
             return
         self.current_index = int(selection[0])
+        self._update_page_position()
         self._render_current()
+
+    def _update_page_position(self):
+        total = len(self.session.pages)
+        if (
+            self.current_index is None
+            or not 0 <= self.current_index < total
+        ):
+            self.page_position_text.set(f"Halaman 0 / {total}")
+            return
+
+        self.page_position_text.set(
+            f"Halaman {self.current_index + 1} / {total}"
+        )
+
+    def select_previous_page(self):
+        if not self.session.pages:
+            return
+
+        if self.current_index is None:
+            self._select_page(0)
+            return
+
+        self._select_page(max(0, self.current_index - 1))
+
+    def select_next_page(self):
+        if not self.session.pages:
+            return
+
+        if self.current_index is None:
+            self._select_page(0)
+            return
+
+        self._select_page(
+            min(len(self.session.pages) - 1, self.current_index + 1)
+        )
 
     def _on_canvas_resize(self, _event=None):
         if self.current_index is not None:
