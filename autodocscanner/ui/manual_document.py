@@ -2,6 +2,11 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+try:
+    import windnd
+except ImportError:
+    windnd = None
+
 import cv2
 from PIL import Image, ImageTk
 
@@ -90,6 +95,44 @@ class ManualDocumentPage(ttk.Frame):
             text="Kosongkan",
             command=self.clear_pages,
         ).pack(side="left", padx=(8, 0))
+
+        self._drop_zone = tk.Frame(
+            self,
+            bg="#F8FAFB",
+            highlightbackground="#D7DDE1",
+            highlightthickness=1,
+            bd=0,
+            padx=14,
+            pady=12,
+        )
+        self._drop_zone.pack(fill="x", pady=(0, 12))
+
+        self._drop_zone_title = tk.Label(
+            self._drop_zone,
+            text="↓  Tarik & Lepas Dokumen di sini",
+            bg="#F8FAFB",
+            fg="#273038",
+            font=("Segoe UI Semibold", 9),
+        )
+        self._drop_zone_title.pack(side="left")
+
+        tk.Label(
+            self._drop_zone,
+            text="JPG • PNG • JPEG • BMP • WEBP",
+            bg="#F8FAFB",
+            fg="#6F7880",
+            font=("Segoe UI", 8),
+        ).pack(side="right")
+
+        self._drop_zone.bind(
+            "<Button-1>",
+            lambda _event: self.choose_images(),
+        )
+        self._drop_zone_title.bind(
+            "<Button-1>",
+            lambda _event: self.choose_images(),
+        )
+        self.after_idle(self._install_file_drop)
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True)
@@ -283,6 +326,114 @@ class ManualDocumentPage(ttk.Frame):
             style="Subheader.TLabel",
         ).pack(fill="x", pady=(10, 0))
 
+    @staticmethod
+    def _decode_drop_path(raw_path):
+        if isinstance(raw_path, bytes):
+            for encoding in ("utf-8", "mbcs"):
+                try:
+                    return Path(raw_path.decode(encoding))
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return None
+
+        try:
+            return Path(str(raw_path))
+        except (TypeError, ValueError):
+            return None
+
+    def _collect_dropped_images(self, raw_paths):
+        images = []
+
+        for raw_path in raw_paths or []:
+            path = self._decode_drop_path(raw_path)
+            if path is None:
+                continue
+
+            if path.is_dir():
+                images.extend(
+                    sorted(
+                        child
+                        for child in path.iterdir()
+                        if (
+                            child.is_file()
+                            and child.suffix.lower()
+                            in self.SUPPORTED_EXTENSIONS
+                        )
+                    )
+                )
+            elif (
+                path.is_file()
+                and path.suffix.lower()
+                in self.SUPPORTED_EXTENSIONS
+            ):
+                images.append(path)
+
+        unique = []
+        seen = set()
+        for path in images:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+
+        return unique
+
+    def _install_file_drop(self):
+        if windnd is None:
+            return
+
+        try:
+            windnd.hook_dropfiles(
+                self._drop_zone,
+                func=self._on_drop_files,
+            )
+        except Exception:
+            return
+
+    def _on_drop_files(self, raw_paths):
+        paths = self._collect_dropped_images(raw_paths)
+        if not paths:
+            self.after(
+                0,
+                self.status_text.set,
+                "Tidak ada gambar dokumen yang valid pada drop.",
+            )
+            return
+
+        self.after(
+            0,
+            self._add_image_paths,
+            paths,
+        )
+
+    def _add_image_paths(self, paths):
+        first_added = len(self.session.pages)
+        failed = []
+
+        for path in paths:
+            image = cv2.imread(str(path))
+            if image is None:
+                failed.append(Path(path).name)
+                continue
+            self.session.add_image(Path(path), image)
+
+        self._refresh_page_list()
+
+        if len(self.session.pages) > first_added:
+            self._select_page(first_added)
+
+        if failed:
+            messagebox.showwarning(
+                "Dokumen",
+                "File berikut tidak dapat dibaca:\n"
+                + "\n".join(failed[:5]),
+            )
+
+        self.status_text.set(
+            f"{len(self.session.pages)} halaman siap dikoreksi."
+        )
+
     def choose_images(self):
         paths = filedialog.askopenfilenames(
             title="Pilih gambar dokumen",
@@ -293,30 +444,8 @@ class ManualDocumentPage(ttk.Frame):
         if not paths:
             return
 
-        first_added = len(self.session.pages)
-        failed = []
-
-        for raw_path in paths:
-            path = Path(raw_path)
-            image = cv2.imread(str(path))
-            if image is None:
-                failed.append(path.name)
-                continue
-            self.session.add_image(path, image)
-
-        self._refresh_page_list()
-
-        if len(self.session.pages) > first_added:
-            self._select_page(first_added)
-
-        if failed:
-            messagebox.showwarning(
-                "Dokumen",
-                "File berikut tidak dapat dibaca:\n" + "\n".join(failed[:5]),
-            )
-
-        self.status_text.set(
-            f"{len(self.session.pages)} halaman siap dikoreksi."
+        self._add_image_paths(
+            [Path(raw_path) for raw_path in paths]
         )
 
     def clear_pages(self):
