@@ -275,6 +275,10 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                         "#111827",
                         "#172033",
                         "#252A30",
+                        "#F8FAFC",
+                        "#E5E7EB",
+                        "#CBD5E1",
+                        "#FFFFFF",
                     }:
                         try:
                             widget.configure(
