@@ -251,12 +251,14 @@ class FinalScannerUI(SafeScannerUI):
         ttk.Button(
             drop_actions,
             text="Pilih Foto",
+            style="Secondary.TButton",
             command=self.choose_files,
         ).pack(side="left")
 
         ttk.Button(
             drop_actions,
             text="Pilih Folder",
+            style="Quiet.TButton",
             command=self.choose_folder,
         ).pack(side="left", padx=(8, 0))
 
@@ -280,7 +282,7 @@ class FinalScannerUI(SafeScannerUI):
             body,
             style="Card.TFrame",
             padding=14,
-            width=250,
+            width=230,
         )
         files_panel.pack(side="left", fill="y")
         files_panel.pack_propagate(False)
@@ -350,12 +352,14 @@ class FinalScannerUI(SafeScannerUI):
         ttk.Button(
             file_actions,
             text="Kosongkan",
+            style="Quiet.TButton",
             command=self.clear_files,
         ).pack(side="left")
 
         ttk.Button(
             file_actions,
             text="Folder Output",
+            style="Secondary.TButton",
             command=self.choose_output,
         ).pack(side="right")
 
@@ -372,9 +376,15 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Label(
             selected_row,
+            text="FILE AKTIF",
+            style="Eyebrow.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            selected_row,
             textvariable=self.selected_text,
             style="Subheader.TLabel",
-        ).pack(side="left")
+        ).pack(side="left", padx=(10, 0))
 
         previews = ttk.Frame(workspace)
         previews.pack(fill="both", expand=True)
