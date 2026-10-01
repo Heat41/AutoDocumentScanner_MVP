@@ -43,8 +43,8 @@ class TrackingPlaceholderPage(ttk.Frame):
 
         ttk.Label(
             card,
-            text="Coming Soon",
-            style="SectionTitle.TLabel",
+            text="COMING SOON",
+            style="Badge.TLabel",
         ).pack()
 
         ttk.Label(
@@ -68,7 +68,7 @@ class TrackingPlaceholderPage(ttk.Frame):
         ):
             box = ttk.Frame(
                 features,
-                style="Card.TFrame",
+                style="Surface.TFrame",
                 padding=16,
             )
             box.pack(
