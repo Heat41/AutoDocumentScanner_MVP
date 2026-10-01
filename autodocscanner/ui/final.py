@@ -183,29 +183,6 @@ class FinalScannerUI(SafeScannerUI):
             style="Subheader.TLabel",
         ).pack(anchor="w", pady=(4, 0))
 
-        mode_panel = ttk.Frame(header)
-        mode_panel.pack(side="right", anchor="e")
-
-        ttk.Label(
-            mode_panel,
-            text="Mode gambar",
-            style="Subheader.TLabel",
-        ).pack(side="left", padx=(0, 10))
-
-        ttk.Radiobutton(
-            mode_panel,
-            text="Warna",
-            variable=self.output_mode,
-            value="color",
-        ).pack(side="left")
-
-        ttk.Radiobutton(
-            mode_panel,
-            text="Grayscale",
-            variable=self.output_mode,
-            value="grayscale",
-        ).pack(side="left", padx=(10, 0))
-
         self._drop_zone = tk.Frame(
             root,
             bg="#EFF6FF",
@@ -482,6 +459,194 @@ class FinalScannerUI(SafeScannerUI):
         )
         label.pack(fill="both", expand=True)
         return label
+
+    @staticmethod
+    def _ktp_mode_label(mode):
+        return {
+            "color": "Warna",
+            "grayscale": "Grayscale",
+            "bw": "B&W",
+        }.get(mode, "Warna")
+
+    def _choose_ktp_processing_mode(self):
+        try:
+            from autodocscanner.ui.theme import get_theme
+            mode_var = getattr(self, "theme_mode", None)
+            theme_name = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(theme_name)
+        except Exception:
+            palette = {
+                "surface": "#FFFFFF",
+                "surface_soft": "#F8FAFC",
+                "text": "#172033",
+                "muted": "#64748B",
+                "accent": "#2563EB",
+            }
+
+        current_mode = self.output_mode.get() or "color"
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Pilih Mode Hasil")
+        dialog.transient(self)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.configure(bg=palette["surface"])
+
+        selected_mode = tk.StringVar(
+            master=dialog,
+            value=current_mode,
+        )
+        result = {
+            "accepted": False,
+            "mode": current_mode,
+        }
+
+        container = tk.Frame(
+            dialog,
+            bg=palette["surface"],
+            padx=26,
+            pady=24,
+        )
+        container.pack(fill="both", expand=True)
+
+        tk.Label(
+            container,
+            text="Pilih Mode Hasil KTP",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            container,
+            text=(
+                "Pilih tampilan hasil sebelum proses otomatis dijalankan."
+            ),
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 16))
+
+        options = (
+            (
+                "color",
+                "Warna",
+                "Pertahankan warna asli KTP.",
+            ),
+            (
+                "grayscale",
+                "Grayscale",
+                "Hasil abu-abu yang lebih ringan.",
+            ),
+            (
+                "bw",
+                "B&W",
+                "Hitam-putih dengan kontras tinggi.",
+            ),
+        )
+
+        for value, title, description in options:
+            row = tk.Frame(
+                container,
+                bg=palette["surface_soft"],
+                padx=12,
+                pady=10,
+            )
+            row.pack(fill="x", pady=(0, 8))
+
+            ttk.Radiobutton(
+                row,
+                text=title,
+                variable=selected_mode,
+                value=value,
+            ).pack(anchor="w")
+
+            tk.Label(
+                row,
+                text=description,
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+                font=("Segoe UI", 8),
+                anchor="w",
+            ).pack(
+                fill="x",
+                padx=(24, 0),
+                pady=(2, 0),
+            )
+
+            row.bind(
+                "<Button-1>",
+                lambda _event, v=value: selected_mode.set(v),
+            )
+
+        buttons = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        buttons.pack(fill="x", pady=(8, 0))
+
+        def cancel():
+            dialog.destroy()
+
+        def accept():
+            result["accepted"] = True
+            result["mode"] = selected_mode.get()
+            dialog.destroy()
+
+        ttk.Button(
+            buttons,
+            text="Batal",
+            style="Quiet.TButton",
+            command=cancel,
+        ).pack(side="right")
+
+        ttk.Button(
+            buttons,
+            text="Lanjutkan",
+            style="Accent.TButton",
+            command=accept,
+        ).pack(side="right", padx=(0, 8))
+
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.update_idletasks()
+
+        width = max(dialog.winfo_width(), 430)
+        height = dialog.winfo_height()
+        x = self.winfo_rootx() + max(
+            (self.winfo_width() - width) // 2,
+            0,
+        )
+        y = self.winfo_rooty() + max(
+            (self.winfo_height() - height) // 2,
+            0,
+        )
+        dialog.geometry(
+            f"{width}x{height}+{x}+{y}"
+        )
+
+        dialog.wait_window()
+        return result
+
+    def process_files(self):
+        if not self.files:
+            return super().process_files()
+
+        choice = self._choose_ktp_processing_mode()
+        if not choice["accepted"]:
+            return
+
+        self.output_mode.set(choice["mode"])
+        self.status_text.set(
+            "Mode hasil: "
+            f"{self._ktp_mode_label(choice['mode'])}"
+        )
+        return super().process_files()
 
     @staticmethod
     def _decode_drop_path(raw_path):
