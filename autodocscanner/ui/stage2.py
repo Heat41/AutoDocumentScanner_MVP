@@ -7,6 +7,9 @@ from autodocscanner.output.manager import build_output_path
 from autodocscanner.services.ktp_output import process_ktp_output
 from autodocscanner.ui.manual_document import ManualDocumentPage
 from autodocscanner.ui.responsive import ResponsiveScannerUI
+from autodocscanner.ui.sidebar import CollapsibleSidebar
+from autodocscanner.ui.theme import apply_theme, get_theme
+from autodocscanner.ui.tracking_placeholder import TrackingPlaceholderPage
 
 
 class Stage2ScannerUI(ResponsiveScannerUI):
@@ -18,9 +21,21 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     TRACKING_KTP_PAGE = "tracking_ktp"
     TRACKING_RELEASE_ENABLED = False
     NAVIGATION_ITEMS = (
-        ("▣  Auto Koreksi KTP", AUTO_KTP_PAGE),
-        ("▤  Dokumen Manual", MANUAL_DOCUMENT_PAGE),
-        ("🔒  Tracking KTP", TRACKING_KTP_PAGE),
+        {
+            "icon": "▣",
+            "label": "Auto Koreksi KTP",
+            "page": AUTO_KTP_PAGE,
+        },
+        {
+            "icon": "▤",
+            "label": "Dokumen Manual",
+            "page": MANUAL_DOCUMENT_PAGE,
+        },
+        {
+            "icon": "🔒",
+            "label": "Tracking KTP",
+            "page": TRACKING_KTP_PAGE,
+        },
     )
 
     def __init__(self):
@@ -37,12 +52,18 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             self.DEFAULT_OUTPUT_FORMAT
         )
         self._pdf_preview_by_output = {}
-        self._install_output_format_controls()
-        self._install_manual_document_page()
+        self.theme_mode = tk.StringVar(
+            master=self,
+            value="light",
+        )
         self._tracking_ktp_page = None
         self._tracking_placeholder_page = None
 
+        self._install_output_format_controls()
+        self._install_manual_document_page()
+
         self._ktp_page.pack_forget()
+        self._install_global_header()
         self._install_top_navigation()
         self._install_tracking_placeholder_page()
         self._ktp_page.pack(
@@ -50,6 +71,8 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             fill="both",
             expand=True,
         )
+
+        self._apply_app_theme()
         self._update_navigation_state()
 
     def _locate_ktp_page(self):
@@ -81,180 +104,205 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
 
     def _install_tracking_placeholder_page(self):
-        page = ttk.Frame(
+        self._tracking_placeholder_page = TrackingPlaceholderPage(
+            self
+        )
+
+    def _install_global_header(self):
+        self._global_header = ttk.Frame(
             self,
-            padding=32,
+            style="Surface.TFrame",
+            padding=(16, 10),
         )
-
-        card = ttk.Frame(
-            page,
-            style="Card.TFrame",
-            padding=34,
-        )
-        card.pack(
-            fill="both",
-            expand=True,
-            padx=50,
-            pady=50,
+        self._global_header.pack(
+            side="top",
+            fill="x",
         )
 
         ttk.Label(
-            card,
-            text="🔒",
-            style="SectionTitle.TLabel",
-        ).pack(pady=(34, 10))
-
-        ttk.Label(
-            card,
-            text="Tracking KTP",
-            style="SectionTitle.TLabel",
-        ).pack()
-
-        ttk.Label(
-            card,
-            text="Fitur khusus perangkat Supervisor",
-            style="CardMuted.TLabel",
-        ).pack(pady=(8, 20))
-
-        ttk.Label(
-            card,
-            text=(
-                "OCR Identitas  •  Review Data  •  "
-                "Rekam ke Website Induk"
-            ),
+            self._global_header,
+            text="AutoDocumentScanner",
             style="CardLabel.TLabel",
-        ).pack(pady=(0, 20))
+        ).pack(side="left")
+
+        theme_group = ttk.Frame(
+            self._global_header,
+            style="Surface.TFrame",
+        )
+        theme_group.pack(side="right")
 
         ttk.Label(
-            card,
-            text="COMING SOON",
-            style="Badge.TLabel",
-        ).pack()
+            theme_group,
+            text="Tema",
+            style="CardMuted.TLabel",
+        ).pack(side="left", padx=(0, 8))
 
-        self._tracking_placeholder_page = page
+        ttk.Button(
+            theme_group,
+            text="☀ Terang",
+            command=lambda: self.set_theme("light"),
+        ).pack(side="left")
+
+        ttk.Button(
+            theme_group,
+            text="🌙 Gelap",
+            command=lambda: self.set_theme("dark"),
+        ).pack(side="left", padx=(6, 0))
 
     def _install_top_navigation(self):
-        self._navigation_bar = ttk.Frame(
+        self._navigation_bar = CollapsibleSidebar(
             self,
-            style="Sidebar.TFrame",
-            padding=(18, 22),
-            width=238,
+            items=self.NAVIGATION_ITEMS,
+            on_select=self._show_stage2_page,
+            active_page=self._active_stage2_page,
+            collapsed=False,
         )
         self._navigation_bar.pack(
             side="left",
             fill="y",
         )
-        self._navigation_bar.pack_propagate(False)
 
-        brand_block = ttk.Frame(
-            self._navigation_bar,
-            style="Sidebar.TFrame",
-        )
-        brand_block.pack(fill="x", pady=(0, 26))
-
-        ttk.Label(
-            brand_block,
-            text="AUTODOCUMENT",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w")
-
-        ttk.Label(
-            brand_block,
-            text="Scanner",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w", pady=(1, 3))
-
-        ttk.Label(
-            brand_block,
-            text="Internal Office Edition",
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w")
-
-        ttk.Label(
-            self._navigation_bar,
-            text="WORKSPACE",
-            style="SidebarSection.TLabel",
-        ).pack(anchor="w", pady=(0, 9))
-
-        self._navigation_buttons = {}
-
-        commands = {
-            self.AUTO_KTP_PAGE:
-                self.show_auto_ktp,
-            self.MANUAL_DOCUMENT_PAGE:
-                self.show_manual_document,
-            self.TRACKING_KTP_PAGE:
-                self.show_tracking_ktp,
-        }
-
-        for label, page_name in self.NAVIGATION_ITEMS:
-            button = ttk.Button(
-                self._navigation_bar,
-                text=label,
-                command=commands[page_name],
-                style="Nav.TButton",
-            )
-            button.pack(
-                fill="x",
-                pady=(0, 8),
-            )
-            self._navigation_buttons[
-                page_name
-            ] = button
-
-        ttk.Separator(
-            self._navigation_bar,
-            orient="horizontal",
-        ).pack(fill="x", pady=(10, 14))
-
-        ttk.Label(
-            self._navigation_bar,
-            text="●  Sistem siap digunakan",
-            style="StatusGood.TLabel",
-        ).pack(anchor="w", pady=(0, 14))
-
-        ttk.Label(
-            self._navigation_bar,
-            text="SUPERVISOR FEATURE",
-            style="SidebarSection.TLabel",
-        ).pack(anchor="w", pady=(0, 7))
-
-        ttk.Label(
-            self._navigation_bar,
-            text="Tracking KTP",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w")
-
-        ttk.Label(
-            self._navigation_bar,
-            text=(
-                "OCR identitas dan integrasi website induk "
-                "akan tersedia pada versi berikutnya."
-            ),
-            style="SidebarMuted.TLabel",
-            wraplength=188,
-            justify="left",
-        ).pack(anchor="w", pady=(4, 0))
+    def _show_stage2_page(self, page_name):
+        if page_name == self.AUTO_KTP_PAGE:
+            self.show_auto_ktp()
+        elif page_name == self.MANUAL_DOCUMENT_PAGE:
+            self.show_manual_document()
+        elif page_name == self.TRACKING_KTP_PAGE:
+            self.show_tracking_ktp()
 
     def _update_navigation_state(self):
-        buttons = getattr(
+        sidebar = getattr(
             self,
-            "_navigation_buttons",
-            {},
+            "_navigation_bar",
+            None,
+        )
+        if sidebar is not None:
+            sidebar.set_active(
+                self._active_stage2_page
+            )
+
+    def set_theme(self, mode):
+        if mode not in {"light", "dark"}:
+            return
+
+        self.theme_mode.set(mode)
+        self._apply_app_theme()
+
+    def _apply_app_theme(self):
+        palette = apply_theme(
+            self,
+            self.theme_mode.get(),
         )
 
-        for page_name, button in buttons.items():
-            if (
-                page_name
-                == self._active_stage2_page
-            ):
-                button.configure(
-                    style="NavActive.TButton"
-                )
-            else:
-                button.configure(
-                    style="Nav.TButton"
-                )
+        self._apply_custom_widget_theme(palette)
+
+        manual_page = getattr(
+            self,
+            "_manual_document_page",
+            None,
+        )
+        if manual_page is not None and hasattr(
+            manual_page,
+            "apply_theme",
+        ):
+            manual_page.apply_theme(palette)
+
+    def _apply_custom_widget_theme(self, palette):
+        def visit(widget):
+            try:
+                klass = widget.winfo_class()
+            except tk.TclError:
+                return
+
+            if klass in {"Frame", "Label"}:
+                try:
+                    current = str(widget.cget("bg")).upper()
+                except tk.TclError:
+                    current = ""
+
+                drop_colors = {
+                    "#EFF6FF",
+                    "#F8FAFC",
+                    "#FFFFFF",
+                    "#F4F7FB",
+                    "#F5F7FA",
+                    "#0F172A",
+                    "#111827",
+                    "#1E293B",
+                }
+
+                if current in drop_colors:
+                    target = (
+                        palette["surface_soft"]
+                        if current in {"#EFF6FF", "#F8FAFC", "#1E293B"}
+                        else palette["surface"]
+                    )
+                    try:
+                        widget.configure(bg=target)
+                    except tk.TclError:
+                        pass
+
+                if klass == "Label":
+                    try:
+                        fg = str(widget.cget("fg")).upper()
+                    except tk.TclError:
+                        fg = ""
+
+                    if fg in {
+                        "#1D4ED8",
+                        "#2563EB",
+                        "#3B82F6",
+                    }:
+                        try:
+                            widget.configure(
+                                fg=palette["accent"]
+                            )
+                        except tk.TclError:
+                            pass
+                    elif fg in {
+                        "#64748B",
+                        "#94A3B8",
+                        "#6D747C",
+                    }:
+                        try:
+                            widget.configure(
+                                fg=palette["muted"]
+                            )
+                        except tk.TclError:
+                            pass
+                    elif fg in {
+                        "#0F172A",
+                        "#111827",
+                        "#172033",
+                        "#252A30",
+                    }:
+                        try:
+                            widget.configure(
+                                fg=palette["text"]
+                            )
+                        except tk.TclError:
+                            pass
+
+            if klass == "Listbox":
+                try:
+                    widget.configure(
+                        bg=palette["surface"],
+                        fg=palette["text"],
+                        selectbackground=palette["active_bg"],
+                        selectforeground=palette["text"],
+                    )
+                except tk.TclError:
+                    pass
+
+            try:
+                children = widget.winfo_children()
+            except tk.TclError:
+                children = []
+
+            for child in children:
+                visit(child)
+
+        visit(self)
 
     def _hide_stage2_pages(self):
         self._ktp_page.pack_forget()
