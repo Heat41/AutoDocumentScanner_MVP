@@ -337,7 +337,7 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Button(
             file_actions,
-            text="Folder Output",
+            text="Simpan",
             style="Secondary.TButton",
             command=self.choose_output,
         ).pack(side="right")
