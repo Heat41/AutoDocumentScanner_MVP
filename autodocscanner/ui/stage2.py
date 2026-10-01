@@ -193,7 +193,13 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         ttk.Separator(
             self._navigation_bar,
             orient="horizontal",
-        ).pack(fill="x", pady=(10, 12))
+        ).pack(fill="x", pady=(10, 14))
+
+        ttk.Label(
+            self._navigation_bar,
+            text="●  Sistem siap digunakan",
+            style="StatusGood.TLabel",
+        ).pack(anchor="w", pady=(0, 14))
 
         ttk.Label(
             self._navigation_bar,
