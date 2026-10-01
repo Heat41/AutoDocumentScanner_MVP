@@ -595,29 +595,109 @@ class FinalScannerUI(SafeScannerUI):
     def _show_loading_popup(self):
         self._hide_loading_popup()
 
+        palette = {
+            "bg": "#F5F7FA",
+            "surface": "#FFFFFF",
+            "surface_soft": "#F8FAFC",
+            "text": "#172033",
+            "muted": "#64748B",
+            "accent": "#2563EB",
+            "border": "#E2E8F0",
+        }
+
+        try:
+            from autodocscanner.ui.theme import get_theme
+            mode_var = getattr(self, "theme_mode", None)
+            mode = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(mode)
+        except Exception:
+            pass
+
         window = tk.Toplevel(self)
         self._loading_window = window
-        window.title("Sedang Memproses")
-        window.configure(bg=self.CARD)
+        window.title("Memproses")
+        window.configure(bg=palette["surface"])
         window.resizable(False, False)
         window.transient(self)
         window.protocol("WM_DELETE_WINDOW", lambda: None)
 
-        container = tk.Frame(
+        try:
+            window.attributes("-topmost", True)
+            window.after(
+                250,
+                lambda: window.attributes("-topmost", False),
+            )
+        except tk.TclError:
+            pass
+
+        shell = tk.Frame(
             window,
-            bg=self.CARD,
-            padx=30,
-            pady=26,
+            bg=palette["surface"],
+            bd=0,
+            highlightthickness=0,
+        )
+        shell.pack(fill="both", expand=True)
+
+        accent = tk.Frame(
+            shell,
+            bg=palette["accent"],
+            height=4,
+        )
+        accent.pack(fill="x")
+        accent.pack_propagate(False)
+
+        container = tk.Frame(
+            shell,
+            bg=palette["surface"],
+            padx=28,
+            pady=24,
         )
         container.pack(fill="both", expand=True)
 
-        tk.Label(
+        header = tk.Frame(
             container,
-            text="Memproses dokumen",
-            bg=self.CARD,
-            fg=self.TEXT,
+            bg=palette["surface"],
+        )
+        header.pack(fill="x")
+
+        icon = tk.Label(
+            header,
+            text="◌",
+            bg=palette["surface_soft"],
+            fg=palette["accent"],
             font=("Segoe UI Semibold", 13),
-        ).pack(anchor="w")
+            width=2,
+            height=1,
+        )
+        icon.pack(side="left", padx=(0, 12))
+
+        title_block = tk.Frame(
+            header,
+            bg=palette["surface"],
+        )
+        title_block.pack(side="left", fill="x", expand=True)
+
+        tk.Label(
+            title_block,
+            text="Memproses dokumen",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 13),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            title_block,
+            text="AutoDocumentScanner sedang menyiapkan hasil.",
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 8),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 0))
 
         self._loading_detail_var = tk.StringVar(
             value=self._loading_detail(
@@ -626,35 +706,72 @@ class FinalScannerUI(SafeScannerUI):
             )
         )
 
-        tk.Label(
+        detail_card = tk.Frame(
             container,
+            bg=palette["surface_soft"],
+            bd=0,
+            padx=14,
+            pady=12,
+        )
+        detail_card.pack(fill="x", pady=(18, 14))
+
+        tk.Label(
+            detail_card,
             textvariable=self._loading_detail_var,
-            bg=self.CARD,
-            fg=self.MUTED,
-            font=("Segoe UI", 9),
+            bg=palette["surface_soft"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 9),
             justify="left",
             anchor="w",
-            wraplength=330,
-        ).pack(fill="x", pady=(6, 16))
+            wraplength=360,
+        ).pack(fill="x")
+
+        tk.Label(
+            detail_card,
+            text=(
+                f"{len(self.files)} file dalam antrean"
+                if len(self.files) != 1
+                else "1 file dalam antrean"
+            ),
+            bg=palette["surface_soft"],
+            fg=palette["muted"],
+            font=("Segoe UI", 8),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 0))
 
         self._loading_progress = ttk.Progressbar(
             container,
             mode="indeterminate",
-            length=330,
+            length=360,
         )
         self._loading_progress.pack(fill="x")
-        self._loading_progress.start(12)
+        self._loading_progress.start(10)
+
+        footer = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        footer.pack(fill="x", pady=(12, 0))
 
         tk.Label(
-            container,
-            text="Mohon tunggu sampai proses selesai.",
-            bg=self.CARD,
-            fg=self.MUTED,
+            footer,
+            text="Jangan tutup aplikasi saat proses berlangsung.",
+            bg=palette["surface"],
+            fg=palette["muted"],
             font=("Segoe UI", 8),
-        ).pack(anchor="w", pady=(12, 0))
+            anchor="w",
+        ).pack(side="left")
+
+        tk.Label(
+            footer,
+            text="● Memproses",
+            bg=palette["surface"],
+            fg=palette["accent"],
+            font=("Segoe UI Semibold", 8),
+        ).pack(side="right")
 
         window.update_idletasks()
-        popup_width = window.winfo_width()
+        popup_width = max(window.winfo_width(), 430)
         popup_height = window.winfo_height()
         x = self.winfo_rootx() + max(
             (self.winfo_width() - popup_width) // 2,
@@ -664,7 +781,9 @@ class FinalScannerUI(SafeScannerUI):
             (self.winfo_height() - popup_height) // 2,
             0,
         )
-        window.geometry(f"+{x}+{y}")
+        window.geometry(
+            f"{popup_width}x{popup_height}+{x}+{y}"
+        )
         window.lift()
 
     def _hide_loading_popup(self):
