@@ -37,10 +37,8 @@ class ManualDocumentPage(ttk.Frame):
             master=self,
             value=self.DEFAULT_OUTPUT_FORMAT,
         )
-        self.image_mode = tk.StringVar(
-            master=self,
-            value="color",
-        )
+        self._page_image_modes = {}
+        self._session_image_mode = None
         self.status_text = tk.StringVar(
             master=self,
             value="Pilih satu atau beberapa gambar dokumen untuk memulai.",
@@ -339,28 +337,6 @@ class ManualDocumentPage(ttk.Frame):
             command=self.apply_current,
         ).pack(side="left", padx=(12, 0))
 
-        image_mode_group = ttk.Frame(controls)
-        image_mode_group.pack(side="right", padx=(0, 18))
-
-        ttk.Label(
-            image_mode_group,
-            text="Mode",
-            style="Subheader.TLabel",
-        ).pack(side="left", padx=(0, 8))
-
-        for label, value in (
-            ("Warna", "color"),
-            ("Grayscale", "grayscale"),
-            ("B&W", "bw"),
-        ):
-            ttk.Radiobutton(
-                image_mode_group,
-                text=label,
-                variable=self.image_mode,
-                value=value,
-                command=self._on_image_mode_change,
-            ).pack(side="left", padx=(0, 8))
-
         export_group = ttk.Frame(controls)
         export_group.pack(side="right")
         ttk.Label(
@@ -603,7 +579,14 @@ class ManualDocumentPage(ttk.Frame):
             if image is None:
                 failed.append(Path(path).name)
                 continue
-            self.session.add_image(Path(path), image)
+            index = self.session.add_image(
+                Path(path),
+                image,
+            )
+            if self._session_image_mode is not None:
+                self._page_image_modes[
+                    index
+                ] = self._session_image_mode
 
         self._refresh_page_list()
 
@@ -639,6 +622,8 @@ class ManualDocumentPage(ttk.Frame):
         self.session = ManualDocumentSession()
         self.current_index = None
         self._active_corner = None
+        self._page_image_modes = {}
+        self._session_image_mode = None
         self.page_list.delete(0, tk.END)
         self.canvas.delete("all")
         self._canvas_photo = None
@@ -760,7 +745,15 @@ class ManualDocumentPage(ttk.Frame):
             padding=22,
         )
 
-        rendered = self._apply_image_mode(image)
+        mode = (
+            self._mode_for_page(self.current_index)
+            if self.current_index is not None
+            else "color"
+        )
+        rendered = self._apply_image_mode(
+            image,
+            mode,
+        )
 
         if rendered.ndim == 2:
             pil = Image.fromarray(rendered)
@@ -927,24 +920,70 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
+        choice = self._choose_processing_mode()
+        if not choice["accepted"]:
+            return
+
+        selected_mode = choice["mode"]
+
+        if choice["apply_all"]:
+            self._session_image_mode = selected_mode
+            self._page_image_modes = {
+                index: selected_mode
+                for index in range(len(self.session.pages))
+            }
+        else:
+            self._page_image_modes[
+                self.current_index
+            ] = selected_mode
+
         try:
-            result = self.session.apply_correction(self.current_index)
+            result = self.session.apply_correction(
+                self.current_index
+            )
         except Exception as exc:
-            messagebox.showerror("Koreksi Dokumen", str(exc))
+            messagebox.showerror(
+                "Koreksi Dokumen",
+                str(exc),
+            )
             return
 
         self._render_result(result)
         self._refresh_page_list()
-        self.page_list.selection_set(self.current_index)
-        self.status_text.set(
-            f"Halaman {self.current_index + 1} berhasil dikoreksi."
+        self.page_list.selection_set(
+            self.current_index
         )
 
-    def _apply_image_mode(self, image):
+        scope = (
+            "semua halaman"
+            if choice["apply_all"]
+            else f"halaman {self.current_index + 1}"
+        )
+        self.status_text.set(
+            f"Koreksi berhasil • "
+            f"{self._mode_label(selected_mode)} • {scope}."
+        )
+
+    def _mode_label(mode):
+        return {
+            "color": "Warna",
+            "grayscale": "Grayscale",
+            "bw": "B&W",
+        }.get(mode, "Warna")
+
+    def _mode_for_page(self, index):
+        index = int(index)
+        if index in self._page_image_modes:
+            return self._page_image_modes[index]
+        if self._session_image_mode is not None:
+            return self._session_image_mode
+        return "color"
+
+    def _apply_image_mode(self, image, mode="color"):
         if image is None:
             return None
 
-        mode = self.image_mode.get()
+        mode = str(mode or "color").lower()
 
         if mode == "color":
             return image.copy()
@@ -976,14 +1015,192 @@ class ManualDocumentPage(ttk.Frame):
 
         return image.copy()
 
-    def _on_image_mode_change(self):
-        if self.current_index is None:
-            return
-
-        page = self.session.pages[self.current_index]
-        self._render_result(
-            page.corrected_image
+    def _choose_processing_mode(self):
+        current_mode = self._mode_for_page(
+            self.current_index
         )
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Pilih Mode Hasil")
+        dialog.transient(self.winfo_toplevel())
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        try:
+            from autodocscanner.ui.theme import get_theme
+            root = self.winfo_toplevel()
+            mode_var = getattr(root, "theme_mode", None)
+            theme_name = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(theme_name)
+        except Exception:
+            palette = {
+                "surface": "#FFFFFF",
+                "surface_soft": "#F8FAFC",
+                "text": "#172033",
+                "muted": "#64748B",
+                "accent": "#2563EB",
+            }
+
+        dialog.configure(bg=palette["surface"])
+
+        result = {
+            "accepted": False,
+            "mode": current_mode,
+            "apply_all": False,
+        }
+
+        selected_mode = tk.StringVar(
+            master=dialog,
+            value=current_mode,
+        )
+        apply_all = tk.BooleanVar(
+            master=dialog,
+            value=False,
+        )
+
+        container = tk.Frame(
+            dialog,
+            bg=palette["surface"],
+            padx=26,
+            pady=24,
+        )
+        container.pack(fill="both", expand=True)
+
+        tk.Label(
+            container,
+            text="Pilih Mode Hasil",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            container,
+            text=(
+                "Tentukan tampilan hasil koreksi "
+                "untuk halaman dokumen ini."
+            ),
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 16))
+
+        options = (
+            (
+                "color",
+                "Warna",
+                "Pertahankan warna asli dokumen.",
+            ),
+            (
+                "grayscale",
+                "Grayscale",
+                "Hasil abu-abu yang lebih ringan.",
+            ),
+            (
+                "bw",
+                "B&W",
+                "Hitam-putih dengan kontras tinggi untuk teks.",
+            ),
+        )
+
+        for value, title, description in options:
+            row = tk.Frame(
+                container,
+                bg=palette["surface_soft"],
+                padx=12,
+                pady=10,
+            )
+            row.pack(fill="x", pady=(0, 8))
+
+            radio = ttk.Radiobutton(
+                row,
+                text=title,
+                variable=selected_mode,
+                value=value,
+            )
+            radio.pack(anchor="w")
+
+            tk.Label(
+                row,
+                text=description,
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+                font=("Segoe UI", 8),
+                anchor="w",
+            ).pack(fill="x", padx=(24, 0), pady=(2, 0))
+
+            row.bind(
+                "<Button-1>",
+                lambda _event, v=value: selected_mode.set(v),
+            )
+
+        apply_row = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        apply_row.pack(fill="x", pady=(6, 16))
+
+        ttk.Checkbutton(
+            apply_row,
+            text="Terapkan mode ini ke semua halaman",
+            variable=apply_all,
+        ).pack(anchor="w")
+
+        buttons = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        buttons.pack(fill="x")
+
+        def cancel():
+            dialog.destroy()
+
+        def accept():
+            result["accepted"] = True
+            result["mode"] = selected_mode.get()
+            result["apply_all"] = bool(apply_all.get())
+            dialog.destroy()
+
+        ttk.Button(
+            buttons,
+            text="Batal",
+            style="Quiet.TButton",
+            command=cancel,
+        ).pack(side="right")
+
+        ttk.Button(
+            buttons,
+            text="Lanjutkan",
+            style="Accent.TButton",
+            command=accept,
+        ).pack(side="right", padx=(0, 8))
+
+        dialog.update_idletasks()
+        width = max(dialog.winfo_width(), 430)
+        height = dialog.winfo_height()
+        root = self.winfo_toplevel()
+        x = root.winfo_rootx() + max(
+            (root.winfo_width() - width) // 2,
+            0,
+        )
+        y = root.winfo_rooty() + max(
+            (root.winfo_height() - height) // 2,
+            0,
+        )
+        dialog.geometry(
+            f"{width}x{height}+{x}+{y}"
+        )
+
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.wait_window()
+
+        return result
 
     def _render_result(self, image):
         if image is None:
@@ -1062,9 +1279,15 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
+        corrected_images = self.session.corrected_images()
         images = [
-            self._apply_image_mode(image)
-            for image in self.session.corrected_images()
+            self._apply_image_mode(
+                image,
+                self._mode_for_page(index),
+            )
+            for index, image in enumerate(
+                corrected_images
+            )
         ]
 
         try:
