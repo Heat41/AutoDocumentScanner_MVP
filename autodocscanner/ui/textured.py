@@ -334,7 +334,7 @@ class TexturedScannerUI(FinalScannerUI):
             frame,
             bg=self.CARD,
             padx=12,
-            pady=(0, 12),
+            pady=12,
         )
         content.pack(fill="both", expand=True)
 
