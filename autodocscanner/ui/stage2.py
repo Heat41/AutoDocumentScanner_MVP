@@ -18,9 +18,9 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     TRACKING_KTP_PAGE = "tracking_ktp"
     TRACKING_RELEASE_ENABLED = False
     NAVIGATION_ITEMS = (
-        ("Auto Koreksi KTP", AUTO_KTP_PAGE),
-        ("Koreksi Dokumen Manual", MANUAL_DOCUMENT_PAGE),
-        ("🔒 Tracking KTP · Coming Soon", TRACKING_KTP_PAGE),
+        ("▣  Auto Koreksi KTP", AUTO_KTP_PAGE),
+        ("▤  Dokumen Manual", MANUAL_DOCUMENT_PAGE),
+        ("🔒  Tracking KTP", TRACKING_KTP_PAGE),
     )
 
     def __init__(self):
@@ -137,8 +137,8 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         self._navigation_bar = ttk.Frame(
             self,
             style="Sidebar.TFrame",
-            padding=(14, 18),
-            width=220,
+            padding=(18, 22),
+            width=238,
         )
         self._navigation_bar.pack(
             side="left",
@@ -146,23 +146,35 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
         self._navigation_bar.pack_propagate(False)
 
-        ttk.Label(
+        brand_block = ttk.Frame(
             self._navigation_bar,
+            style="Sidebar.TFrame",
+        )
+        brand_block.pack(fill="x", pady=(0, 26))
+
+        ttk.Label(
+            brand_block,
             text="AUTODOCUMENT",
             style="SidebarTitle.TLabel",
-        ).pack(anchor="w", pady=(2, 2))
+        ).pack(anchor="w")
+
+        ttk.Label(
+            brand_block,
+            text="Scanner",
+            style="SidebarTitle.TLabel",
+        ).pack(anchor="w", pady=(1, 3))
+
+        ttk.Label(
+            brand_block,
+            text="Internal Office Edition",
+            style="SidebarMuted.TLabel",
+        ).pack(anchor="w")
 
         ttk.Label(
             self._navigation_bar,
-            text="Scan • Perspective • Export",
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(0, 24))
-
-        ttk.Label(
-            self._navigation_bar,
-            text="MENU",
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(0, 8))
+            text="WORKSPACE",
+            style="SidebarSection.TLabel",
+        ).pack(anchor="w", pady=(0, 9))
 
         self._navigation_buttons = {}
 
@@ -203,20 +215,26 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
         ttk.Label(
             self._navigation_bar,
-            text="COMING SOON",
-            style="Badge.TLabel",
-        ).pack(anchor="w", pady=(0, 8))
+            text="SUPERVISOR FEATURE",
+            style="SidebarSection.TLabel",
+        ).pack(anchor="w", pady=(0, 7))
+
+        ttk.Label(
+            self._navigation_bar,
+            text="Tracking KTP",
+            style="SidebarTitle.TLabel",
+        ).pack(anchor="w")
 
         ttk.Label(
             self._navigation_bar,
             text=(
-                "Tracking KTP disiapkan khusus "
-                "untuk perangkat Supervisor."
+                "OCR identitas dan integrasi website induk "
+                "akan tersedia pada versi berikutnya."
             ),
             style="SidebarMuted.TLabel",
-            wraplength=175,
+            wraplength=188,
             justify="left",
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(4, 0))
 
     def _update_navigation_state(self):
         buttons = getattr(
