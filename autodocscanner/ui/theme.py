@@ -54,8 +54,6 @@ def _window_handles(root):
     except (tk.TclError, TypeError, ValueError):
         return ()
 
-    handles = []
-
     try:
         parent = int(
             ctypes.windll.user32.GetParent(
@@ -64,14 +62,11 @@ def _window_handles(root):
             or 0
         )
         if parent:
-            handles.append(parent)
+            return (parent,)
     except Exception:
         pass
 
-    if child not in handles:
-        handles.append(child)
-
-    return tuple(handles)
+    return (child,)
 
 
 def apply_windows_titlebar(root, palette):
