@@ -751,6 +751,43 @@ class ManualDocumentPage(ttk.Frame):
         self._result_photo = ImageTk.PhotoImage(pil)
         self.result_label.configure(image=self._result_photo, text="")
 
+    def apply_theme(self, palette):
+        try:
+            self.configure(
+                style="TFrame"
+            )
+        except Exception:
+            pass
+
+        try:
+            self._drop_zone.configure(
+                bg=palette["surface_soft"],
+                highlightbackground=palette["border"],
+            )
+            self._drop_zone_title.configure(
+                bg=palette["surface_soft"],
+                fg=palette["accent"],
+            )
+        except Exception:
+            pass
+
+        try:
+            self.canvas.configure(
+                bg=palette["surface_soft"],
+            )
+            self.result_label.configure(
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+            )
+            self.page_list.configure(
+                bg=palette["surface"],
+                fg=palette["text"],
+                selectbackground=palette["active_bg"],
+                selectforeground=palette["text"],
+            )
+        except Exception:
+            pass
+
     def export_results(self):
         if not self.session.pages:
             messagebox.showinfo(
