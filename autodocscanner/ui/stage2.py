@@ -1,9 +1,14 @@
-from io import BytesIO
 from pathlib import Path
+import shutil
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
-from autodocscanner.output.manager import build_output_path
+import cv2
+
+from autodocscanner.output.manager import (
+    build_output_path,
+    save_pdf_pages,
+)
 from autodocscanner.services.ktp_output import process_ktp_output
 from autodocscanner.ui.manual_document import ManualDocumentPage
 from autodocscanner.ui.responsive import ResponsiveScannerUI
@@ -44,14 +49,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         self._ktp_page = self._locate_ktp_page()
         self._active_stage2_page = self.AUTO_KTP_PAGE
 
-        self.output_format = tk.StringVar(
-            master=self,
-            value=self.DEFAULT_OUTPUT_FORMAT,
-        )
-        self._active_output_format = (
-            self.DEFAULT_OUTPUT_FORMAT
-        )
-        self._pdf_preview_by_output = {}
+        self._active_output_format = "image"
         self.theme_mode = tk.StringVar(
             master=self,
             value="light",
@@ -394,100 +392,147 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         panel.pack(
             side="right",
             before=self.process_button,
-            padx=(0, 4),
-        )
-
-        ttk.Label(
-            panel,
-            text="Format",
-            style="Subheader.TLabel",
-        ).pack(
-            side="left",
             padx=(0, 8),
         )
 
-        ttk.Radiobutton(
+        ttk.Button(
             panel,
-            text="Gambar",
-            variable=self.output_format,
-            value="image",
+            text="Simpan PDF",
+            style="Secondary.TButton",
+            command=self.save_ktp_pdf,
         ).pack(side="left")
-
-        ttk.Radiobutton(
-            panel,
-            text="PDF",
-            variable=self.output_format,
-            value="pdf",
-        ).pack(
-            side="left",
-            padx=(8, 0),
-        )
 
         self._format_panel = panel
 
     def process_files(self):
-        self._active_output_format = (
-            self.output_format.get()
-        )
+        self._active_output_format = "image"
         return super().process_files()
 
     def _set_files(self, paths):
-        self._pdf_preview_by_output.clear()
         super()._set_files(paths)
 
-    def _show_result(self, path):
-        path = Path(path)
-
-        if not self._is_pdf_path(path):
-            return super()._show_result(path)
-
-        preview_bytes = (
-            self._pdf_preview_by_output.get(
-                str(path)
+    def _processed_image_paths(self):
+        outputs = []
+        for input_path in self.files:
+            output = self._output_by_file.get(
+                str(input_path)
             )
+            if output is None:
+                continue
+            output = Path(output)
+            if (
+                output.exists()
+                and output.suffix.lower()
+                in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+            ):
+                outputs.append(output)
+        return outputs
+
+    def choose_output(self):
+        outputs = self._processed_image_paths()
+        if not outputs:
+            messagebox.showinfo(
+                "Simpan Hasil",
+                "Belum ada hasil yang bisa disimpan. "
+                "Jalankan Proses Otomatis terlebih dahulu.",
+            )
+            return
+
+        folder = filedialog.askdirectory(
+            title="Pilih folder penyimpanan hasil KTP",
+        )
+        if not folder:
+            return
+
+        target_dir = Path(folder)
+        target_dir.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
-        if not preview_bytes:
-            self._result_photo = None
-            self.result_label.configure(
-                image="",
-                text=(
-                    "PDF tersimpan\n"
-                    f"{path.name}"
-                ),
-                justify="center",
+        saved = 0
+        for source in outputs:
+            target = target_dir / source.name
+            try:
+                if source.resolve() != target.resolve():
+                    shutil.copy2(
+                        source,
+                        target,
+                    )
+                saved += 1
+            except OSError:
+                continue
+
+        self.status_text.set(
+            f"{saved} hasil KTP disimpan ke {target_dir}"
+        )
+        messagebox.showinfo(
+            "Simpan Hasil",
+            f"{saved} file gambar berhasil disimpan.",
+        )
+
+    def save_ktp_pdf(self):
+        outputs = self._processed_image_paths()
+        if not outputs:
+            messagebox.showinfo(
+                "Simpan PDF",
+                "Belum ada hasil yang bisa dijadikan PDF. "
+                "Jalankan Proses Otomatis terlebih dahulu.",
+            )
+            return
+
+        target = filedialog.asksaveasfilename(
+            title="Simpan hasil KTP sebagai PDF",
+            initialfile="hasil_ktp.pdf",
+            defaultextension=".pdf",
+            filetypes=[("PDF", "*.pdf")],
+        )
+        if not target:
+            return
+
+        images = []
+        for path in outputs:
+            image = cv2.imread(
+                str(path)
+            )
+            if image is not None:
+                images.append(image)
+
+        if not images:
+            messagebox.showerror(
+                "Simpan PDF",
+                "Hasil gambar tidak dapat dibaca untuk dibuat PDF.",
             )
             return
 
         try:
-            self._result_photo = (
-                self._load_preview(
-                    BytesIO(preview_bytes)
-                )
+            saved_path = save_pdf_pages(
+                target,
+                images,
             )
-            self.result_label.configure(
-                image=self._result_photo,
-                text="",
+        except Exception as exc:
+            messagebox.showerror(
+                "Simpan PDF",
+                str(exc),
             )
-        except Exception:
-            self._result_photo = None
-            self.result_label.configure(
-                image="",
-                text=(
-                    "PDF berhasil dibuat, "
-                    "preview tidak tersedia.\n"
-                    f"{path.name}"
-                ),
-                justify="center",
-            )
+            return
+
+        self.status_text.set(
+            f"PDF tersimpan: {saved_path}"
+        )
+        messagebox.showinfo(
+            "Simpan PDF",
+            (
+                f"{len(images)} halaman berhasil "
+                f"disimpan ke PDF.\n\n{saved_path}"
+            ),
+        )
 
     def _process_worker(self, output_mode):
         success = 0
         failed = 0
         errors = []
-        output_format = (
-            self._active_output_format
-        )
+        output_format = "image"
 
         self.output_dir.mkdir(
             parents=True,
@@ -530,10 +575,6 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     processed["output_path"]
                 )
                 corners = processed["corners"]
-                preview_bytes = (
-                    processed["preview_bytes"]
-                )
-
                 self._failure_by_file.pop(
                     key,
                     None,
@@ -548,16 +589,6 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 self._output_by_file[key] = (
                     output_path
                 )
-
-                if preview_bytes:
-                    self._pdf_preview_by_output[
-                        str(output_path)
-                    ] = preview_bytes
-                else:
-                    self._pdf_preview_by_output.pop(
-                        str(output_path),
-                        None,
-                    )
 
                 success += 1
 
@@ -609,11 +640,6 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     key,
                     None,
                 )
-                self._pdf_preview_by_output.pop(
-                    str(attempted_output_path),
-                    None,
-                )
-
                 failure = {
                     "message": str(exc),
                     "metadata": metadata,
