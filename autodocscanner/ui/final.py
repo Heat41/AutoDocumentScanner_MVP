@@ -152,26 +152,26 @@ class FinalScannerUI(SafeScannerUI):
         self._loading_detail_var = None
         self._loading_watch_id = None
 
-        root = ttk.Frame(self, padding=22)
+        root = ttk.Frame(self, padding=(28, 24, 28, 20))
         root.pack(fill="both", expand=True)
 
         header = ttk.Frame(root)
-        header.pack(fill="x", pady=(0, 16))
+        header.pack(fill="x", pady=(0, 14))
 
         title_column = ttk.Frame(header)
         title_column.pack(side="left", fill="x", expand=True)
 
         ttk.Label(
             title_column,
-            text="Auto Document Scanner",
+            text="Auto Koreksi KTP",
             style="Header.TLabel",
         ).pack(anchor="w")
 
         ttk.Label(
             title_column,
             text=(
-                "Koreksi perspektif KTP otomatis, validasi kualitas, "
-                "dan output aman."
+                "Koreksi perspektif KTP secara otomatis, "
+                "kemudian simpan sebagai gambar atau PDF."
             ),
             style="Subheader.TLabel",
         ).pack(anchor="w", pady=(4, 0))
@@ -181,7 +181,7 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Label(
             mode_panel,
-            text="Output",
+            text="Mode gambar",
             style="Subheader.TLabel",
         ).pack(side="left", padx=(0, 10))
 
@@ -199,68 +199,60 @@ class FinalScannerUI(SafeScannerUI):
             value="grayscale",
         ).pack(side="left", padx=(10, 0))
 
-        ttk.Separator(root, orient="horizontal").pack(
-            fill="x",
-            pady=(0, 16),
-        )
-
-        # Reserve the action footer before the expandable body. With Tk pack,
-        # packing the expandable preview first can leave too little vertical
-        # space for widgets packed afterwards on short/scaled displays.
-        footer = ttk.Frame(root)
-        footer.pack(side="bottom", fill="x", pady=(12, 0))
-
-        body = ttk.Frame(root)
-        body.pack(fill="both", expand=True)
-
-        sidebar = ttk.Frame(
-            body,
-            style="Sidebar.TFrame",
-            padding=15,
-            width=250,
-        )
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
-
-        ttk.Label(
-            sidebar,
-            text="Input",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w")
-
-        ttk.Label(
-            sidebar,
-            textvariable=self.batch_text,
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(3, 12))
-
         self._drop_zone = tk.Frame(
-            sidebar,
+            root,
             bg="#F8FAFB",
             highlightbackground=self.BORDER,
             highlightthickness=1,
             bd=0,
-            padx=12,
-            pady=16,
+            padx=18,
+            pady=18,
         )
-        self._drop_zone.pack(fill="x", pady=(0, 10))
+        self._drop_zone.pack(fill="x", pady=(6, 16))
+
+        drop_text = tk.Frame(
+            self._drop_zone,
+            bg="#F8FAFB",
+        )
+        drop_text.pack(side="left", fill="x", expand=True)
 
         self._drop_zone_title = tk.Label(
-            self._drop_zone,
-            text="↓  Tarik & Lepas Foto KTP",
+            drop_text,
+            text="↓  Tarik & Lepas Foto KTP di sini",
             bg="#F8FAFB",
             fg=self.TEXT,
-            font=("Segoe UI Semibold", 9),
+            font=("Segoe UI Semibold", 10),
         )
-        self._drop_zone_title.pack()
+        self._drop_zone_title.pack(anchor="w")
 
         tk.Label(
-            self._drop_zone,
-            text="JPG • PNG • JPEG • BMP • WEBP",
+            drop_text,
+            text=(
+                "JPG, JPEG, PNG, BMP, WEBP  •  "
+                "bisa satu file, banyak file, atau satu folder"
+            ),
             bg="#F8FAFB",
             fg=self.MUTED,
             font=("Segoe UI", 8),
-        ).pack(pady=(4, 0))
+        ).pack(anchor="w", pady=(4, 0))
+
+        drop_actions = tk.Frame(
+            self._drop_zone,
+            bg="#F8FAFB",
+        )
+        drop_actions.pack(side="right", padx=(16, 0))
+
+        ttk.Button(
+            drop_actions,
+            text="Pilih Foto",
+            command=self.choose_files,
+        ).pack(side="left")
+
+        ttk.Button(
+            drop_actions,
+            text="Pilih Folder",
+            command=self.choose_folder,
+        ).pack(side="left", padx=(8, 0))
 
         self._drop_zone.bind(
             "<Button-1>",
@@ -272,39 +264,44 @@ class FinalScannerUI(SafeScannerUI):
         )
         self.after_idle(self._install_file_drop)
 
-        ttk.Button(
-            sidebar,
-            text="Pilih Foto",
-            command=self.choose_files,
-        ).pack(fill="x")
+        footer = ttk.Frame(root)
+        footer.pack(side="bottom", fill="x", pady=(14, 0))
 
-        ttk.Button(
-            sidebar,
-            text="Pilih Folder",
-            command=self.choose_folder,
-        ).pack(fill="x", pady=(7, 0))
+        body = ttk.Frame(root)
+        body.pack(fill="both", expand=True)
 
-        ttk.Button(
-            sidebar,
-            text="Folder Output",
-            command=self.choose_output,
-        ).pack(fill="x", pady=(7, 14))
-
-        ttk.Separator(sidebar, orient="horizontal").pack(
-            fill="x",
-            pady=(0, 12),
+        files_panel = ttk.Frame(
+            body,
+            style="Card.TFrame",
+            padding=14,
+            width=250,
         )
+        files_panel.pack(side="left", fill="y")
+        files_panel.pack_propagate(False)
+
+        files_header = ttk.Frame(
+            files_panel,
+            style="Card.TFrame",
+        )
+        files_header.pack(fill="x", pady=(0, 10))
 
         ttk.Label(
-            sidebar,
-            text="Daftar File",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w", pady=(0, 8))
+            files_header,
+            text="Foto Dipilih",
+            style="CardLabel.TLabel",
+        ).pack(anchor="w")
+
+        ttk.Label(
+            files_header,
+            textvariable=self.batch_text,
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(3, 0))
 
         list_frame = tk.Frame(
-            sidebar,
+            files_panel,
             bg=self.CARD,
-            highlightthickness=0,
+            highlightbackground=self.BORDER,
+            highlightthickness=1,
         )
         list_frame.pack(fill="both", expand=True)
 
@@ -326,12 +323,36 @@ class FinalScannerUI(SafeScannerUI):
             font=("Segoe UI", 9),
             yscrollcommand=scrollbar.set,
         )
-        self.listbox.pack(side="left", fill="both", expand=True)
+        self.listbox.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=4,
+            pady=4,
+        )
         scrollbar.configure(command=self.listbox.yview)
         self.listbox.bind(
             "<<ListboxSelect>>",
             self._on_select,
         )
+
+        file_actions = ttk.Frame(
+            files_panel,
+            style="Card.TFrame",
+        )
+        file_actions.pack(fill="x", pady=(10, 0))
+
+        ttk.Button(
+            file_actions,
+            text="Kosongkan",
+            command=self.clear_files,
+        ).pack(side="left")
+
+        ttk.Button(
+            file_actions,
+            text="Folder Output",
+            command=self.choose_output,
+        ).pack(side="right")
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -363,7 +384,11 @@ class FinalScannerUI(SafeScannerUI):
         )
 
         info = ttk.Frame(footer)
-        info.pack(side="left", fill="x", expand=True)
+        info.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
 
         ttk.Label(
             info,
@@ -372,7 +397,11 @@ class FinalScannerUI(SafeScannerUI):
         ).pack(anchor="w")
 
         quality_row = ttk.Frame(info)
-        quality_row.pack(anchor="w", fill="x", pady=(4, 0))
+        quality_row.pack(
+            anchor="w",
+            fill="x",
+            pady=(4, 0),
+        )
 
         ttk.Label(
             quality_row,
