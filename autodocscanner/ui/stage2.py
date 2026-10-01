@@ -156,7 +156,13 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             self._navigation_bar,
             text="Scan • Perspective • Export",
             style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(0, 20))
+        ).pack(anchor="w", pady=(0, 24))
+
+        ttk.Label(
+            self._navigation_bar,
+            text="MENU",
+            style="SidebarMuted.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
         self._navigation_buttons = {}
 
@@ -174,6 +180,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 self._navigation_bar,
                 text=label,
                 command=commands[page_name],
+                style="Nav.TButton",
             )
             button.pack(
                 fill="x",
@@ -187,6 +194,12 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             self._navigation_bar,
             orient="horizontal",
         ).pack(fill="x", pady=(10, 12))
+
+        ttk.Label(
+            self._navigation_bar,
+            text="COMING SOON",
+            style="Badge.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
         ttk.Label(
             self._navigation_bar,
@@ -212,11 +225,11 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 == self._active_stage2_page
             ):
                 button.configure(
-                    style="Accent.TButton"
+                    style="NavActive.TButton"
                 )
             else:
                 button.configure(
-                    style="TButton"
+                    style="Nav.TButton"
                 )
 
     def _hide_stage2_pages(self):
