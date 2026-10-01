@@ -154,6 +154,7 @@ class FinalScannerUI(SafeScannerUI):
 
         root = ttk.Frame(self, padding=(28, 24, 28, 20))
         root.pack(fill="both", expand=True)
+        self._page_root = root
 
         header = ttk.Frame(root)
         header.pack(fill="x", pady=(0, 14))
@@ -286,6 +287,7 @@ class FinalScannerUI(SafeScannerUI):
         )
         files_panel.pack(side="left", fill="y")
         files_panel.pack_propagate(False)
+        self._files_panel = files_panel
 
         files_header = ttk.Frame(
             files_panel,
@@ -388,6 +390,7 @@ class FinalScannerUI(SafeScannerUI):
 
         previews = ttk.Frame(workspace)
         previews.pack(fill="both", expand=True)
+        self._preview_parent = previews
 
         self.original_label = self._preview_card(
             previews,
