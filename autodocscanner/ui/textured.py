@@ -330,7 +330,7 @@ class TexturedScannerUI(FinalScannerUI):
     def _preview_card(self, parent, title):
         shadow = tk.Frame(
             parent,
-            bg="#E2E8F0",
+            bg=self.BG,
             bd=0,
         )
         shadow.pack(
@@ -347,8 +347,7 @@ class TexturedScannerUI(FinalScannerUI):
             shadow,
             bg=self.CARD,
             bd=0,
-            highlightbackground=self.BORDER,
-            highlightthickness=1,
+            highlightthickness=0,
         )
         frame.pack(
             fill="both",
