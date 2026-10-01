@@ -101,20 +101,20 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         ttk.Label(
             card,
             text="🔒",
-            style="Header.TLabel",
-        ).pack(pady=(24, 8))
+            style="SectionTitle.TLabel",
+        ).pack(pady=(34, 10))
 
         ttk.Label(
             card,
             text="Tracking KTP",
-            style="Header.TLabel",
+            style="SectionTitle.TLabel",
         ).pack()
 
         ttk.Label(
             card,
             text="Fitur khusus perangkat Supervisor",
-            style="Subheader.TLabel",
-        ).pack(pady=(8, 18))
+            style="CardMuted.TLabel",
+        ).pack(pady=(8, 20))
 
         ttk.Label(
             card,
@@ -123,12 +123,12 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 "Rekam ke Website Induk"
             ),
             style="CardLabel.TLabel",
-        ).pack(pady=(0, 18))
+        ).pack(pady=(0, 20))
 
         ttk.Label(
             card,
             text="COMING SOON",
-            style="Quality.TLabel",
+            style="Badge.TLabel",
         ).pack()
 
         self._tracking_placeholder_page = page
