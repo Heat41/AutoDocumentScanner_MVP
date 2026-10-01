@@ -245,20 +245,76 @@ def apply_theme(root, mode):
         padding=(8, 5),
     )
 
+    # Global button system: flatter, softer, and less boxy.
     style.configure(
         "TButton",
         background=palette["surface"],
         foreground=palette["text"],
-        borderwidth=1,
-        relief="solid",
-        padding=(12, 8),
+        borderwidth=0,
+        relief="flat",
+        padding=(14, 9),
         font=("Segoe UI", 9),
+        focusthickness=0,
+        focuscolor=palette["surface"],
     )
     style.map(
         "TButton",
         background=[
             ("active", palette["surface_soft"]),
+            ("pressed", palette["active_bg"]),
+            ("disabled", palette["surface_soft"]),
+        ],
+        foreground=[
+            ("disabled", palette["sidebar_muted"]),
+        ],
+        relief=[
+            ("pressed", "flat"),
+            ("active", "flat"),
+        ],
+    )
+
+    style.configure(
+        "Secondary.TButton",
+        background=palette["surface_soft"],
+        foreground=palette["text"],
+        borderwidth=0,
+        relief="flat",
+        padding=(14, 9),
+        font=("Segoe UI Semibold", 9),
+        focusthickness=0,
+        focuscolor=palette["surface_soft"],
+    )
+    style.map(
+        "Secondary.TButton",
+        background=[
+            ("active", palette["active_bg"]),
+            ("pressed", palette["active_bg"]),
+        ],
+        foreground=[
+            ("active", palette["accent"]),
+            ("pressed", palette["accent"]),
+        ],
+    )
+
+    style.configure(
+        "Quiet.TButton",
+        background=palette["bg"],
+        foreground=palette["muted"],
+        borderwidth=0,
+        relief="flat",
+        padding=(10, 7),
+        font=("Segoe UI", 9),
+        focusthickness=0,
+        focuscolor=palette["bg"],
+    )
+    style.map(
+        "Quiet.TButton",
+        background=[
+            ("active", palette["surface_soft"]),
             ("pressed", palette["surface_soft"]),
+        ],
+        foreground=[
+            ("active", palette["text"]),
         ],
     )
 
@@ -266,18 +322,27 @@ def apply_theme(root, mode):
         "Accent.TButton",
         background=palette["accent"],
         foreground="#FFFFFF",
-        borderwidth=1,
-        relief="solid",
-        padding=(18, 10),
+        borderwidth=0,
+        relief="flat",
+        padding=(20, 11),
         font=("Segoe UI Semibold", 10),
+        focusthickness=0,
+        focuscolor=palette["accent"],
     )
     style.map(
         "Accent.TButton",
         background=[
             ("active", palette["accent_hover"]),
             ("pressed", palette["accent_hover"]),
+            ("disabled", palette["sidebar_muted"]),
         ],
-        foreground=[("disabled", "#CBD5E1")],
+        foreground=[
+            ("disabled", "#E2E8F0"),
+        ],
+        relief=[
+            ("pressed", "flat"),
+            ("active", "flat"),
+        ],
     )
 
     style.configure(
