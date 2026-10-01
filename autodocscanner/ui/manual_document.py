@@ -71,6 +71,12 @@ class ManualDocumentPage(ttk.Frame):
 
         ttk.Label(
             title,
+            text="DOKUMEN",
+            style="Eyebrow.TLabel",
+        ).pack(anchor="w", pady=(0, 3))
+
+        ttk.Label(
+            title,
             text="Koreksi Dokumen Manual",
             style="Header.TLabel",
         ).pack(anchor="w")
@@ -88,11 +94,13 @@ class ManualDocumentPage(ttk.Frame):
         ttk.Button(
             actions,
             text="Pilih Dokumen",
+            style="Secondary.TButton",
             command=self.choose_images,
         ).pack(side="left")
         ttk.Button(
             actions,
             text="Kosongkan",
+            style="Quiet.TButton",
             command=self.clear_pages,
         ).pack(side="left", padx=(8, 0))
 
@@ -188,18 +196,21 @@ class ManualDocumentPage(ttk.Frame):
         page_nav.pack(fill="x", pady=(10, 0))
         ttk.Button(
             page_nav,
-            text="← Sebelumnya",
+            text="‹",
+            style="Quiet.TButton",
             command=self.select_previous_page,
         ).pack(side="left", fill="x", expand=True)
         ttk.Button(
             page_nav,
-            text="Berikutnya →",
+            text="›",
+            style="Quiet.TButton",
             command=self.select_next_page,
         ).pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         ttk.Button(
             sidebar,
             text="Folder Output",
+            style="Secondary.TButton",
             command=self.choose_output_dir,
         ).pack(fill="x", pady=(10, 0))
 
@@ -276,16 +287,19 @@ class ManualDocumentPage(ttk.Frame):
         ttk.Button(
             controls,
             text="Reset Titik",
+            style="Quiet.TButton",
             command=self.reset_current,
         ).pack(side="left")
         ttk.Button(
             controls,
             text="↺ Putar Kiri",
+            style="Secondary.TButton",
             command=lambda: self.rotate_current("left"),
         ).pack(side="left", padx=(8, 0))
         ttk.Button(
             controls,
             text="Putar Kanan ↻",
+            style="Secondary.TButton",
             command=lambda: self.rotate_current("right"),
         ).pack(side="left", padx=(8, 0))
         ttk.Button(
@@ -317,6 +331,7 @@ class ManualDocumentPage(ttk.Frame):
         ttk.Button(
             export_group,
             text="Export",
+            style="Accent.TButton",
             command=self.export_results,
         ).pack(side="left", padx=(12, 0))
 
