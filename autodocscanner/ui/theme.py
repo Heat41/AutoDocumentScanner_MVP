@@ -156,8 +156,8 @@ def apply_theme(root, mode):
     style.configure(
         "Card.TFrame",
         background=palette["surface"],
-        borderwidth=1,
-        relief="solid",
+        borderwidth=0,
+        relief="flat",
     )
     style.configure(
         "Sidebar.TFrame",
