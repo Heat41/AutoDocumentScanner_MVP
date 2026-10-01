@@ -140,12 +140,14 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         ttk.Button(
             theme_group,
             text="☀ Terang",
+            style="Quiet.TButton",
             command=lambda: self.set_theme("light"),
         ).pack(side="left")
 
         ttk.Button(
             theme_group,
             text="🌙 Gelap",
+            style="Quiet.TButton",
             command=lambda: self.set_theme("dark"),
         ).pack(side="left", padx=(6, 0))
 
