@@ -524,7 +524,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             "Simpan PDF",
             (
                 f"{len(images)} KTP berhasil disusun "
-                f"ke PDF A4 (maks. 4 kartu per halaman)."
+                f"ke PDF A4 (maks. 6 kartu per halaman)."
                 f"\n\n{saved_path}"
             ),
         )
