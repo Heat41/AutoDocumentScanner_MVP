@@ -13,16 +13,16 @@ class TexturedScannerUI(FinalScannerUI):
     FinalScannerUI and the locked pipeline below it.
     """
 
-    BG = "#F8FAFC"
+    BG = "#F4F7FB"
     CARD = "#FFFFFF"
-    TEXT = "#111827"
+    TEXT = "#0F172A"
     MUTED = "#64748B"
-    BORDER = "#E2E8F0"
-    SOFT = "#F1F5F9"
+    BORDER = "#DDE5F0"
+    SOFT = "#EEF3F8"
     ACCENT = "#2563EB"
 
-    PANEL = "#FFFFFF"
-    SHADOW = "#E2E8F0"
+    PANEL = "#0F172A"
+    SHADOW = "#D9E2EC"
     TEXTURE_LIGHT = "#F8FAFC"
     TEXTURE_MID = "#E2E8F0"
     TEXTURE_DARK = "#CBD5E1"
@@ -83,6 +83,12 @@ class TexturedScannerUI(FinalScannerUI):
             relief="flat",
         )
         style.configure(
+            "PremiumCard.TFrame",
+            background=self.CARD,
+            borderwidth=1,
+            relief="solid",
+        )
+        style.configure(
             "TLabel",
             background=self.BG,
             foreground=self.TEXT,
@@ -108,10 +114,24 @@ class TexturedScannerUI(FinalScannerUI):
         )
         style.configure(
             "StatusGood.TLabel",
-            background="#ECFDF5",
-            foreground="#047857",
+            background="#12372A",
+            foreground="#6EE7B7",
             font=("Segoe UI Semibold", 8),
-            padding=(8, 4),
+            padding=(8, 5),
+        )
+        style.configure(
+            "StatusChip.TLabel",
+            background="#EFF6FF",
+            foreground="#1D4ED8",
+            font=("Segoe UI Semibold", 8),
+            padding=(9, 5),
+        )
+        style.configure(
+            "NeutralChip.TLabel",
+            background="#F1F5F9",
+            foreground="#475569",
+            font=("Segoe UI Semibold", 8),
+            padding=(9, 5),
         )
         style.configure(
             "Eyebrow.TLabel",
@@ -137,12 +157,20 @@ class TexturedScannerUI(FinalScannerUI):
         style.configure(
             "SidebarTitle.TLabel",
             background=self.PANEL,
-            foreground=self.TEXT,
+            foreground="#F8FAFC",
+            font=("Segoe UI Semibold", 10),
         )
         style.configure(
             "SidebarMuted.TLabel",
             background=self.PANEL,
-            foreground=self.MUTED,
+            foreground="#94A3B8",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "SidebarSection.TLabel",
+            background=self.PANEL,
+            foreground="#64748B",
+            font=("Segoe UI Semibold", 8),
         )
         style.configure(
             "Quality.TLabel",
@@ -160,8 +188,8 @@ class TexturedScannerUI(FinalScannerUI):
         )
         style.configure(
             "Nav.TButton",
-            background="#FFFFFF",
-            foreground="#334155",
+            background=self.PANEL,
+            foreground="#CBD5E1",
             borderwidth=0,
             relief="flat",
             padding=(14, 11),
@@ -170,8 +198,8 @@ class TexturedScannerUI(FinalScannerUI):
         )
         style.configure(
             "NavActive.TButton",
-            background="#EFF6FF",
-            foreground="#1D4ED8",
+            background="#1D4ED8",
+            foreground="#FFFFFF",
             borderwidth=0,
             relief="flat",
             padding=(14, 11),
@@ -192,21 +220,21 @@ class TexturedScannerUI(FinalScannerUI):
         style.map(
             "Nav.TButton",
             background=[
-                ("active", "#F8FAFC"),
-                ("pressed", "#F1F5F9"),
+                ("active", "#1E293B"),
+                ("pressed", "#1E293B"),
             ],
             foreground=[
-                ("active", "#0F172A"),
+                ("active", "#FFFFFF"),
             ],
         )
         style.map(
             "NavActive.TButton",
             background=[
-                ("active", "#DBEAFE"),
-                ("pressed", "#DBEAFE"),
+                ("active", "#2563EB"),
+                ("pressed", "#1D4ED8"),
             ],
             foreground=[
-                ("active", "#1D4ED8"),
+                ("active", "#FFFFFF"),
             ],
         )
 
@@ -233,7 +261,8 @@ class TexturedScannerUI(FinalScannerUI):
         style.configure(
             "TRadiobutton",
             background=self.BG,
-            foreground=self.TEXT,
+            foreground="#334155",
+            font=("Segoe UI", 9),
         )
         style.map(
             "TRadiobutton",
