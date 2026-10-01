@@ -24,6 +24,8 @@ class ManualDocumentPage(ttk.Frame):
     DEFAULT_OUTPUT_FORMAT = "image"
     HANDLE_RADIUS = 8
     HANDLE_HIT_RADIUS = 18
+    NARROW_BREAKPOINT = 900
+    COMPACT_BREAKPOINT = 1180
 
     def __init__(self, parent, on_back=None, output_dir="output"):
         super().__init__(parent, padding=18)
@@ -48,7 +50,15 @@ class ManualDocumentPage(ttk.Frame):
         self._display_size = None
         self._display_offset = None
         self._active_corner = None
+        self._responsive_mode = None
+        self._resize_after_id = None
         self._build_ui()
+        self.bind(
+            "<Configure>",
+            self._on_page_resize,
+            add="+",
+        )
+        self.after_idle(self._apply_responsive_layout)
 
     @staticmethod
     def page_label(index, path, corrected):
@@ -117,20 +127,21 @@ class ManualDocumentPage(ttk.Frame):
 
         self._drop_zone_title = tk.Label(
             self._drop_zone,
-            text="↓  Tarik & Lepas Dokumen di sini",
+            text="⇧  Upload Dokumen",
             bg="#EFF6FF",
             fg="#1D4ED8",
-            font=("Segoe UI Semibold", 9),
+            font=("Segoe UI Semibold", 10),
         )
         self._drop_zone_title.pack(side="left")
 
-        tk.Label(
+        self._drop_zone_hint = tk.Label(
             self._drop_zone,
-            text="JPG • PNG • JPEG • BMP • WEBP",
+            text="Tarik & lepas file  •  JPG • PNG • JPEG • BMP • WEBP",
             bg="#EFF6FF",
             fg="#64748B",
             font=("Segoe UI", 8),
-        ).pack(side="right")
+        )
+        self._drop_zone_hint.pack(side="right")
 
         self._drop_zone.bind(
             "<Button-1>",
@@ -147,30 +158,36 @@ class ManualDocumentPage(ttk.Frame):
 
         sidebar = ttk.Frame(
             body,
-            style="Sidebar.TFrame",
+            style="Card.TFrame",
             padding=12,
-            width=235,
+            width=220,
         )
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
+        self._document_sidebar = sidebar
 
         ttk.Label(
             sidebar,
             text="Halaman Dokumen",
-            style="SidebarTitle.TLabel",
+            style="CardLabel.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             sidebar,
             text="✓ = sudah dikoreksi",
-            style="SidebarMuted.TLabel",
+            style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(2, 4))
         ttk.Label(
             sidebar,
             textvariable=self.page_position_text,
-            style="SidebarMuted.TLabel",
+            style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(0, 8))
 
-        list_wrap = tk.Frame(sidebar, bg="#FFFFFF")
+        list_wrap = tk.Frame(
+            sidebar,
+            bg="#FFFFFF",
+            highlightthickness=0,
+        )
+        self._page_list_wrap = list_wrap
         list_wrap.pack(fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(list_wrap, orient="vertical")
@@ -192,7 +209,7 @@ class ManualDocumentPage(ttk.Frame):
         scrollbar.configure(command=self.page_list.yview)
         self.page_list.bind("<<ListboxSelect>>", self._on_page_select)
 
-        page_nav = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        page_nav = ttk.Frame(sidebar, style="Surface.TFrame")
         page_nav.pack(fill="x", pady=(10, 0))
         ttk.Button(
             page_nav,
@@ -221,21 +238,28 @@ class ManualDocumentPage(ttk.Frame):
             expand=True,
             padx=(14, 0),
         )
+        self._document_workspace = workspace
 
         previews = ttk.Frame(workspace)
         previews.pack(fill="both", expand=True)
+        self._document_previews = previews
+
+        previews.grid_rowconfigure(0, weight=1)
+        previews.grid_columnconfigure(0, weight=2, uniform="document-preview")
+        previews.grid_columnconfigure(1, weight=1, uniform="document-preview")
 
         canvas_card = ttk.Frame(
             previews,
             style="Card.TFrame",
             padding=10,
         )
-        canvas_card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
             padx=(0, 6),
         )
+        self._canvas_card = canvas_card
         ttk.Label(
             canvas_card,
             text="Dokumen + 4 Titik",
@@ -259,12 +283,13 @@ class ManualDocumentPage(ttk.Frame):
             style="Card.TFrame",
             padding=10,
         )
-        result_card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        result_card.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
             padx=(6, 0),
         )
+        self._result_card = result_card
         ttk.Label(
             result_card,
             text="Preview Hasil",
@@ -273,7 +298,7 @@ class ManualDocumentPage(ttk.Frame):
 
         self.result_label = tk.Label(
             result_card,
-            text="Belum dikoreksi",
+            text="Preview belum tersedia\nTerapkan koreksi untuk melihat hasil",
             bg="#E9EDF0",
             fg="#737D85",
             bd=0,
@@ -283,6 +308,7 @@ class ManualDocumentPage(ttk.Frame):
 
         controls = ttk.Frame(workspace)
         controls.pack(fill="x", pady=(12, 0))
+        self._document_controls = controls
 
         ttk.Button(
             controls,
@@ -340,6 +366,126 @@ class ManualDocumentPage(ttk.Frame):
             textvariable=self.status_text,
             style="Subheader.TLabel",
         ).pack(fill="x", pady=(10, 0))
+
+    def _on_page_resize(self, event):
+        if event.widget is not self:
+            return
+
+        if self._resize_after_id is not None:
+            try:
+                self.after_cancel(self._resize_after_id)
+            except tk.TclError:
+                pass
+
+        self._resize_after_id = self.after(
+            120,
+            lambda: self._apply_responsive_layout(event.width),
+        )
+
+    def _apply_responsive_layout(self, width=None):
+        self._resize_after_id = None
+
+        try:
+            width = int(width or self.winfo_width())
+        except (TypeError, ValueError, tk.TclError):
+            return
+
+        if width < self.NARROW_BREAKPOINT:
+            mode = "narrow"
+        elif width < self.COMPACT_BREAKPOINT:
+            mode = "compact"
+        else:
+            mode = "wide"
+
+        if mode == self._responsive_mode:
+            return
+
+        self._responsive_mode = mode
+
+        try:
+            if mode == "wide":
+                self._document_sidebar.configure(width=220)
+                self._pack_document_previews_horizontal(
+                    canvas_weight=2,
+                    result_weight=1,
+                    gap=6,
+                )
+            elif mode == "compact":
+                self._document_sidebar.configure(width=185)
+                self._pack_document_previews_horizontal(
+                    canvas_weight=3,
+                    result_weight=2,
+                    gap=5,
+                )
+            else:
+                self._document_sidebar.configure(width=155)
+                self._pack_document_previews_vertical()
+        except tk.TclError:
+            return
+
+        if self.current_index is not None:
+            self.after_idle(self._render_current)
+
+    def _pack_document_previews_horizontal(
+        self,
+        canvas_weight,
+        result_weight,
+        gap,
+    ):
+        previews = self._document_previews
+        self._canvas_card.grid_forget()
+        self._result_card.grid_forget()
+
+        previews.grid_rowconfigure(0, weight=1)
+        previews.grid_rowconfigure(1, weight=0)
+        previews.grid_columnconfigure(
+            0,
+            weight=canvas_weight,
+            uniform="",
+        )
+        previews.grid_columnconfigure(
+            1,
+            weight=result_weight,
+            uniform="",
+        )
+
+        self._canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(0, gap),
+        )
+        self._result_card.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(gap, 0),
+        )
+
+    def _pack_document_previews_vertical(self):
+        previews = self._document_previews
+        self._canvas_card.grid_forget()
+        self._result_card.grid_forget()
+
+        previews.grid_columnconfigure(0, weight=1)
+        previews.grid_columnconfigure(1, weight=0)
+        previews.grid_rowconfigure(0, weight=3)
+        previews.grid_rowconfigure(1, weight=2)
+
+        self._canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=0,
+            pady=(0, 5),
+        )
+        self._result_card.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=0,
+            pady=(5, 0),
+        )
 
     @staticmethod
     def _decode_drop_path(raw_path):
@@ -471,7 +617,13 @@ class ManualDocumentPage(ttk.Frame):
         self.canvas.delete("all")
         self._canvas_photo = None
         self._result_photo = None
-        self.result_label.configure(image="", text="Belum dikoreksi")
+        self.result_label.configure(
+            image="",
+            text=(
+                "Preview belum tersedia\n"
+                "Terapkan koreksi untuk melihat hasil"
+            ),
+        )
         self._update_page_position()
         self.status_text.set("Daftar halaman dikosongkan.")
 
@@ -757,7 +909,13 @@ class ManualDocumentPage(ttk.Frame):
     def _render_result(self, image):
         if image is None:
             self._result_photo = None
-            self.result_label.configure(image="", text="Belum dikoreksi")
+            self.result_label.configure(
+                image="",
+                text=(
+                    "Preview belum tersedia\n"
+                    "Terapkan koreksi untuk melihat hasil"
+                ),
+            )
             return
 
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -783,6 +941,10 @@ class ManualDocumentPage(ttk.Frame):
                 bg=palette["surface_soft"],
                 fg=palette["accent"],
             )
+            self._drop_zone_hint.configure(
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+            )
         except Exception:
             pass
 
@@ -799,6 +961,9 @@ class ManualDocumentPage(ttk.Frame):
                 fg=palette["text"],
                 selectbackground=palette["active_bg"],
                 selectforeground=palette["text"],
+            )
+            self._page_list_wrap.configure(
+                bg=palette["surface"],
             )
         except Exception:
             pass
