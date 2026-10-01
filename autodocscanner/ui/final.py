@@ -287,7 +287,7 @@ class FinalScannerUI(SafeScannerUI):
 
         files_header = ttk.Frame(
             files_panel,
-            style="Card.TFrame",
+            style="Surface.TFrame",
         )
         files_header.pack(fill="x", pady=(0, 10))
 
@@ -344,7 +344,7 @@ class FinalScannerUI(SafeScannerUI):
 
         file_actions = ttk.Frame(
             files_panel,
-            style="Card.TFrame",
+            style="Surface.TFrame",
         )
         file_actions.pack(fill="x", pady=(10, 0))
 
