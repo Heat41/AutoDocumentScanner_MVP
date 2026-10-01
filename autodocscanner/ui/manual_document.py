@@ -745,24 +745,11 @@ class ManualDocumentPage(ttk.Frame):
             padding=22,
         )
 
-        mode = (
-            self._mode_for_page(self.current_index)
-            if self.current_index is not None
-            else "color"
-        )
-        rendered = self._apply_image_mode(
+        rgb = cv2.cvtColor(
             image,
-            mode,
+            cv2.COLOR_BGR2RGB,
         )
-
-        if rendered.ndim == 2:
-            pil = Image.fromarray(rendered)
-        else:
-            rgb = cv2.cvtColor(
-                rendered,
-                cv2.COLOR_BGR2RGB,
-            )
-            pil = Image.fromarray(rgb)
+        pil = Image.fromarray(rgb)
         pil = pil.resize(
             (display_width, display_height),
             Image.Resampling.LANCZOS,
@@ -964,6 +951,7 @@ class ManualDocumentPage(ttk.Frame):
             f"{self._mode_label(selected_mode)} • {scope}."
         )
 
+    @staticmethod
     def _mode_label(mode):
         return {
             "color": "Warna",
@@ -1214,11 +1202,34 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil = Image.fromarray(rgb)
-        pil.thumbnail((420, 520), Image.Resampling.LANCZOS)
+        mode = (
+            self._mode_for_page(self.current_index)
+            if self.current_index is not None
+            else "color"
+        )
+        rendered = self._apply_image_mode(
+            image,
+            mode,
+        )
+
+        if rendered.ndim == 2:
+            pil = Image.fromarray(rendered)
+        else:
+            rgb = cv2.cvtColor(
+                rendered,
+                cv2.COLOR_BGR2RGB,
+            )
+            pil = Image.fromarray(rgb)
+
+        pil.thumbnail(
+            (420, 520),
+            Image.Resampling.LANCZOS,
+        )
         self._result_photo = ImageTk.PhotoImage(pil)
-        self.result_label.configure(image=self._result_photo, text="")
+        self.result_label.configure(
+            image=self._result_photo,
+            text="",
+        )
 
     def apply_theme(self, palette):
         try:
