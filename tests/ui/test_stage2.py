@@ -78,7 +78,7 @@ class TestStage2UiContract(unittest.TestCase):
                     "manual_document",
                 ),
                 (
-                    "Tracking Data KTP",
+                    "🔒 Tracking KTP · Coming Soon",
                     "tracking_ktp",
                 ),
             ),
@@ -92,6 +92,11 @@ class TestStage2UiContract(unittest.TestCase):
                     "show_tracking_ktp",
                 )
             )
+        )
+
+    def test_tracking_is_locked_for_public_release(self):
+        self.assertFalse(
+            Stage2ScannerUI.TRACKING_RELEASE_ENABLED
         )
 
 
