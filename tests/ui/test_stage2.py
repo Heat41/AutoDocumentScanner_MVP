@@ -72,13 +72,13 @@ class TestStage2UiContract(unittest.TestCase):
         self.assertEqual(
             Stage2ScannerUI.NAVIGATION_ITEMS,
             (
-                ("Auto Koreksi KTP", "auto_ktp"),
+                ("▣  Auto Koreksi KTP", "auto_ktp"),
                 (
-                    "Koreksi Dokumen Manual",
+                    "▤  Dokumen Manual",
                     "manual_document",
                 ),
                 (
-                    "🔒 Tracking KTP · Coming Soon",
+                    "🔒  Tracking KTP",
                     "tracking_ktp",
                 ),
             ),
