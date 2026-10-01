@@ -3,8 +3,8 @@ from tkinter import ttk
 
 
 class CollapsibleSidebar(ttk.Frame):
-    EXPANDED_WIDTH = 228
-    COLLAPSED_WIDTH = 68
+    EXPANDED_WIDTH = 252
+    COLLAPSED_WIDTH = 72
 
     def __init__(
         self,
@@ -45,6 +45,7 @@ class CollapsibleSidebar(ttk.Frame):
         toggle = ttk.Button(
             top,
             text="☰",
+            style="Quiet.TButton",
             command=self.toggle,
         )
         toggle.pack(
@@ -54,13 +55,23 @@ class CollapsibleSidebar(ttk.Frame):
         )
 
         if not self.collapsed:
-            brand = ttk.Frame(top, style="Sidebar.TFrame")
-            brand.pack(side="left", padx=(10, 0))
+            brand = ttk.Frame(
+                top,
+                style="Sidebar.TFrame",
+                width=150,
+            )
+            brand.pack(
+                side="left",
+                fill="x",
+                expand=True,
+                padx=(10, 0),
+            )
+            brand.pack_propagate(False)
             ttk.Label(
                 brand,
                 text="AUTODOCUMENT",
                 style="SidebarTitle.TLabel",
-            ).pack(anchor="w")
+            ).pack(anchor="w", fill="x")
             ttk.Label(
                 brand,
                 text="Office Scanner",
@@ -128,7 +139,7 @@ class CollapsibleSidebar(ttk.Frame):
                 self,
                 text="Coming Soon • integrasi website induk",
                 style="SidebarMuted.TLabel",
-                wraplength=180,
+                wraplength=198,
                 justify="left",
             ).pack(anchor="w", pady=(3, 0))
 
