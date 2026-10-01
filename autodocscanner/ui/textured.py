@@ -423,31 +423,8 @@ class TexturedScannerUI(FinalScannerUI):
         return label
 
     def _show_loading_popup(self):
+        # The final UI now owns the complete themed loading experience.
         super()._show_loading_popup()
-
-        window = self._loading_window
-        if window is None:
-            return
-
-        try:
-            accent = tk.Canvas(
-                window,
-                height=6,
-                bg=self.ACCENT,
-                bd=0,
-                highlightthickness=0,
-            )
-            accent.place(
-                x=0,
-                y=0,
-                relwidth=1.0,
-            )
-            accent.bind(
-                "<Configure>",
-                lambda _event, target=accent: self._paint_texture_strip(target),
-            )
-        except tk.TclError:
-            pass
 
 
 def main():
