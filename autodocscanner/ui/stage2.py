@@ -40,7 +40,16 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         self._install_output_format_controls()
         self._install_manual_document_page()
         self._tracking_ktp_page = None
+        self._tracking_placeholder_page = None
+
+        self._ktp_page.pack_forget()
         self._install_top_navigation()
+        self._install_tracking_placeholder_page()
+        self._ktp_page.pack(
+            side="left",
+            fill="both",
+            expand=True,
+        )
         self._update_navigation_state()
 
     def _locate_ktp_page(self):
@@ -71,32 +80,83 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             scanner=self.scanner,
         )
 
+    def _install_tracking_placeholder_page(self):
+        page = ttk.Frame(
+            self,
+            padding=32,
+        )
+
+        card = ttk.Frame(
+            page,
+            style="Card.TFrame",
+            padding=34,
+        )
+        card.pack(
+            fill="both",
+            expand=True,
+            padx=50,
+            pady=50,
+        )
+
+        ttk.Label(
+            card,
+            text="🔒",
+            style="Header.TLabel",
+        ).pack(pady=(24, 8))
+
+        ttk.Label(
+            card,
+            text="Tracking KTP",
+            style="Header.TLabel",
+        ).pack()
+
+        ttk.Label(
+            card,
+            text="Fitur khusus perangkat Supervisor",
+            style="Subheader.TLabel",
+        ).pack(pady=(8, 18))
+
+        ttk.Label(
+            card,
+            text=(
+                "OCR Identitas  •  Review Data  •  "
+                "Rekam ke Website Induk"
+            ),
+            style="CardLabel.TLabel",
+        ).pack(pady=(0, 18))
+
+        ttk.Label(
+            card,
+            text="COMING SOON",
+            style="Quality.TLabel",
+        ).pack()
+
+        self._tracking_placeholder_page = page
+
     def _install_top_navigation(self):
         self._navigation_bar = ttk.Frame(
             self,
-            padding=(22, 12, 22, 0),
+            style="Sidebar.TFrame",
+            padding=(14, 18),
+            width=220,
         )
         self._navigation_bar.pack(
-            side="top",
-            fill="x",
-            before=self._ktp_page,
+            side="left",
+            fill="y",
         )
-
-        nav_card = ttk.Frame(
-            self._navigation_bar,
-            style="Card.TFrame",
-            padding=(10, 8),
-        )
-        nav_card.pack(fill="x")
+        self._navigation_bar.pack_propagate(False)
 
         ttk.Label(
-            nav_card,
-            text="Fitur",
-            style="CardMuted.TLabel",
-        ).pack(
-            side="left",
-            padx=(2, 14),
-        )
+            self._navigation_bar,
+            text="AUTODOCUMENT",
+            style="SidebarTitle.TLabel",
+        ).pack(anchor="w", pady=(2, 2))
+
+        ttk.Label(
+            self._navigation_bar,
+            text="Scan • Perspective • Export",
+            style="SidebarMuted.TLabel",
+        ).pack(anchor="w", pady=(0, 20))
 
         self._navigation_buttons = {}
 
@@ -111,23 +171,33 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
         for label, page_name in self.NAVIGATION_ITEMS:
             button = ttk.Button(
-                nav_card,
+                self._navigation_bar,
                 text=label,
                 command=commands[page_name],
             )
-            if (
-                page_name == self.TRACKING_KTP_PAGE
-                and not self.TRACKING_RELEASE_ENABLED
-            ):
-                button.configure(state="disabled")
-
             button.pack(
-                side="left",
-                padx=(0, 8),
+                fill="x",
+                pady=(0, 8),
             )
             self._navigation_buttons[
                 page_name
             ] = button
+
+        ttk.Separator(
+            self._navigation_bar,
+            orient="horizontal",
+        ).pack(fill="x", pady=(10, 12))
+
+        ttk.Label(
+            self._navigation_bar,
+            text=(
+                "Tracking KTP disiapkan khusus "
+                "untuk perangkat Supervisor."
+            ),
+            style="SidebarMuted.TLabel",
+            wraplength=175,
+            justify="left",
+        ).pack(anchor="w")
 
     def _update_navigation_state(self):
         buttons = getattr(
@@ -156,9 +226,13 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         if self._tracking_ktp_page is not None:
             self._tracking_ktp_page.pack_forget()
 
+        if self._tracking_placeholder_page is not None:
+            self._tracking_placeholder_page.pack_forget()
+
     def show_manual_document(self):
         self._hide_stage2_pages()
         self._manual_document_page.pack(
+            side="left",
             fill="both",
             expand=True,
         )
@@ -169,36 +243,34 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
 
     def show_tracking_ktp(self):
-        if not self.TRACKING_RELEASE_ENABLED:
-            messagebox.showinfo(
-                "Tracking KTP — Coming Soon",
-                (
-                    "Fitur Tracking KTP belum tersedia pada "
-                    "rilis ini.\n\n"
-                    "Fitur ini disiapkan khusus untuk Supervisor "
-                    "dan nantinya akan terhubung langsung ke "
-                    "website induk."
-                ),
-            )
-            return
-
-        if self._tracking_ktp_page is None:
-            self._install_tracking_ktp_page()
-
         self._hide_stage2_pages()
-        self._tracking_ktp_page.pack(
-            fill="both",
-            expand=True,
-        )
+
+        if not self.TRACKING_RELEASE_ENABLED:
+            self._tracking_placeholder_page.pack(
+                side="left",
+                fill="both",
+                expand=True,
+            )
+        else:
+            if self._tracking_ktp_page is None:
+                self._install_tracking_ktp_page()
+
+            self._tracking_ktp_page.pack(
+                side="left",
+                fill="both",
+                expand=True,
+            )
+
         self._active_stage2_page = self.TRACKING_KTP_PAGE
         self._update_navigation_state()
         self.title(
-            "Auto Document Scanner — Tracking Data KTP"
+            "Auto Document Scanner — Tracking KTP"
         )
 
     def show_auto_ktp(self):
         self._hide_stage2_pages()
         self._ktp_page.pack(
+            side="left",
             fill="both",
             expand=True,
         )
