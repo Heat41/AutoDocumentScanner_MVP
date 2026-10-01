@@ -13,19 +13,19 @@ class TexturedScannerUI(FinalScannerUI):
     FinalScannerUI and the locked pipeline below it.
     """
 
-    BG = "#EEF1F3"
-    CARD = "#FCFDFD"
-    TEXT = "#273038"
-    MUTED = "#6F7880"
-    BORDER = "#D7DDE1"
-    SOFT = "#E8ECEF"
-    ACCENT = "#506371"
+    BG = "#F8FAFC"
+    CARD = "#FFFFFF"
+    TEXT = "#111827"
+    MUTED = "#64748B"
+    BORDER = "#E2E8F0"
+    SOFT = "#F1F5F9"
+    ACCENT = "#2563EB"
 
-    PANEL = "#F6F8F9"
-    SHADOW = "#D6DCE0"
-    TEXTURE_LIGHT = "#F7F9FA"
-    TEXTURE_MID = "#E8ECEF"
-    TEXTURE_DARK = "#DCE2E6"
+    PANEL = "#FFFFFF"
+    SHADOW = "#E2E8F0"
+    TEXTURE_LIGHT = "#F8FAFC"
+    TEXTURE_MID = "#E2E8F0"
+    TEXTURE_DARK = "#CBD5E1"
 
     def __init__(self):
         super().__init__()
@@ -73,10 +73,14 @@ class TexturedScannerUI(FinalScannerUI):
             relief="solid",
         )
         style.configure(
+            "Surface.TFrame",
+            background=self.CARD,
+        )
+        style.configure(
             "Sidebar.TFrame",
             background=self.PANEL,
-            borderwidth=1,
-            relief="solid",
+            borderwidth=0,
+            relief="flat",
         )
         style.configure(
             "TLabel",
@@ -88,6 +92,19 @@ class TexturedScannerUI(FinalScannerUI):
             background=self.BG,
             foreground=self.TEXT,
             font=("Segoe UI Semibold", 20),
+        )
+        style.configure(
+            "SectionTitle.TLabel",
+            background=self.CARD,
+            foreground=self.TEXT,
+            font=("Segoe UI Semibold", 11),
+        )
+        style.configure(
+            "Badge.TLabel",
+            background="#EFF6FF",
+            foreground="#1D4ED8",
+            font=("Segoe UI Semibold", 8),
+            padding=(8, 3),
         )
         style.configure(
             "Subheader.TLabel",
@@ -122,21 +139,61 @@ class TexturedScannerUI(FinalScannerUI):
 
         style.configure(
             "TButton",
-            background="#F8FAFB",
+            background="#FFFFFF",
             foreground=self.TEXT,
             borderwidth=1,
             relief="solid",
             padding=(12, 8),
         )
+        style.configure(
+            "Nav.TButton",
+            background="#FFFFFF",
+            foreground="#334155",
+            borderwidth=0,
+            relief="flat",
+            padding=(14, 11),
+            anchor="w",
+            font=("Segoe UI Semibold", 9),
+        )
+        style.configure(
+            "NavActive.TButton",
+            background="#EFF6FF",
+            foreground="#1D4ED8",
+            borderwidth=0,
+            relief="flat",
+            padding=(14, 11),
+            anchor="w",
+            font=("Segoe UI Semibold", 9),
+        )
         style.map(
             "TButton",
             background=[
-                ("active", "#EFF3F5"),
-                ("pressed", "#E4E9EC"),
-                ("disabled", "#F1F3F4"),
+                ("active", "#F8FAFC"),
+                ("pressed", "#F1F5F9"),
+                ("disabled", "#F8FAFC"),
             ],
             foreground=[
-                ("disabled", "#9AA2A8"),
+                ("disabled", "#94A3B8"),
+            ],
+        )
+        style.map(
+            "Nav.TButton",
+            background=[
+                ("active", "#F8FAFC"),
+                ("pressed", "#F1F5F9"),
+            ],
+            foreground=[
+                ("active", "#0F172A"),
+            ],
+        )
+        style.map(
+            "NavActive.TButton",
+            background=[
+                ("active", "#DBEAFE"),
+                ("pressed", "#DBEAFE"),
+            ],
+            foreground=[
+                ("active", "#1D4ED8"),
             ],
         )
 
@@ -151,12 +208,12 @@ class TexturedScannerUI(FinalScannerUI):
         style.map(
             "Accent.TButton",
             background=[
-                ("active", "#5C7180"),
-                ("pressed", "#435560"),
-                ("disabled", "#9AA5AC"),
+                ("active", "#1D4ED8"),
+                ("pressed", "#1E40AF"),
+                ("disabled", "#94A3B8"),
             ],
             foreground=[
-                ("disabled", "#EEF1F3"),
+                ("disabled", "#F8FAFC"),
             ],
         )
 
