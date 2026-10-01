@@ -306,8 +306,7 @@ class FinalScannerUI(SafeScannerUI):
         list_frame = tk.Frame(
             files_panel,
             bg=self.CARD,
-            highlightbackground=self.BORDER,
-            highlightthickness=1,
+            highlightthickness=0,
         )
         list_frame.pack(fill="both", expand=True)
 
