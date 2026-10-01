@@ -328,18 +328,30 @@ class TexturedScannerUI(FinalScannerUI):
             )
 
     def _preview_card(self, parent, title):
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+            uniform="preview",
+        )
+        parent.grid_columnconfigure(
+            1,
+            weight=1,
+            uniform="preview",
+        )
+
+        column = 0 if title.startswith("Original") else 1
+
         shadow = tk.Frame(
             parent,
             bg=self.BG,
             bd=0,
         )
-        shadow.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(0, 7)
-            if title.startswith("Original")
-            else (7, 0),
+        shadow.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
+            padx=(0, 7) if column == 0 else (7, 0),
             pady=(0, 2),
         )
 
@@ -406,6 +418,8 @@ class TexturedScannerUI(FinalScannerUI):
             justify="center",
         )
         label.pack(fill="both", expand=True)
+
+        label._responsive_card = shadow
         return label
 
     def _show_loading_popup(self):
