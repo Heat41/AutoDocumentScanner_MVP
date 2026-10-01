@@ -633,21 +633,6 @@ class FinalScannerUI(SafeScannerUI):
         dialog.wait_window()
         return result
 
-    def process_files(self):
-        if not self.files:
-            return super().process_files()
-
-        choice = self._choose_ktp_processing_mode()
-        if not choice["accepted"]:
-            return
-
-        self.output_mode.set(choice["mode"])
-        self.status_text.set(
-            "Mode hasil: "
-            f"{self._ktp_mode_label(choice['mode'])}"
-        )
-        return super().process_files()
-
     @staticmethod
     def _decode_drop_path(raw_path):
         if isinstance(raw_path, bytes):
@@ -1008,6 +993,17 @@ class FinalScannerUI(SafeScannerUI):
     def process_files(self):
         if not self.files:
             return super().process_files()
+
+        choice = self._choose_ktp_processing_mode()
+        if not choice["accepted"]:
+            return
+
+        selected_mode = choice["mode"]
+        self.output_mode.set(selected_mode)
+        self.status_text.set(
+            "Mode hasil: "
+            f"{self._ktp_mode_label(selected_mode)}"
+        )
 
         self._show_loading_popup()
 
