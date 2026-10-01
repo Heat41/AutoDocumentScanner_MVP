@@ -148,9 +148,9 @@ def save_ktp_sheet_pdf(
     images,
     dpi=300,
 ):
-    """Save KTP results to A4 portrait, max four cards per page.
+    """Save KTP results to A4 portrait, max six cards per page.
 
-    Layout is fixed at 2 columns x 2 rows. Each KTP is rendered at the
+    Layout is fixed at 2 columns x 3 rows. Each KTP is rendered at the
     physical ID-1 card size (85.60 x 53.98 mm) while preserving aspect ratio.
     """
     images = list(images or [])
@@ -180,11 +180,11 @@ def save_ktp_sheet_pdf(
     )
 
     slot_width = page_width // 2
-    slot_height = page_height // 2
+    slot_height = page_height // 3
 
     pages = []
 
-    for page_start in range(0, len(images), 4):
+    for page_start in range(0, len(images), 6):
         page = Image.new(
             "RGB",
             (page_width, page_height),
@@ -192,7 +192,7 @@ def save_ktp_sheet_pdf(
         )
 
         for local_index, image in enumerate(
-            images[page_start:page_start + 4]
+            images[page_start:page_start + 6]
         ):
             card = _to_rgb_pillow(image)
 
