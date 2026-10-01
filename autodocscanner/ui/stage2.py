@@ -6,7 +6,6 @@ from tkinter import messagebox, ttk
 from autodocscanner.output.manager import build_output_path
 from autodocscanner.services.ktp_output import process_ktp_output
 from autodocscanner.ui.manual_document import ManualDocumentPage
-from autodocscanner.ui.tracking_ktp import TrackingKtpPage
 from autodocscanner.ui.responsive import ResponsiveScannerUI
 
 
@@ -17,10 +16,11 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     AUTO_KTP_PAGE = "auto_ktp"
     MANUAL_DOCUMENT_PAGE = "manual_document"
     TRACKING_KTP_PAGE = "tracking_ktp"
+    TRACKING_RELEASE_ENABLED = False
     NAVIGATION_ITEMS = (
         ("Auto Koreksi KTP", AUTO_KTP_PAGE),
         ("Koreksi Dokumen Manual", MANUAL_DOCUMENT_PAGE),
-        ("Tracking Data KTP", TRACKING_KTP_PAGE),
+        ("🔒 Tracking KTP · Coming Soon", TRACKING_KTP_PAGE),
     )
 
     def __init__(self):
@@ -39,7 +39,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         self._pdf_preview_by_output = {}
         self._install_output_format_controls()
         self._install_manual_document_page()
-        self._install_tracking_ktp_page()
+        self._tracking_ktp_page = None
         self._install_top_navigation()
         self._update_navigation_state()
 
@@ -60,6 +60,12 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
 
     def _install_tracking_ktp_page(self):
+        if not self.TRACKING_RELEASE_ENABLED:
+            self._tracking_ktp_page = None
+            return
+
+        from autodocscanner.ui.tracking_ktp import TrackingKtpPage
+
         self._tracking_ktp_page = TrackingKtpPage(
             self,
             scanner=self.scanner,
@@ -85,7 +91,7 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
         ttk.Label(
             nav_card,
-            text="Navigasi",
+            text="Fitur",
             style="CardMuted.TLabel",
         ).pack(
             side="left",
@@ -109,6 +115,12 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 text=label,
                 command=commands[page_name],
             )
+            if (
+                page_name == self.TRACKING_KTP_PAGE
+                and not self.TRACKING_RELEASE_ENABLED
+            ):
+                button.configure(state="disabled")
+
             button.pack(
                 side="left",
                 padx=(0, 8),
@@ -140,7 +152,9 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     def _hide_stage2_pages(self):
         self._ktp_page.pack_forget()
         self._manual_document_page.pack_forget()
-        self._tracking_ktp_page.pack_forget()
+
+        if self._tracking_ktp_page is not None:
+            self._tracking_ktp_page.pack_forget()
 
     def show_manual_document(self):
         self._hide_stage2_pages()
@@ -155,6 +169,22 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         )
 
     def show_tracking_ktp(self):
+        if not self.TRACKING_RELEASE_ENABLED:
+            messagebox.showinfo(
+                "Tracking KTP — Coming Soon",
+                (
+                    "Fitur Tracking KTP belum tersedia pada "
+                    "rilis ini.\n\n"
+                    "Fitur ini disiapkan khusus untuk Supervisor "
+                    "dan nantinya akan terhubung langsung ke "
+                    "website induk."
+                ),
+            )
+            return
+
+        if self._tracking_ktp_page is None:
+            self._install_tracking_ktp_page()
+
         self._hide_stage2_pages()
         self._tracking_ktp_page.pack(
             fill="both",
