@@ -2,6 +2,11 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
+try:
+    import windnd
+except ImportError:
+    windnd = None
+
 from autodocscanner.ui.safe import SafeScannerUI
 
 
@@ -229,6 +234,44 @@ class FinalScannerUI(SafeScannerUI):
             style="SidebarMuted.TLabel",
         ).pack(anchor="w", pady=(3, 12))
 
+        self._drop_zone = tk.Frame(
+            sidebar,
+            bg="#F8FAFB",
+            highlightbackground=self.BORDER,
+            highlightthickness=1,
+            bd=0,
+            padx=12,
+            pady=16,
+        )
+        self._drop_zone.pack(fill="x", pady=(0, 10))
+
+        self._drop_zone_title = tk.Label(
+            self._drop_zone,
+            text="↓  Tarik & Lepas Foto KTP",
+            bg="#F8FAFB",
+            fg=self.TEXT,
+            font=("Segoe UI Semibold", 9),
+        )
+        self._drop_zone_title.pack()
+
+        tk.Label(
+            self._drop_zone,
+            text="JPG • PNG • JPEG • BMP • WEBP",
+            bg="#F8FAFB",
+            fg=self.MUTED,
+            font=("Segoe UI", 8),
+        ).pack(pady=(4, 0))
+
+        self._drop_zone.bind(
+            "<Button-1>",
+            lambda _event: self.choose_files(),
+        )
+        self._drop_zone_title.bind(
+            "<Button-1>",
+            lambda _event: self.choose_files(),
+        )
+        self.after_idle(self._install_file_drop)
+
         ttk.Button(
             sidebar,
             text="Pilih Foto",
@@ -392,6 +435,93 @@ class FinalScannerUI(SafeScannerUI):
         )
         label.pack(fill="both", expand=True)
         return label
+
+    @staticmethod
+    def _decode_drop_path(raw_path):
+        if isinstance(raw_path, bytes):
+            for encoding in ("utf-8", "mbcs"):
+                try:
+                    return Path(raw_path.decode(encoding))
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return None
+
+        try:
+            return Path(str(raw_path))
+        except (TypeError, ValueError):
+            return None
+
+    def _collect_dropped_images(self, raw_paths):
+        supported = {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".bmp",
+            ".webp",
+        }
+        images = []
+
+        for raw_path in raw_paths or []:
+            path = self._decode_drop_path(raw_path)
+            if path is None:
+                continue
+
+            if path.is_dir():
+                images.extend(
+                    sorted(
+                        child
+                        for child in path.iterdir()
+                        if (
+                            child.is_file()
+                            and child.suffix.lower()
+                            in supported
+                        )
+                    )
+                )
+            elif (
+                path.is_file()
+                and path.suffix.lower() in supported
+            ):
+                images.append(path)
+
+        unique = []
+        seen = set()
+        for path in images:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+
+        return unique
+
+    def _install_file_drop(self):
+        if windnd is None:
+            return
+
+        try:
+            windnd.hook_dropfiles(
+                self._drop_zone,
+                func=self._on_drop_files,
+            )
+        except Exception:
+            return
+
+    def _on_drop_files(self, raw_paths):
+        paths = self._collect_dropped_images(raw_paths)
+        if not paths:
+            self.after(
+                0,
+                self.status_text.set,
+                "Tidak ada file gambar yang valid pada drop.",
+            )
+            return
+
+        self.after(
+            0,
+            self._set_files,
+            paths,
+        )
 
     @staticmethod
     def _batch_summary(total):
