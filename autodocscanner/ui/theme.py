@@ -1,3 +1,5 @@
+import ctypes
+import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -43,6 +45,118 @@ DARK_THEME = {
 
 def get_theme(mode):
     return DARK_THEME if str(mode).lower() == "dark" else LIGHT_THEME
+
+
+def _colorref(hex_color):
+    value = str(hex_color or "").lstrip("#")
+    if len(value) != 6:
+        return 0
+
+    red = int(value[0:2], 16)
+    green = int(value[2:4], 16)
+    blue = int(value[4:6], 16)
+    return red | (green << 8) | (blue << 16)
+
+
+def _window_handles(root):
+    try:
+        root.update_idletasks()
+        child = int(root.winfo_id())
+    except (tk.TclError, TypeError, ValueError):
+        return ()
+
+    handles = [child]
+
+    try:
+        parent = int(
+            ctypes.windll.user32.GetParent(
+                ctypes.c_void_p(child)
+            )
+            or 0
+        )
+        if parent and parent not in handles:
+            handles.insert(0, parent)
+    except Exception:
+        pass
+
+    return tuple(handles)
+
+
+def apply_windows_titlebar(root, palette):
+    if sys.platform != "win32":
+        return False
+
+    try:
+        dwm = ctypes.windll.dwmapi
+    except Exception:
+        return False
+
+    dark = 1 if palette.get("name") == "dark" else 0
+    dark_value = ctypes.c_int(dark)
+
+    # Windows 11 supports direct caption, text, and border colors.
+    caption = ctypes.c_uint(
+        _colorref(
+            palette["surface"]
+            if dark
+            else "#FFFFFF"
+        )
+    )
+    text = ctypes.c_uint(
+        _colorref(
+            "#F8FAFC"
+            if dark
+            else palette["text"]
+        )
+    )
+    border = ctypes.c_uint(
+        _colorref(palette["border"])
+    )
+
+    applied = False
+
+    for hwnd in _window_handles(root):
+        handle = ctypes.c_void_p(hwnd)
+
+        # DWMWA_USE_IMMERSIVE_DARK_MODE is 20 on current Windows;
+        # older Windows 10 builds used 19.
+        for attribute in (20, 19):
+            try:
+                result = dwm.DwmSetWindowAttribute(
+                    handle,
+                    attribute,
+                    ctypes.byref(dark_value),
+                    ctypes.sizeof(dark_value),
+                )
+                if result == 0:
+                    applied = True
+                    break
+            except Exception:
+                continue
+
+        # Windows 11 DWM color attributes. Unsupported systems simply
+        # ignore/fail these calls and keep the immersive-mode fallback.
+        for attribute, value in (
+            (35, caption),  # DWMWA_CAPTION_COLOR
+            (36, text),     # DWMWA_TEXT_COLOR
+            (34, border),   # DWMWA_BORDER_COLOR
+        ):
+            try:
+                dwm.DwmSetWindowAttribute(
+                    handle,
+                    attribute,
+                    ctypes.byref(value),
+                    ctypes.sizeof(value),
+                )
+            except Exception:
+                pass
+
+    try:
+        root.update_idletasks()
+    except tk.TclError:
+        pass
+
+    return applied
 
 
 def apply_theme(root, mode):
@@ -237,6 +351,11 @@ def apply_theme(root, mode):
     style.configure(
         "Horizontal.TSeparator",
         background=palette["border"],
+    )
+
+    apply_windows_titlebar(
+        root,
+        palette,
     )
 
     return palette
