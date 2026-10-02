@@ -208,10 +208,12 @@ def apply_theme(root, mode):
     style.map(
         "Secondary.TButton",
         background=[
+            ("disabled", palette["surface_soft"]),
             ("active", palette["active_bg"]),
             ("pressed", palette["active_bg"]),
         ],
         foreground=[
+            ("disabled", palette["sidebar_muted"]),
             ("active", palette["accent"]),
             ("pressed", palette["accent"]),
         ],
