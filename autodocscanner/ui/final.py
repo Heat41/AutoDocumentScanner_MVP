@@ -1,4 +1,5 @@
 from pathlib import Path
+import queue
 import tkinter as tk
 from tkinter import ttk
 
@@ -152,6 +153,8 @@ class FinalScannerUI(SafeScannerUI):
         self._loading_detail_var = None
         self._loading_watch_id = None
         self._processing_active = False
+        self._drop_queue = queue.Queue()
+        self._drop_poll_id = None
 
         root = ttk.Frame(self, padding=(28, 24, 28, 20))
         root.pack(fill="both", expand=True)
@@ -250,6 +253,7 @@ class FinalScannerUI(SafeScannerUI):
             lambda _event: self.choose_files(),
         )
         self.after_idle(self._install_file_drop)
+        self.after_idle(self._start_drop_queue_poll)
 
         footer = ttk.Frame(root)
         footer.pack(side="bottom", fill="x", pady=(14, 0))
@@ -720,21 +724,54 @@ class FinalScannerUI(SafeScannerUI):
         except Exception:
             return
 
-    def _on_drop_files(self, raw_paths):
-        paths = self._collect_dropped_images(raw_paths)
-        if not paths:
-            self.after(
-                0,
-                self.status_text.set,
-                "Tidak ada file gambar yang valid pada drop.",
-            )
+    def _start_drop_queue_poll(self):
+        if self._drop_poll_id is not None:
             return
+        self._poll_drop_queue()
 
-        self.after(
-            0,
-            self._set_files,
-            paths,
-        )
+    def _poll_drop_queue(self):
+        self._drop_poll_id = None
+
+        try:
+            while True:
+                paths = self._drop_queue.get_nowait()
+                if paths:
+                    self._set_files(paths)
+                else:
+                    self.status_text.set(
+                        "Tidak ada file gambar yang valid pada drop."
+                    )
+        except queue.Empty:
+            pass
+        except (tk.TclError, RuntimeError, OSError, ValueError) as exc:
+            try:
+                self.status_text.set(
+                    f"Drag & drop gagal: {exc}"
+                )
+            except tk.TclError:
+                return
+
+        try:
+            if self.winfo_exists():
+                self._drop_poll_id = self.after(
+                    80,
+                    self._poll_drop_queue,
+                )
+        except tk.TclError:
+            self._drop_poll_id = None
+
+    def _on_drop_files(self, raw_paths):
+        """Receive windnd payload without touching Tk from its callback."""
+        try:
+            paths = self._collect_dropped_images(raw_paths)
+            self._drop_queue.put(paths)
+        except Exception:
+            # Never allow an exception inside the native drop callback to
+            # unwind through the Windows message handler.
+            try:
+                self._drop_queue.put([])
+            except Exception:
+                pass
 
     @staticmethod
     def _batch_summary(total):
