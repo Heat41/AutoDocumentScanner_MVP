@@ -151,6 +151,7 @@ class FinalScannerUI(SafeScannerUI):
         self._loading_progress = None
         self._loading_detail_var = None
         self._loading_watch_id = None
+        self._processing_active = False
 
         root = ttk.Frame(self, padding=(28, 24, 28, 20))
         root.pack(fill="both", expand=True)
@@ -1019,11 +1020,13 @@ class FinalScannerUI(SafeScannerUI):
 
         process_button = getattr(self, "process_button", None)
         if process_button is not None:
-            current = str(process_button.cget("state"))
-            if current != "disabled" or not has_files:
-                process_button.configure(
-                    state="normal" if has_files else "disabled"
+            process_button.configure(
+                state=(
+                    "disabled"
+                    if self._processing_active or not has_files
+                    else "normal"
                 )
+            )
 
         save_button = getattr(self, "save_button", None)
         if save_button is not None:
@@ -1072,11 +1075,15 @@ class FinalScannerUI(SafeScannerUI):
             f"{self._ktp_mode_label(selected_mode)}"
         )
 
+        self._processing_active = True
+        self._refresh_ktp_action_state()
         self._show_loading_popup()
 
         try:
             result = super().process_files()
         except Exception:
+            self._processing_active = False
+            self._refresh_ktp_action_state()
             self._hide_loading_popup()
             raise
 
