@@ -3,6 +3,8 @@ import queue
 import tkinter as tk
 from tkinter import ttk
 
+from PIL import Image, ImageDraw, ImageTk
+
 try:
     import windnd
 except ImportError:
@@ -490,6 +492,109 @@ class FinalScannerUI(SafeScannerUI):
         )
         label.pack(fill="both", expand=True)
         return label
+
+    def _preview_target_size(self):
+        """Return the live KTP preview area while keeping safe fallbacks."""
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return 520, 360
+
+        widths = []
+        heights = []
+
+        for label in (
+            getattr(self, "original_label", None),
+            getattr(self, "result_label", None),
+        ):
+            if label is None:
+                continue
+            try:
+                width = int(label.winfo_width())
+                height = int(label.winfo_height())
+            except (tk.TclError, TypeError, ValueError):
+                continue
+
+            if width > 80:
+                widths.append(width)
+            if height > 80:
+                heights.append(height)
+
+        width = min(widths) if widths else 520
+        height = min(heights) if heights else 360
+
+        return (
+            max(160, width - 20),
+            max(120, height - 20),
+        )
+
+    def _load_preview(self, path):
+        image = Image.open(path).convert("RGB")
+        image.thumbnail(
+            self._preview_target_size(),
+            Image.Resampling.LANCZOS,
+        )
+        return ImageTk.PhotoImage(image)
+
+    def _load_preview_with_corners(self, path, corners):
+        image = Image.open(path).convert("RGB")
+        original_width, original_height = image.size
+
+        image.thumbnail(
+            self._preview_target_size(),
+            Image.Resampling.LANCZOS,
+        )
+
+        preview_width, preview_height = image.size
+        scale_x = preview_width / max(original_width, 1)
+        scale_y = preview_height / max(original_height, 1)
+
+        draw = ImageDraw.Draw(image)
+        scaled = [
+            (
+                float(point[0]) * scale_x,
+                float(point[1]) * scale_y,
+            )
+            for point in corners
+        ]
+
+        if len(scaled) == 4:
+            line_width = max(
+                2,
+                min(4, int(round(min(image.size) / 180))),
+            )
+            radius = max(
+                5,
+                min(8, int(round(min(image.size) / 90))),
+            )
+
+            polygon = scaled + [scaled[0]]
+            draw.line(
+                polygon,
+                fill=(82, 92, 102),
+                width=line_width,
+            )
+
+            labels = ("TL", "TR", "BR", "BL")
+            for label, (x, y) in zip(labels, scaled):
+                draw.ellipse(
+                    (
+                        x - radius,
+                        y - radius,
+                        x + radius,
+                        y + radius,
+                    ),
+                    fill=(245, 247, 249),
+                    outline=(55, 62, 70),
+                    width=max(1, line_width - 1),
+                )
+                draw.text(
+                    (x + radius + 3, y - radius),
+                    label,
+                    fill=(55, 62, 70),
+                )
+
+        return ImageTk.PhotoImage(image)
 
     @staticmethod
     def _ktp_mode_label(mode):
