@@ -385,11 +385,20 @@ class FinalScannerUI(SafeScannerUI):
             expand=True,
         )
 
+        status_row = ttk.Frame(info)
+        status_row.pack(anchor="w", fill="x")
+
         ttk.Label(
-            info,
+            status_row,
+            text="STATUS",
+            style="Badge.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            status_row,
             textvariable=self.status_text,
             style="Subheader.TLabel",
-        ).pack(anchor="w")
+        ).pack(side="left", padx=(8, 0))
 
         quality_row = ttk.Frame(info)
         quality_row.pack(
@@ -419,6 +428,7 @@ class FinalScannerUI(SafeScannerUI):
             style="Secondary.TButton",
             command=self.choose_output,
             state="disabled",
+            width=11,
         )
         self.save_button.pack(side="left")
 
@@ -428,6 +438,7 @@ class FinalScannerUI(SafeScannerUI):
             style="Accent.TButton",
             command=self.process_files,
             state="disabled",
+            width=16,
         )
         self.process_button.pack(side="left", padx=(8, 0))
 
@@ -457,7 +468,7 @@ class FinalScannerUI(SafeScannerUI):
             text=(
                 "Area deteksi fisik"
                 if title.startswith("Original")
-                else "Perspective corrected"
+                else "Hasil koreksi perspektif"
             ),
             style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(2, 9))
