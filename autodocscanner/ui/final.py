@@ -328,19 +328,14 @@ class FinalScannerUI(SafeScannerUI):
         )
         file_actions.pack(fill="x", pady=(10, 0))
 
-        ttk.Button(
+        self.clear_button = ttk.Button(
             file_actions,
             text="Kosongkan",
             style="Quiet.TButton",
             command=self.clear_files,
-        ).pack(side="left")
-
-        ttk.Button(
-            file_actions,
-            text="Simpan",
-            style="Secondary.TButton",
-            command=self.choose_output,
-        ).pack(side="right")
+            state="disabled",
+        )
+        self.clear_button.pack(side="left")
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -410,13 +405,26 @@ class FinalScannerUI(SafeScannerUI):
             style="Subheader.TLabel",
         ).pack(side="left", padx=(10, 0))
 
+        self._action_panel = ttk.Frame(footer)
+        self._action_panel.pack(side="right", padx=(16, 0))
+
+        self.save_button = ttk.Button(
+            self._action_panel,
+            text="Simpan",
+            style="Secondary.TButton",
+            command=self.choose_output,
+            state="disabled",
+        )
+        self.save_button.pack(side="left")
+
         self.process_button = ttk.Button(
-            footer,
+            self._action_panel,
             text="Proses Otomatis",
             style="Accent.TButton",
             command=self.process_files,
+            state="disabled",
         )
-        self.process_button.pack(side="right", padx=(16, 0))
+        self.process_button.pack(side="left", padx=(8, 0))
 
     def _preview_card(self, parent, title):
         frame = ttk.Frame(
@@ -451,7 +459,14 @@ class FinalScannerUI(SafeScannerUI):
 
         label = tk.Label(
             frame,
-            text="Belum ada gambar",
+            text=(
+                "Belum ada foto KTP\n"
+                "Pilih atau tarik foto untuk memulai"
+                if title.startswith("Original")
+                else
+                "Belum ada hasil\n"
+                "Jalankan Proses Otomatis terlebih dahulu"
+            ),
             bg="#ECEFF1",
             fg="#737A82",
             bd=0,
@@ -990,6 +1005,58 @@ class FinalScannerUI(SafeScannerUI):
         except tk.TclError:
             self._hide_loading_popup()
 
+    def _refresh_ktp_action_state(self):
+        has_files = bool(self.files)
+        has_outputs = bool(
+            getattr(self, "_processed_image_paths", lambda: [])()
+        )
+
+        clear_button = getattr(self, "clear_button", None)
+        if clear_button is not None:
+            clear_button.configure(
+                state="normal" if has_files else "disabled"
+            )
+
+        process_button = getattr(self, "process_button", None)
+        if process_button is not None:
+            current = str(process_button.cget("state"))
+            if current != "disabled" or not has_files:
+                process_button.configure(
+                    state="normal" if has_files else "disabled"
+                )
+
+        save_button = getattr(self, "save_button", None)
+        if save_button is not None:
+            save_button.configure(
+                state="normal" if has_outputs else "disabled"
+            )
+
+        pdf_button = getattr(self, "save_pdf_button", None)
+        if pdf_button is not None:
+            pdf_button.configure(
+                state="normal" if has_outputs else "disabled"
+            )
+
+    def clear_files(self):
+        super().clear_files()
+        self.batch_text.set("Belum ada file")
+        self.selected_text.set("Tidak ada file dipilih")
+        self.original_label.configure(
+            image="",
+            text=(
+                "Belum ada foto KTP\n"
+                "Pilih atau tarik foto untuk memulai"
+            ),
+        )
+        self.result_label.configure(
+            image="",
+            text=(
+                "Belum ada hasil\n"
+                "Jalankan Proses Otomatis terlebih dahulu"
+            ),
+        )
+        self._refresh_ktp_action_state()
+
     def process_files(self):
         if not self.files:
             return super().process_files()
@@ -1028,6 +1095,9 @@ class FinalScannerUI(SafeScannerUI):
         self.batch_text.set(
             self._batch_summary(len(self.files))
         )
+        if not self.files:
+            self.selected_text.set("Tidak ada file dipilih")
+        self._refresh_ktp_action_state()
 
     def _show_selected(self, index):
         if 0 <= index < len(self.files):
