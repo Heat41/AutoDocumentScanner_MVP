@@ -153,6 +153,12 @@ class ScannerUI(tk.Tk):
             command=self.choose_output,
         ).pack(side="left", padx=(8, 0))
 
+        ttk.Button(
+            toolbar,
+            text="Kosongkan",
+            command=self.clear_files,
+        ).pack(side="left", padx=(8, 0))
+
         mode_frame = ttk.Frame(toolbar)
         mode_frame.pack(side="right")
 
@@ -344,6 +350,37 @@ class ScannerUI(tk.Tk):
             self.status_text.set(
                 f"Output: {self.output_dir}"
             )
+
+    def clear_files(self):
+        self.files = []
+        self.listbox.delete(0, tk.END)
+        self._corners_by_file.clear()
+        self._metadata_by_file.clear()
+        self._output_by_file.clear()
+
+        pdf_previews = getattr(
+            self,
+            "_pdf_preview_by_output",
+            None,
+        )
+        if pdf_previews is not None:
+            pdf_previews.clear()
+
+        self._original_photo = None
+        self._result_photo = None
+        self.original_label.configure(
+            image="",
+            text="Belum ada gambar",
+        )
+        self.result_label.configure(
+            image="",
+            text="Belum diproses",
+        )
+        self.quality_text.set("Kualitas: -")
+        self.quality_detail_text.set("")
+        self.status_text.set(
+            "Daftar foto KTP dikosongkan."
+        )
 
     def _set_files(self, paths):
         self.files = list(paths)

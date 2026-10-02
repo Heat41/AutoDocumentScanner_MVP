@@ -1,6 +1,14 @@
 from pathlib import Path
+import queue
 import tkinter as tk
 from tkinter import ttk
+
+from PIL import Image, ImageDraw, ImageTk
+
+try:
+    import windnd
+except ImportError:
+    windnd = None
 
 from autodocscanner.ui.safe import SafeScannerUI
 
@@ -146,120 +154,145 @@ class FinalScannerUI(SafeScannerUI):
         self._loading_progress = None
         self._loading_detail_var = None
         self._loading_watch_id = None
+        self._processing_active = False
+        self._drop_queue = queue.Queue()
+        self._drop_poll_id = None
 
-        root = ttk.Frame(self, padding=22)
+        root = ttk.Frame(self, padding=(28, 24, 28, 20))
         root.pack(fill="both", expand=True)
+        self._page_root = root
 
         header = ttk.Frame(root)
-        header.pack(fill="x", pady=(0, 16))
+        header.pack(fill="x", pady=(0, 14))
 
         title_column = ttk.Frame(header)
         title_column.pack(side="left", fill="x", expand=True)
 
         ttk.Label(
             title_column,
-            text="Auto Document Scanner",
+            text="WORKSPACE KTP",
+            style="Eyebrow.TLabel",
+        ).pack(anchor="w", pady=(0, 3))
+
+        ttk.Label(
+            title_column,
+            text="Auto Koreksi KTP",
             style="Header.TLabel",
         ).pack(anchor="w")
 
         ttk.Label(
             title_column,
             text=(
-                "Koreksi perspektif KTP otomatis, validasi kualitas, "
-                "dan output aman."
+                "Koreksi perspektif KTP secara otomatis, "
+                "kemudian simpan sebagai gambar atau PDF."
             ),
             style="Subheader.TLabel",
         ).pack(anchor="w", pady=(4, 0))
 
-        mode_panel = ttk.Frame(header)
-        mode_panel.pack(side="right", anchor="e")
+        self._drop_zone = tk.Frame(
+            root,
+            bg="#EFF6FF",
+            highlightbackground="#BFDBFE",
+            highlightthickness=1,
+            bd=0,
+            padx=20,
+            pady=18,
+        )
+        self._drop_zone.pack(fill="x", pady=(6, 16))
 
-        ttk.Label(
-            mode_panel,
-            text="Output",
-            style="Subheader.TLabel",
-        ).pack(side="left", padx=(0, 10))
+        drop_text = tk.Frame(
+            self._drop_zone,
+            bg="#EFF6FF",
+        )
+        drop_text.pack(side="left", fill="x", expand=True)
 
-        ttk.Radiobutton(
-            mode_panel,
-            text="Warna",
-            variable=self.output_mode,
-            value="color",
+        self._drop_zone_title = tk.Label(
+            drop_text,
+            text="⇧  Upload Foto KTP",
+            bg="#EFF6FF",
+            fg="#1D4ED8",
+            font=("Segoe UI Semibold", 11),
+        )
+        self._drop_zone_title.pack(anchor="w")
+
+        tk.Label(
+            drop_text,
+            text=(
+                "Tarik & lepas file di area ini, atau gunakan tombol di kanan.  "
+                "JPG • JPEG • PNG • BMP • WEBP"
+            ),
+            bg="#EFF6FF",
+            fg="#64748B",
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(4, 0))
+
+        drop_actions = tk.Frame(
+            self._drop_zone,
+            bg="#EFF6FF",
+        )
+        drop_actions.pack(side="right", padx=(16, 0))
+
+        ttk.Button(
+            drop_actions,
+            text="Pilih Foto",
+            style="Secondary.TButton",
+            command=self.choose_files,
         ).pack(side="left")
 
-        ttk.Radiobutton(
-            mode_panel,
-            text="Grayscale",
-            variable=self.output_mode,
-            value="grayscale",
-        ).pack(side="left", padx=(10, 0))
+        ttk.Button(
+            drop_actions,
+            text="Pilih Folder",
+            style="Quiet.TButton",
+            command=self.choose_folder,
+        ).pack(side="left", padx=(8, 0))
 
-        ttk.Separator(root, orient="horizontal").pack(
-            fill="x",
-            pady=(0, 16),
+        self._drop_zone.bind(
+            "<Button-1>",
+            lambda _event: self.choose_files(),
         )
+        self._drop_zone_title.bind(
+            "<Button-1>",
+            lambda _event: self.choose_files(),
+        )
+        self.after_idle(self._install_file_drop)
+        self.after_idle(self._start_drop_queue_poll)
 
-        # Reserve the action footer before the expandable body. With Tk pack,
-        # packing the expandable preview first can leave too little vertical
-        # space for widgets packed afterwards on short/scaled displays.
         footer = ttk.Frame(root)
-        footer.pack(side="bottom", fill="x", pady=(12, 0))
+        footer.pack(side="bottom", fill="x", pady=(14, 0))
 
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
 
-        sidebar = ttk.Frame(
+        files_panel = ttk.Frame(
             body,
-            style="Sidebar.TFrame",
-            padding=15,
-            width=250,
+            style="Card.TFrame",
+            padding=14,
+            width=230,
         )
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+        files_panel.pack(side="left", fill="y")
+        files_panel.pack_propagate(False)
+        self._files_panel = files_panel
+
+        files_header = ttk.Frame(
+            files_panel,
+            style="Surface.TFrame",
+        )
+        files_header.pack(fill="x", pady=(0, 10))
 
         ttk.Label(
-            sidebar,
-            text="Input",
-            style="SidebarTitle.TLabel",
+            files_header,
+            text="Foto Dipilih",
+            style="CardLabel.TLabel",
         ).pack(anchor="w")
 
         ttk.Label(
-            sidebar,
+            files_header,
             textvariable=self.batch_text,
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(3, 12))
-
-        ttk.Button(
-            sidebar,
-            text="Pilih Foto",
-            command=self.choose_files,
-        ).pack(fill="x")
-
-        ttk.Button(
-            sidebar,
-            text="Pilih Folder",
-            command=self.choose_folder,
-        ).pack(fill="x", pady=(7, 0))
-
-        ttk.Button(
-            sidebar,
-            text="Folder Output",
-            command=self.choose_output,
-        ).pack(fill="x", pady=(7, 14))
-
-        ttk.Separator(sidebar, orient="horizontal").pack(
-            fill="x",
-            pady=(0, 12),
-        )
-
-        ttk.Label(
-            sidebar,
-            text="Daftar File",
-            style="SidebarTitle.TLabel",
-        ).pack(anchor="w", pady=(0, 8))
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(3, 0))
 
         list_frame = tk.Frame(
-            sidebar,
+            files_panel,
             bg=self.CARD,
             highlightthickness=0,
         )
@@ -269,7 +302,7 @@ class FinalScannerUI(SafeScannerUI):
             list_frame,
             orient="vertical",
         )
-        scrollbar.pack(side="right", fill="y")
+        self._files_scrollbar = scrollbar
 
         self.listbox = tk.Listbox(
             list_frame,
@@ -283,12 +316,33 @@ class FinalScannerUI(SafeScannerUI):
             font=("Segoe UI", 9),
             yscrollcommand=scrollbar.set,
         )
-        self.listbox.pack(side="left", fill="both", expand=True)
+        self.listbox.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=4,
+            pady=4,
+        )
         scrollbar.configure(command=self.listbox.yview)
         self.listbox.bind(
             "<<ListboxSelect>>",
             self._on_select,
         )
+
+        file_actions = ttk.Frame(
+            files_panel,
+            style="Surface.TFrame",
+        )
+        file_actions.pack(fill="x", pady=(10, 0))
+
+        self.clear_button = ttk.Button(
+            file_actions,
+            text="Kosongkan",
+            style="Quiet.TButton",
+            command=self.clear_files,
+            state="disabled",
+        )
+        self.clear_button.pack(side="left")
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -303,33 +357,57 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Label(
             selected_row,
+            text="FILE AKTIF",
+            style="Eyebrow.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            selected_row,
             textvariable=self.selected_text,
             style="Subheader.TLabel",
-        ).pack(side="left")
+        ).pack(side="left", padx=(10, 0))
 
         previews = ttk.Frame(workspace)
         previews.pack(fill="both", expand=True)
+        self._preview_parent = previews
 
         self.original_label = self._preview_card(
             previews,
-            "Original + Corner",
+            "Foto Asli + Sudut",
         )
         self.result_label = self._preview_card(
             previews,
-            "Hasil Scanner",
+            "Hasil Koreksi",
         )
 
         info = ttk.Frame(footer)
-        info.pack(side="left", fill="x", expand=True)
+        info.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+
+        status_row = ttk.Frame(info)
+        status_row.pack(anchor="w", fill="x")
 
         ttk.Label(
-            info,
+            status_row,
+            text="STATUS",
+            style="Badge.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            status_row,
             textvariable=self.status_text,
             style="Subheader.TLabel",
-        ).pack(anchor="w")
+        ).pack(side="left", padx=(8, 0))
 
         quality_row = ttk.Frame(info)
-        quality_row.pack(anchor="w", fill="x", pady=(4, 0))
+        quality_row.pack(
+            anchor="w",
+            fill="x",
+            pady=(4, 0),
+        )
 
         ttk.Label(
             quality_row,
@@ -343,13 +421,28 @@ class FinalScannerUI(SafeScannerUI):
             style="Subheader.TLabel",
         ).pack(side="left", padx=(10, 0))
 
+        self._action_panel = ttk.Frame(footer)
+        self._action_panel.pack(side="right", padx=(16, 0))
+
+        self.save_button = ttk.Button(
+            self._action_panel,
+            text="Simpan",
+            style="Secondary.TButton",
+            command=self.choose_output,
+            state="disabled",
+            width=11,
+        )
+        self.save_button.pack(side="left")
+
         self.process_button = ttk.Button(
-            footer,
+            self._action_panel,
             text="Proses Otomatis",
             style="Accent.TButton",
             command=self.process_files,
+            state="disabled",
+            width=16,
         )
-        self.process_button.pack(side="right", padx=(16, 0))
+        self.process_button.pack(side="left", padx=(8, 0))
 
     def _preview_card(self, parent, title):
         frame = ttk.Frame(
@@ -362,7 +455,7 @@ class FinalScannerUI(SafeScannerUI):
             fill="both",
             expand=True,
             padx=(0, 6)
-            if title.startswith("Original")
+            if title.startswith("Foto Asli")
             else (6, 0),
         )
 
@@ -375,16 +468,23 @@ class FinalScannerUI(SafeScannerUI):
         ttk.Label(
             frame,
             text=(
-                "Area deteksi fisik"
-                if title.startswith("Original")
-                else "Perspective corrected"
+                "Area deteksi sudut KTP"
+                if title.startswith("Foto Asli")
+                else "Hasil koreksi perspektif"
             ),
             style="CardMuted.TLabel",
         ).pack(anchor="w", pady=(2, 9))
 
         label = tk.Label(
             frame,
-            text="Belum ada gambar",
+            text=(
+                "Belum ada foto KTP\n"
+                "Pilih atau tarik foto untuk memulai"
+                if title.startswith("Foto Asli")
+                else
+                "Belum ada hasil\n"
+                "Jalankan Proses Otomatis terlebih dahulu"
+            ),
             bg="#ECEFF1",
             fg="#737A82",
             bd=0,
@@ -392,6 +492,402 @@ class FinalScannerUI(SafeScannerUI):
         )
         label.pack(fill="both", expand=True)
         return label
+
+    def _preview_target_size(self):
+        """Return the live KTP preview area while keeping safe fallbacks."""
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return 520, 360
+
+        widths = []
+        heights = []
+
+        for label in (
+            getattr(self, "original_label", None),
+            getattr(self, "result_label", None),
+        ):
+            if label is None:
+                continue
+            try:
+                width = int(label.winfo_width())
+                height = int(label.winfo_height())
+            except (tk.TclError, TypeError, ValueError):
+                continue
+
+            if width > 80:
+                widths.append(width)
+            if height > 80:
+                heights.append(height)
+
+        width = min(widths) if widths else 520
+        height = min(heights) if heights else 360
+
+        return (
+            max(160, width - 20),
+            max(120, height - 20),
+        )
+
+    def _load_preview(self, path):
+        image = Image.open(path).convert("RGB")
+        image.thumbnail(
+            self._preview_target_size(),
+            Image.Resampling.LANCZOS,
+        )
+        return ImageTk.PhotoImage(image)
+
+    def _load_preview_with_corners(self, path, corners):
+        image = Image.open(path).convert("RGB")
+        original_width, original_height = image.size
+
+        image.thumbnail(
+            self._preview_target_size(),
+            Image.Resampling.LANCZOS,
+        )
+
+        preview_width, preview_height = image.size
+        scale_x = preview_width / max(original_width, 1)
+        scale_y = preview_height / max(original_height, 1)
+
+        draw = ImageDraw.Draw(image)
+        scaled = [
+            (
+                float(point[0]) * scale_x,
+                float(point[1]) * scale_y,
+            )
+            for point in corners
+        ]
+
+        if len(scaled) == 4:
+            line_width = max(
+                2,
+                min(4, int(round(min(image.size) / 180))),
+            )
+            radius = max(
+                5,
+                min(8, int(round(min(image.size) / 90))),
+            )
+
+            polygon = scaled + [scaled[0]]
+            draw.line(
+                polygon,
+                fill=(82, 92, 102),
+                width=line_width,
+            )
+
+            labels = ("TL", "TR", "BR", "BL")
+            for label, (x, y) in zip(labels, scaled):
+                draw.ellipse(
+                    (
+                        x - radius,
+                        y - radius,
+                        x + radius,
+                        y + radius,
+                    ),
+                    fill=(245, 247, 249),
+                    outline=(55, 62, 70),
+                    width=max(1, line_width - 1),
+                )
+                draw.text(
+                    (x + radius + 3, y - radius),
+                    label,
+                    fill=(55, 62, 70),
+                )
+
+        return ImageTk.PhotoImage(image)
+
+    @staticmethod
+    def _ktp_mode_label(mode):
+        return {
+            "color": "Warna",
+            "grayscale": "Grayscale",
+            "bw": "B&W",
+        }.get(mode, "Warna")
+
+    def _choose_ktp_processing_mode(self):
+        try:
+            from autodocscanner.ui.theme import get_theme
+            mode_var = getattr(self, "theme_mode", None)
+            theme_name = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(theme_name)
+        except Exception:
+            palette = {
+                "surface": "#FFFFFF",
+                "surface_soft": "#F8FAFC",
+                "text": "#172033",
+                "muted": "#64748B",
+                "accent": "#2563EB",
+            }
+
+        current_mode = self.output_mode.get() or "color"
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Pilih Mode Hasil")
+        dialog.transient(self)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.configure(bg=palette["surface"])
+
+        selected_mode = tk.StringVar(
+            master=dialog,
+            value=current_mode,
+        )
+        result = {
+            "accepted": False,
+            "mode": current_mode,
+        }
+
+        container = tk.Frame(
+            dialog,
+            bg=palette["surface"],
+            padx=26,
+            pady=24,
+        )
+        container.pack(fill="both", expand=True)
+
+        tk.Label(
+            container,
+            text="Pilih Mode Hasil KTP",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            container,
+            text=(
+                "Pilih tampilan hasil sebelum proses otomatis dijalankan."
+            ),
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 16))
+
+        options = (
+            (
+                "color",
+                "Warna",
+                "Pertahankan warna asli KTP.",
+            ),
+            (
+                "grayscale",
+                "Grayscale",
+                "Hasil abu-abu yang lebih ringan.",
+            ),
+            (
+                "bw",
+                "B&W",
+                "Hitam-putih dengan kontras tinggi.",
+            ),
+        )
+
+        for value, title, description in options:
+            row = tk.Frame(
+                container,
+                bg=palette["surface_soft"],
+                padx=12,
+                pady=10,
+            )
+            row.pack(fill="x", pady=(0, 8))
+
+            ttk.Radiobutton(
+                row,
+                text=title,
+                variable=selected_mode,
+                value=value,
+            ).pack(anchor="w")
+
+            tk.Label(
+                row,
+                text=description,
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+                font=("Segoe UI", 8),
+                anchor="w",
+            ).pack(
+                fill="x",
+                padx=(24, 0),
+                pady=(2, 0),
+            )
+
+            row.bind(
+                "<Button-1>",
+                lambda _event, v=value: selected_mode.set(v),
+            )
+
+        buttons = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        buttons.pack(fill="x", pady=(8, 0))
+
+        def cancel():
+            dialog.destroy()
+
+        def accept():
+            result["accepted"] = True
+            result["mode"] = selected_mode.get()
+            dialog.destroy()
+
+        ttk.Button(
+            buttons,
+            text="Batal",
+            style="Quiet.TButton",
+            command=cancel,
+        ).pack(side="right")
+
+        ttk.Button(
+            buttons,
+            text="Lanjutkan",
+            style="Accent.TButton",
+            command=accept,
+        ).pack(side="right", padx=(0, 8))
+
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.update_idletasks()
+
+        width = max(dialog.winfo_width(), 430)
+        height = dialog.winfo_height()
+        x = self.winfo_rootx() + max(
+            (self.winfo_width() - width) // 2,
+            0,
+        )
+        y = self.winfo_rooty() + max(
+            (self.winfo_height() - height) // 2,
+            0,
+        )
+        dialog.geometry(
+            f"{width}x{height}+{x}+{y}"
+        )
+
+        dialog.wait_window()
+        return result
+
+    @staticmethod
+    def _decode_drop_path(raw_path):
+        if isinstance(raw_path, bytes):
+            for encoding in ("utf-8", "mbcs"):
+                try:
+                    return Path(raw_path.decode(encoding))
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return None
+
+        try:
+            return Path(str(raw_path))
+        except (TypeError, ValueError):
+            return None
+
+    def _collect_dropped_images(self, raw_paths):
+        supported = {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".bmp",
+            ".webp",
+        }
+        images = []
+
+        for raw_path in raw_paths or []:
+            path = self._decode_drop_path(raw_path)
+            if path is None:
+                continue
+
+            if path.is_dir():
+                images.extend(
+                    sorted(
+                        child
+                        for child in path.iterdir()
+                        if (
+                            child.is_file()
+                            and child.suffix.lower()
+                            in supported
+                        )
+                    )
+                )
+            elif (
+                path.is_file()
+                and path.suffix.lower() in supported
+            ):
+                images.append(path)
+
+        unique = []
+        seen = set()
+        for path in images:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+
+        return unique
+
+    def _install_file_drop(self):
+        if windnd is None:
+            return
+
+        try:
+            windnd.hook_dropfiles(
+                self._drop_zone,
+                func=self._on_drop_files,
+            )
+        except Exception:
+            return
+
+    def _start_drop_queue_poll(self):
+        if self._drop_poll_id is not None:
+            return
+        self._poll_drop_queue()
+
+    def _poll_drop_queue(self):
+        self._drop_poll_id = None
+
+        try:
+            while True:
+                paths = self._drop_queue.get_nowait()
+                if paths:
+                    self._set_files(paths)
+                else:
+                    self.status_text.set(
+                        "Tidak ada file gambar yang valid pada drop."
+                    )
+        except queue.Empty:
+            pass
+        except (tk.TclError, RuntimeError, OSError, ValueError) as exc:
+            try:
+                self.status_text.set(
+                    f"Drag & drop gagal: {exc}"
+                )
+            except tk.TclError:
+                return
+
+        try:
+            if self.winfo_exists():
+                self._drop_poll_id = self.after(
+                    80,
+                    self._poll_drop_queue,
+                )
+        except tk.TclError:
+            self._drop_poll_id = None
+
+    def _on_drop_files(self, raw_paths):
+        """Receive windnd payload without touching Tk from its callback."""
+        try:
+            paths = self._collect_dropped_images(raw_paths)
+            self._drop_queue.put(paths)
+        except Exception:
+            # Never allow an exception inside the native drop callback to
+            # unwind through the Windows message handler.
+            try:
+                self._drop_queue.put([])
+            except Exception:
+                pass
 
     @staticmethod
     def _batch_summary(total):
@@ -418,29 +914,109 @@ class FinalScannerUI(SafeScannerUI):
     def _show_loading_popup(self):
         self._hide_loading_popup()
 
+        palette = {
+            "bg": "#F5F7FA",
+            "surface": "#FFFFFF",
+            "surface_soft": "#F8FAFC",
+            "text": "#172033",
+            "muted": "#64748B",
+            "accent": "#2563EB",
+            "border": "#E2E8F0",
+        }
+
+        try:
+            from autodocscanner.ui.theme import get_theme
+            mode_var = getattr(self, "theme_mode", None)
+            mode = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(mode)
+        except Exception:
+            pass
+
         window = tk.Toplevel(self)
         self._loading_window = window
-        window.title("Sedang Memproses")
-        window.configure(bg=self.CARD)
+        window.title("Memproses")
+        window.configure(bg=palette["surface"])
         window.resizable(False, False)
         window.transient(self)
         window.protocol("WM_DELETE_WINDOW", lambda: None)
 
-        container = tk.Frame(
+        try:
+            window.attributes("-topmost", True)
+            window.after(
+                250,
+                lambda: window.attributes("-topmost", False),
+            )
+        except tk.TclError:
+            pass
+
+        shell = tk.Frame(
             window,
-            bg=self.CARD,
-            padx=30,
-            pady=26,
+            bg=palette["surface"],
+            bd=0,
+            highlightthickness=0,
+        )
+        shell.pack(fill="both", expand=True)
+
+        accent = tk.Frame(
+            shell,
+            bg=palette["accent"],
+            height=4,
+        )
+        accent.pack(fill="x")
+        accent.pack_propagate(False)
+
+        container = tk.Frame(
+            shell,
+            bg=palette["surface"],
+            padx=28,
+            pady=24,
         )
         container.pack(fill="both", expand=True)
 
-        tk.Label(
+        header = tk.Frame(
             container,
-            text="Memproses dokumen",
-            bg=self.CARD,
-            fg=self.TEXT,
+            bg=palette["surface"],
+        )
+        header.pack(fill="x")
+
+        icon = tk.Label(
+            header,
+            text="◌",
+            bg=palette["surface_soft"],
+            fg=palette["accent"],
             font=("Segoe UI Semibold", 13),
-        ).pack(anchor="w")
+            width=2,
+            height=1,
+        )
+        icon.pack(side="left", padx=(0, 12))
+
+        title_block = tk.Frame(
+            header,
+            bg=palette["surface"],
+        )
+        title_block.pack(side="left", fill="x", expand=True)
+
+        tk.Label(
+            title_block,
+            text="Memproses dokumen",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 13),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            title_block,
+            text="AutoDocumentScanner sedang menyiapkan hasil.",
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 8),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 0))
 
         self._loading_detail_var = tk.StringVar(
             value=self._loading_detail(
@@ -449,35 +1025,72 @@ class FinalScannerUI(SafeScannerUI):
             )
         )
 
-        tk.Label(
+        detail_card = tk.Frame(
             container,
+            bg=palette["surface_soft"],
+            bd=0,
+            padx=14,
+            pady=12,
+        )
+        detail_card.pack(fill="x", pady=(18, 14))
+
+        tk.Label(
+            detail_card,
             textvariable=self._loading_detail_var,
-            bg=self.CARD,
-            fg=self.MUTED,
-            font=("Segoe UI", 9),
+            bg=palette["surface_soft"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 9),
             justify="left",
             anchor="w",
-            wraplength=330,
-        ).pack(fill="x", pady=(6, 16))
+            wraplength=360,
+        ).pack(fill="x")
+
+        tk.Label(
+            detail_card,
+            text=(
+                f"{len(self.files)} file dalam antrean"
+                if len(self.files) != 1
+                else "1 file dalam antrean"
+            ),
+            bg=palette["surface_soft"],
+            fg=palette["muted"],
+            font=("Segoe UI", 8),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 0))
 
         self._loading_progress = ttk.Progressbar(
             container,
             mode="indeterminate",
-            length=330,
+            length=360,
         )
         self._loading_progress.pack(fill="x")
-        self._loading_progress.start(12)
+        self._loading_progress.start(10)
+
+        footer = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        footer.pack(fill="x", pady=(12, 0))
 
         tk.Label(
-            container,
-            text="Mohon tunggu sampai proses selesai.",
-            bg=self.CARD,
-            fg=self.MUTED,
+            footer,
+            text="Jangan tutup aplikasi saat proses berlangsung.",
+            bg=palette["surface"],
+            fg=palette["muted"],
             font=("Segoe UI", 8),
-        ).pack(anchor="w", pady=(12, 0))
+            anchor="w",
+        ).pack(side="left")
+
+        tk.Label(
+            footer,
+            text="● Memproses",
+            bg=palette["surface"],
+            fg=palette["accent"],
+            font=("Segoe UI Semibold", 8),
+        ).pack(side="right")
 
         window.update_idletasks()
-        popup_width = window.winfo_width()
+        popup_width = max(window.winfo_width(), 430)
         popup_height = window.winfo_height()
         x = self.winfo_rootx() + max(
             (self.winfo_width() - popup_width) // 2,
@@ -487,7 +1100,9 @@ class FinalScannerUI(SafeScannerUI):
             (self.winfo_height() - popup_height) // 2,
             0,
         )
-        window.geometry(f"+{x}+{y}")
+        window.geometry(
+            f"{popup_width}x{popup_height}+{x}+{y}"
+        )
         window.lift()
 
     def _hide_loading_popup(self):
@@ -544,15 +1159,102 @@ class FinalScannerUI(SafeScannerUI):
         except tk.TclError:
             self._hide_loading_popup()
 
+    def _refresh_file_scrollbar(self):
+        scrollbar = getattr(self, "_files_scrollbar", None)
+        if scrollbar is None:
+            return
+
+        try:
+            if len(self.files) > 8:
+                if not scrollbar.winfo_ismapped():
+                    scrollbar.pack(side="right", fill="y")
+            elif scrollbar.winfo_ismapped():
+                scrollbar.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _refresh_ktp_action_state(self):
+        has_files = bool(self.files)
+        has_outputs = bool(
+            getattr(self, "_processed_image_paths", lambda: [])()
+        )
+
+        clear_button = getattr(self, "clear_button", None)
+        if clear_button is not None:
+            clear_button.configure(
+                state="normal" if has_files else "disabled"
+            )
+
+        process_button = getattr(self, "process_button", None)
+        if process_button is not None:
+            process_button.configure(
+                state=(
+                    "disabled"
+                    if self._processing_active or not has_files
+                    else "normal"
+                )
+            )
+
+        save_button = getattr(self, "save_button", None)
+        if save_button is not None:
+            save_button.configure(
+                state="normal" if has_outputs else "disabled"
+            )
+
+        pdf_button = getattr(self, "save_pdf_button", None)
+        if pdf_button is not None:
+            pdf_button.configure(
+                state="normal" if has_outputs else "disabled"
+            )
+
+    def clear_files(self):
+        super().clear_files()
+        self.batch_text.set("Belum ada file")
+        self.selected_text.set("Tidak ada file dipilih")
+        self.original_label.configure(
+            image="",
+            text=(
+                "Belum ada foto KTP\n"
+                "Pilih atau tarik foto untuk memulai"
+            ),
+        )
+        self.result_label.configure(
+            image="",
+            text=(
+                "Belum ada hasil\n"
+                "Jalankan Proses Otomatis terlebih dahulu"
+            ),
+        )
+        self.process_button.configure(
+            text="Proses Otomatis"
+        )
+        self._refresh_file_scrollbar()
+        self._refresh_ktp_action_state()
+
     def process_files(self):
         if not self.files:
             return super().process_files()
 
+        choice = self._choose_ktp_processing_mode()
+        if not choice["accepted"]:
+            return
+
+        selected_mode = choice["mode"]
+        self.output_mode.set(selected_mode)
+        self.status_text.set(
+            "Mode hasil: "
+            f"{self._ktp_mode_label(selected_mode)}"
+        )
+
+        self._processing_active = True
+        self._refresh_ktp_action_state()
         self._show_loading_popup()
 
         try:
             result = super().process_files()
         except Exception:
+            self._processing_active = False
+            self._refresh_ktp_action_state()
             self._hide_loading_popup()
             raise
 
@@ -571,6 +1273,13 @@ class FinalScannerUI(SafeScannerUI):
         self.batch_text.set(
             self._batch_summary(len(self.files))
         )
+        if not self.files:
+            self.selected_text.set("Tidak ada file dipilih")
+        self.process_button.configure(
+            text="Proses Otomatis"
+        )
+        self._refresh_file_scrollbar()
+        self._refresh_ktp_action_state()
 
     def _show_selected(self, index):
         if 0 <= index < len(self.files):

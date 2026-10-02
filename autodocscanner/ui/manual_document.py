@@ -2,6 +2,11 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+try:
+    import windnd
+except ImportError:
+    windnd = None
+
 import cv2
 from PIL import Image, ImageTk
 
@@ -19,6 +24,8 @@ class ManualDocumentPage(ttk.Frame):
     DEFAULT_OUTPUT_FORMAT = "image"
     HANDLE_RADIUS = 8
     HANDLE_HIT_RADIUS = 18
+    NARROW_BREAKPOINT = 900
+    COMPACT_BREAKPOINT = 1180
 
     def __init__(self, parent, on_back=None, output_dir="output"):
         super().__init__(parent, padding=18)
@@ -30,16 +37,30 @@ class ManualDocumentPage(ttk.Frame):
             master=self,
             value=self.DEFAULT_OUTPUT_FORMAT,
         )
+        self._page_image_modes = {}
+        self._session_image_mode = None
         self.status_text = tk.StringVar(
             master=self,
             value="Pilih satu atau beberapa gambar dokumen untuk memulai.",
+        )
+        self.page_position_text = tk.StringVar(
+            master=self,
+            value="Halaman 0 / 0",
         )
         self._canvas_photo = None
         self._result_photo = None
         self._display_size = None
         self._display_offset = None
         self._active_corner = None
+        self._responsive_mode = None
+        self._resize_after_id = None
         self._build_ui()
+        self.bind(
+            "<Configure>",
+            self._on_page_resize,
+            add="+",
+        )
+        self.after_idle(self._apply_responsive_layout)
 
     @staticmethod
     def page_label(index, path, corrected):
@@ -62,6 +83,12 @@ class ManualDocumentPage(ttk.Frame):
 
         ttk.Label(
             title,
+            text="DOKUMEN",
+            style="Eyebrow.TLabel",
+        ).pack(anchor="w", pady=(0, 3))
+
+        ttk.Label(
+            title,
             text="Koreksi Dokumen Manual",
             style="Header.TLabel",
         ).pack(anchor="w")
@@ -79,38 +106,90 @@ class ManualDocumentPage(ttk.Frame):
         ttk.Button(
             actions,
             text="Pilih Dokumen",
+            style="Secondary.TButton",
             command=self.choose_images,
         ).pack(side="left")
         ttk.Button(
             actions,
             text="Kosongkan",
+            style="Quiet.TButton",
             command=self.clear_pages,
         ).pack(side="left", padx=(8, 0))
+
+        self._drop_zone = tk.Frame(
+            self,
+            bg="#EFF6FF",
+            highlightbackground="#BFDBFE",
+            highlightthickness=1,
+            bd=0,
+            padx=16,
+            pady=13,
+        )
+        self._drop_zone.pack(fill="x", pady=(0, 12))
+
+        self._drop_zone_title = tk.Label(
+            self._drop_zone,
+            text="⇧  Upload Dokumen",
+            bg="#EFF6FF",
+            fg="#1D4ED8",
+            font=("Segoe UI Semibold", 10),
+        )
+        self._drop_zone_title.pack(side="left")
+
+        self._drop_zone_hint = tk.Label(
+            self._drop_zone,
+            text="Tarik & lepas file  •  JPG • PNG • JPEG • BMP • WEBP",
+            bg="#EFF6FF",
+            fg="#64748B",
+            font=("Segoe UI", 8),
+        )
+        self._drop_zone_hint.pack(side="right")
+
+        self._drop_zone.bind(
+            "<Button-1>",
+            lambda _event: self.choose_images(),
+        )
+        self._drop_zone_title.bind(
+            "<Button-1>",
+            lambda _event: self.choose_images(),
+        )
+        self.after_idle(self._install_file_drop)
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True)
 
         sidebar = ttk.Frame(
             body,
-            style="Sidebar.TFrame",
+            style="Card.TFrame",
             padding=12,
-            width=235,
+            width=220,
         )
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
+        self._document_sidebar = sidebar
 
         ttk.Label(
             sidebar,
             text="Halaman Dokumen",
-            style="SidebarTitle.TLabel",
+            style="CardLabel.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             sidebar,
             text="✓ = sudah dikoreksi",
-            style="SidebarMuted.TLabel",
-        ).pack(anchor="w", pady=(2, 8))
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(2, 4))
+        ttk.Label(
+            sidebar,
+            textvariable=self.page_position_text,
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
 
-        list_wrap = tk.Frame(sidebar, bg="#FFFFFF")
+        list_wrap = tk.Frame(
+            sidebar,
+            bg="#FFFFFF",
+            highlightthickness=0,
+        )
+        self._page_list_wrap = list_wrap
         list_wrap.pack(fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(list_wrap, orient="vertical")
@@ -132,9 +211,25 @@ class ManualDocumentPage(ttk.Frame):
         scrollbar.configure(command=self.page_list.yview)
         self.page_list.bind("<<ListboxSelect>>", self._on_page_select)
 
+        page_nav = ttk.Frame(sidebar, style="Surface.TFrame")
+        page_nav.pack(fill="x", pady=(10, 0))
+        ttk.Button(
+            page_nav,
+            text="‹",
+            style="Quiet.TButton",
+            command=self.select_previous_page,
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            page_nav,
+            text="›",
+            style="Quiet.TButton",
+            command=self.select_next_page,
+        ).pack(side="left", fill="x", expand=True, padx=(6, 0))
+
         ttk.Button(
             sidebar,
             text="Folder Output",
+            style="Secondary.TButton",
             command=self.choose_output_dir,
         ).pack(fill="x", pady=(10, 0))
 
@@ -145,21 +240,28 @@ class ManualDocumentPage(ttk.Frame):
             expand=True,
             padx=(14, 0),
         )
+        self._document_workspace = workspace
 
         previews = ttk.Frame(workspace)
         previews.pack(fill="both", expand=True)
+        self._document_previews = previews
+
+        previews.grid_rowconfigure(0, weight=1)
+        previews.grid_columnconfigure(0, weight=2, uniform="document-preview")
+        previews.grid_columnconfigure(1, weight=1, uniform="document-preview")
 
         canvas_card = ttk.Frame(
             previews,
             style="Card.TFrame",
             padding=10,
         )
-        canvas_card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
             padx=(0, 6),
         )
+        self._canvas_card = canvas_card
         ttk.Label(
             canvas_card,
             text="Dokumen + 4 Titik",
@@ -183,12 +285,13 @@ class ManualDocumentPage(ttk.Frame):
             style="Card.TFrame",
             padding=10,
         )
-        result_card.pack(
-            side="left",
-            fill="both",
-            expand=True,
+        result_card.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
             padx=(6, 0),
         )
+        self._result_card = result_card
         ttk.Label(
             result_card,
             text="Preview Hasil",
@@ -197,7 +300,7 @@ class ManualDocumentPage(ttk.Frame):
 
         self.result_label = tk.Label(
             result_card,
-            text="Belum dikoreksi",
+            text="Preview belum tersedia\nTerapkan koreksi untuk melihat hasil",
             bg="#E9EDF0",
             fg="#737D85",
             bd=0,
@@ -207,20 +310,24 @@ class ManualDocumentPage(ttk.Frame):
 
         controls = ttk.Frame(workspace)
         controls.pack(fill="x", pady=(12, 0))
+        self._document_controls = controls
 
         ttk.Button(
             controls,
             text="Reset Titik",
+            style="Quiet.TButton",
             command=self.reset_current,
         ).pack(side="left")
         ttk.Button(
             controls,
             text="↺ Putar Kiri",
+            style="Secondary.TButton",
             command=lambda: self.rotate_current("left"),
         ).pack(side="left", padx=(8, 0))
         ttk.Button(
             controls,
             text="Putar Kanan ↻",
+            style="Secondary.TButton",
             command=lambda: self.rotate_current("right"),
         ).pack(side="left", padx=(8, 0))
         ttk.Button(
@@ -252,6 +359,7 @@ class ManualDocumentPage(ttk.Frame):
         ttk.Button(
             export_group,
             text="Export",
+            style="Accent.TButton",
             command=self.export_results,
         ).pack(side="left", padx=(12, 0))
 
@@ -260,6 +368,241 @@ class ManualDocumentPage(ttk.Frame):
             textvariable=self.status_text,
             style="Subheader.TLabel",
         ).pack(fill="x", pady=(10, 0))
+
+    def _on_page_resize(self, event):
+        if event.widget is not self:
+            return
+
+        if self._resize_after_id is not None:
+            try:
+                self.after_cancel(self._resize_after_id)
+            except tk.TclError:
+                pass
+
+        self._resize_after_id = self.after(
+            120,
+            lambda: self._apply_responsive_layout(event.width),
+        )
+
+    def _apply_responsive_layout(self, width=None):
+        self._resize_after_id = None
+
+        try:
+            width = int(width or self.winfo_width())
+        except (TypeError, ValueError, tk.TclError):
+            return
+
+        if width < self.NARROW_BREAKPOINT:
+            mode = "narrow"
+        elif width < self.COMPACT_BREAKPOINT:
+            mode = "compact"
+        else:
+            mode = "wide"
+
+        if mode == self._responsive_mode:
+            return
+
+        self._responsive_mode = mode
+
+        try:
+            if mode == "wide":
+                self._document_sidebar.configure(width=220)
+                self._pack_document_previews_horizontal(
+                    canvas_weight=2,
+                    result_weight=1,
+                    gap=6,
+                )
+            elif mode == "compact":
+                self._document_sidebar.configure(width=185)
+                self._pack_document_previews_horizontal(
+                    canvas_weight=3,
+                    result_weight=2,
+                    gap=5,
+                )
+            else:
+                self._document_sidebar.configure(width=155)
+                self._pack_document_previews_vertical()
+        except tk.TclError:
+            return
+
+        if self.current_index is not None:
+            self.after_idle(self._render_current)
+
+    def _pack_document_previews_horizontal(
+        self,
+        canvas_weight,
+        result_weight,
+        gap,
+    ):
+        previews = self._document_previews
+        self._canvas_card.grid_forget()
+        self._result_card.grid_forget()
+
+        previews.grid_rowconfigure(0, weight=1)
+        previews.grid_rowconfigure(1, weight=0)
+        previews.grid_columnconfigure(
+            0,
+            weight=canvas_weight,
+            uniform="",
+        )
+        previews.grid_columnconfigure(
+            1,
+            weight=result_weight,
+            uniform="",
+        )
+
+        self._canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(0, gap),
+        )
+        self._result_card.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(gap, 0),
+        )
+
+    def _pack_document_previews_vertical(self):
+        previews = self._document_previews
+        self._canvas_card.grid_forget()
+        self._result_card.grid_forget()
+
+        previews.grid_columnconfigure(0, weight=1)
+        previews.grid_columnconfigure(1, weight=0)
+        previews.grid_rowconfigure(0, weight=3)
+        previews.grid_rowconfigure(1, weight=2)
+
+        self._canvas_card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=0,
+            pady=(0, 5),
+        )
+        self._result_card.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=0,
+            pady=(5, 0),
+        )
+
+    @staticmethod
+    def _decode_drop_path(raw_path):
+        if isinstance(raw_path, bytes):
+            for encoding in ("utf-8", "mbcs"):
+                try:
+                    return Path(raw_path.decode(encoding))
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return None
+
+        try:
+            return Path(str(raw_path))
+        except (TypeError, ValueError):
+            return None
+
+    def _collect_dropped_images(self, raw_paths):
+        images = []
+
+        for raw_path in raw_paths or []:
+            path = self._decode_drop_path(raw_path)
+            if path is None:
+                continue
+
+            if path.is_dir():
+                images.extend(
+                    sorted(
+                        child
+                        for child in path.iterdir()
+                        if (
+                            child.is_file()
+                            and child.suffix.lower()
+                            in self.SUPPORTED_EXTENSIONS
+                        )
+                    )
+                )
+            elif (
+                path.is_file()
+                and path.suffix.lower()
+                in self.SUPPORTED_EXTENSIONS
+            ):
+                images.append(path)
+
+        unique = []
+        seen = set()
+        for path in images:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+
+        return unique
+
+    def _install_file_drop(self):
+        if windnd is None:
+            return
+
+        try:
+            windnd.hook_dropfiles(
+                self._drop_zone,
+                func=self._on_drop_files,
+            )
+        except Exception:
+            return
+
+    def _on_drop_files(self, raw_paths):
+        paths = self._collect_dropped_images(raw_paths)
+        if not paths:
+            self.after(
+                0,
+                self.status_text.set,
+                "Tidak ada gambar dokumen yang valid pada drop.",
+            )
+            return
+
+        self.after(
+            0,
+            self._add_image_paths,
+            paths,
+        )
+
+    def _add_image_paths(self, paths):
+        first_added = len(self.session.pages)
+        failed = []
+
+        for path in paths:
+            image = cv2.imread(str(path))
+            if image is None:
+                failed.append(Path(path).name)
+                continue
+            index = self.session.add_image(
+                Path(path),
+                image,
+            )
+            if self._session_image_mode is not None:
+                self._page_image_modes[
+                    index
+                ] = self._session_image_mode
+
+        self._refresh_page_list()
+
+        if len(self.session.pages) > first_added:
+            self._select_page(first_added)
+
+        if failed:
+            messagebox.showwarning(
+                "Dokumen",
+                "File berikut tidak dapat dibaca:\n"
+                + "\n".join(failed[:5]),
+            )
+
+        self.status_text.set(
+            f"{len(self.session.pages)} halaman siap dikoreksi."
+        )
 
     def choose_images(self):
         paths = filedialog.askopenfilenames(
@@ -271,41 +614,28 @@ class ManualDocumentPage(ttk.Frame):
         if not paths:
             return
 
-        first_added = len(self.session.pages)
-        failed = []
-
-        for raw_path in paths:
-            path = Path(raw_path)
-            image = cv2.imread(str(path))
-            if image is None:
-                failed.append(path.name)
-                continue
-            self.session.add_image(path, image)
-
-        self._refresh_page_list()
-
-        if len(self.session.pages) > first_added:
-            self._select_page(first_added)
-
-        if failed:
-            messagebox.showwarning(
-                "Dokumen",
-                "File berikut tidak dapat dibaca:\n" + "\n".join(failed[:5]),
-            )
-
-        self.status_text.set(
-            f"{len(self.session.pages)} halaman siap dikoreksi."
+        self._add_image_paths(
+            [Path(raw_path) for raw_path in paths]
         )
 
     def clear_pages(self):
         self.session = ManualDocumentSession()
         self.current_index = None
         self._active_corner = None
+        self._page_image_modes = {}
+        self._session_image_mode = None
         self.page_list.delete(0, tk.END)
         self.canvas.delete("all")
         self._canvas_photo = None
         self._result_photo = None
-        self.result_label.configure(image="", text="Belum dikoreksi")
+        self.result_label.configure(
+            image="",
+            text=(
+                "Preview belum tersedia\n"
+                "Terapkan koreksi untuk melihat hasil"
+            ),
+        )
+        self._update_page_position()
         self.status_text.set("Daftar halaman dikosongkan.")
 
     def choose_output_dir(self):
@@ -334,6 +664,8 @@ class ManualDocumentPage(ttk.Frame):
         ):
             self.page_list.selection_set(selected)
 
+        self._update_page_position()
+
     def _select_page(self, index):
         index = int(index)
         if not 0 <= index < len(self.session.pages):
@@ -343,6 +675,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.selection_clear(0, tk.END)
         self.page_list.selection_set(index)
         self.page_list.see(index)
+        self._update_page_position()
         self._render_current()
 
     def _on_page_select(self, _event=None):
@@ -350,7 +683,43 @@ class ManualDocumentPage(ttk.Frame):
         if not selection:
             return
         self.current_index = int(selection[0])
+        self._update_page_position()
         self._render_current()
+
+    def _update_page_position(self):
+        total = len(self.session.pages)
+        if (
+            self.current_index is None
+            or not 0 <= self.current_index < total
+        ):
+            self.page_position_text.set(f"Halaman 0 / {total}")
+            return
+
+        self.page_position_text.set(
+            f"Halaman {self.current_index + 1} / {total}"
+        )
+
+    def select_previous_page(self):
+        if not self.session.pages:
+            return
+
+        if self.current_index is None:
+            self._select_page(0)
+            return
+
+        self._select_page(max(0, self.current_index - 1))
+
+    def select_next_page(self):
+        if not self.session.pages:
+            return
+
+        if self.current_index is None:
+            self._select_page(0)
+            return
+
+        self._select_page(
+            min(len(self.session.pages) - 1, self.current_index + 1)
+        )
 
     def _on_canvas_resize(self, _event=None):
         if self.current_index is not None:
@@ -376,7 +745,10 @@ class ManualDocumentPage(ttk.Frame):
             padding=22,
         )
 
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        rgb = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2RGB,
+        )
         pil = Image.fromarray(rgb)
         pil = pil.resize(
             (display_width, display_height),
@@ -535,30 +907,373 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
+        choice = self._choose_processing_mode()
+        if not choice["accepted"]:
+            return
+
+        selected_mode = choice["mode"]
+
+        if choice["apply_all"]:
+            self._session_image_mode = selected_mode
+            self._page_image_modes = {
+                index: selected_mode
+                for index in range(len(self.session.pages))
+            }
+        else:
+            self._page_image_modes[
+                self.current_index
+            ] = selected_mode
+
         try:
-            result = self.session.apply_correction(self.current_index)
+            result = self.session.apply_correction(
+                self.current_index
+            )
         except Exception as exc:
-            messagebox.showerror("Koreksi Dokumen", str(exc))
+            messagebox.showerror(
+                "Koreksi Dokumen",
+                str(exc),
+            )
             return
 
         self._render_result(result)
         self._refresh_page_list()
-        self.page_list.selection_set(self.current_index)
-        self.status_text.set(
-            f"Halaman {self.current_index + 1} berhasil dikoreksi."
+        self.page_list.selection_set(
+            self.current_index
         )
+
+        scope = (
+            "semua halaman"
+            if choice["apply_all"]
+            else f"halaman {self.current_index + 1}"
+        )
+        self.status_text.set(
+            f"Koreksi berhasil • "
+            f"{self._mode_label(selected_mode)} • {scope}."
+        )
+
+    @staticmethod
+    def _mode_label(mode):
+        return {
+            "color": "Warna",
+            "grayscale": "Grayscale",
+            "bw": "B&W",
+        }.get(mode, "Warna")
+
+    def _mode_for_page(self, index):
+        index = int(index)
+        if index in self._page_image_modes:
+            return self._page_image_modes[index]
+        if self._session_image_mode is not None:
+            return self._session_image_mode
+        return "color"
+
+    def _apply_image_mode(self, image, mode="color"):
+        if image is None:
+            return None
+
+        mode = str(mode or "color").lower()
+
+        if mode == "color":
+            return image.copy()
+
+        if image.ndim == 2:
+            gray = image.copy()
+        else:
+            gray = cv2.cvtColor(
+                image,
+                cv2.COLOR_BGR2GRAY,
+            )
+
+        if mode == "grayscale":
+            return gray
+
+        if mode == "bw":
+            blurred = cv2.GaussianBlur(
+                gray,
+                (3, 3),
+                0,
+            )
+            _, bw = cv2.threshold(
+                blurred,
+                0,
+                255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+            )
+            return bw
+
+        return image.copy()
+
+    def _choose_processing_mode(self):
+        current_mode = self._mode_for_page(
+            self.current_index
+        )
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Pilih Mode Hasil")
+        dialog.transient(self.winfo_toplevel())
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        try:
+            from autodocscanner.ui.theme import get_theme
+            root = self.winfo_toplevel()
+            mode_var = getattr(root, "theme_mode", None)
+            theme_name = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(theme_name)
+        except Exception:
+            palette = {
+                "surface": "#FFFFFF",
+                "surface_soft": "#F8FAFC",
+                "text": "#172033",
+                "muted": "#64748B",
+                "accent": "#2563EB",
+            }
+
+        dialog.configure(bg=palette["surface"])
+
+        result = {
+            "accepted": False,
+            "mode": current_mode,
+            "apply_all": False,
+        }
+
+        selected_mode = tk.StringVar(
+            master=dialog,
+            value=current_mode,
+        )
+        apply_all = tk.BooleanVar(
+            master=dialog,
+            value=False,
+        )
+
+        container = tk.Frame(
+            dialog,
+            bg=palette["surface"],
+            padx=26,
+            pady=24,
+        )
+        container.pack(fill="both", expand=True)
+
+        tk.Label(
+            container,
+            text="Pilih Mode Hasil",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            container,
+            text=(
+                "Tentukan tampilan hasil koreksi "
+                "untuk halaman dokumen ini."
+            ),
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(fill="x", pady=(4, 16))
+
+        options = (
+            (
+                "color",
+                "Warna",
+                "Pertahankan warna asli dokumen.",
+            ),
+            (
+                "grayscale",
+                "Grayscale",
+                "Hasil abu-abu yang lebih ringan.",
+            ),
+            (
+                "bw",
+                "B&W",
+                "Hitam-putih dengan kontras tinggi untuk teks.",
+            ),
+        )
+
+        for value, title, description in options:
+            row = tk.Frame(
+                container,
+                bg=palette["surface_soft"],
+                padx=12,
+                pady=10,
+            )
+            row.pack(fill="x", pady=(0, 8))
+
+            radio = ttk.Radiobutton(
+                row,
+                text=title,
+                variable=selected_mode,
+                value=value,
+            )
+            radio.pack(anchor="w")
+
+            tk.Label(
+                row,
+                text=description,
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+                font=("Segoe UI", 8),
+                anchor="w",
+            ).pack(fill="x", padx=(24, 0), pady=(2, 0))
+
+            row.bind(
+                "<Button-1>",
+                lambda _event, v=value: selected_mode.set(v),
+            )
+
+        apply_row = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        apply_row.pack(fill="x", pady=(6, 16))
+
+        ttk.Checkbutton(
+            apply_row,
+            text="Terapkan mode ini ke semua halaman",
+            variable=apply_all,
+        ).pack(anchor="w")
+
+        buttons = tk.Frame(
+            container,
+            bg=palette["surface"],
+        )
+        buttons.pack(fill="x")
+
+        def cancel():
+            dialog.destroy()
+
+        def accept():
+            result["accepted"] = True
+            result["mode"] = selected_mode.get()
+            result["apply_all"] = bool(apply_all.get())
+            dialog.destroy()
+
+        ttk.Button(
+            buttons,
+            text="Batal",
+            style="Quiet.TButton",
+            command=cancel,
+        ).pack(side="right")
+
+        ttk.Button(
+            buttons,
+            text="Lanjutkan",
+            style="Accent.TButton",
+            command=accept,
+        ).pack(side="right", padx=(0, 8))
+
+        dialog.update_idletasks()
+        width = max(dialog.winfo_width(), 430)
+        height = dialog.winfo_height()
+        root = self.winfo_toplevel()
+        x = root.winfo_rootx() + max(
+            (root.winfo_width() - width) // 2,
+            0,
+        )
+        y = root.winfo_rooty() + max(
+            (root.winfo_height() - height) // 2,
+            0,
+        )
+        dialog.geometry(
+            f"{width}x{height}+{x}+{y}"
+        )
+
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.wait_window()
+
+        return result
 
     def _render_result(self, image):
         if image is None:
             self._result_photo = None
-            self.result_label.configure(image="", text="Belum dikoreksi")
+            self.result_label.configure(
+                image="",
+                text=(
+                    "Preview belum tersedia\n"
+                    "Terapkan koreksi untuk melihat hasil"
+                ),
+            )
             return
 
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil = Image.fromarray(rgb)
-        pil.thumbnail((420, 520), Image.Resampling.LANCZOS)
+        mode = (
+            self._mode_for_page(self.current_index)
+            if self.current_index is not None
+            else "color"
+        )
+        rendered = self._apply_image_mode(
+            image,
+            mode,
+        )
+
+        if rendered.ndim == 2:
+            pil = Image.fromarray(rendered)
+        else:
+            rgb = cv2.cvtColor(
+                rendered,
+                cv2.COLOR_BGR2RGB,
+            )
+            pil = Image.fromarray(rgb)
+
+        pil.thumbnail(
+            (420, 520),
+            Image.Resampling.LANCZOS,
+        )
         self._result_photo = ImageTk.PhotoImage(pil)
-        self.result_label.configure(image=self._result_photo, text="")
+        self.result_label.configure(
+            image=self._result_photo,
+            text="",
+        )
+
+    def apply_theme(self, palette):
+        try:
+            self.configure(
+                style="TFrame"
+            )
+        except Exception:
+            pass
+
+        try:
+            self._drop_zone.configure(
+                bg=palette["surface_soft"],
+                highlightbackground=palette["border"],
+            )
+            self._drop_zone_title.configure(
+                bg=palette["surface_soft"],
+                fg=palette["accent"],
+            )
+            self._drop_zone_hint.configure(
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+            )
+        except Exception:
+            pass
+
+        try:
+            self.canvas.configure(
+                bg=palette["surface_soft"],
+            )
+            self.result_label.configure(
+                bg=palette["surface_soft"],
+                fg=palette["muted"],
+            )
+            self.page_list.configure(
+                bg=palette["surface"],
+                fg=palette["text"],
+                selectbackground=palette["active_bg"],
+                selectforeground=palette["text"],
+            )
+            self._page_list_wrap.configure(
+                bg=palette["surface"],
+            )
+        except Exception:
+            pass
 
     def export_results(self):
         if not self.session.pages:
@@ -575,7 +1290,16 @@ class ManualDocumentPage(ttk.Frame):
             )
             return
 
-        images = self.session.corrected_images()
+        corrected_images = self.session.corrected_images()
+        images = [
+            self._apply_image_mode(
+                image,
+                self._mode_for_page(index),
+            )
+            for index, image in enumerate(
+                corrected_images
+            )
+        ]
 
         try:
             if self.output_format.get() == "pdf":

@@ -38,7 +38,7 @@ a = Analysis(
         + brand_datas
         + detector_datas
     ),
-    hiddenimports=[],
+    hiddenimports=["windnd"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -340,22 +340,44 @@ class AutoDocumentScanner:
         image,
         output_mode="color",
     ):
+        output_mode = str(
+            output_mode or "color"
+        ).strip().lower()
+
         if output_mode == "color":
             return image
 
-        if output_mode == "grayscale":
-            gray = cv2.cvtColor(
-                image,
-                cv2.COLOR_BGR2GRAY,
-            )
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
 
+        if output_mode == "grayscale":
             return cv2.cvtColor(
                 gray,
                 cv2.COLOR_GRAY2BGR,
             )
 
+        if output_mode == "bw":
+            blurred = cv2.GaussianBlur(
+                gray,
+                (3, 3),
+                0,
+            )
+            _, bw = cv2.threshold(
+                blurred,
+                0,
+                255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+            )
+            return cv2.cvtColor(
+                bw,
+                cv2.COLOR_GRAY2BGR,
+            )
+
         raise ValueError(
-            "output_mode harus 'color' atau 'grayscale'."
+            "output_mode harus 'color', "
+            "'grayscale', atau 'bw'."
         )
 
     def scan(
