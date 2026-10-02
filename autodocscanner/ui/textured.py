@@ -340,7 +340,7 @@ class TexturedScannerUI(FinalScannerUI):
             uniform="preview",
         )
 
-        column = 0 if title.startswith("Original") else 1
+        column = 0 if title.startswith("Foto Asli") else 1
 
         shadow = tk.Frame(
             parent,
@@ -387,8 +387,8 @@ class TexturedScannerUI(FinalScannerUI):
         tk.Label(
             header,
             text=(
-                "Deteksi sudut KTP"
-                if title.startswith("Original")
+                "Area deteksi sudut KTP"
+                if title.startswith("Foto Asli")
                 else "Hasil koreksi perspektif"
             ),
             bg=self.CARD,
@@ -399,8 +399,8 @@ class TexturedScannerUI(FinalScannerUI):
         content = tk.Frame(
             frame,
             bg=self.CARD,
-            padx=12,
-            pady=12,
+            padx=8,
+            pady=8,
         )
         content.pack(fill="both", expand=True)
 
