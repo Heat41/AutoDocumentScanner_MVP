@@ -1225,6 +1225,9 @@ class FinalScannerUI(SafeScannerUI):
                 "Jalankan Proses Otomatis terlebih dahulu"
             ),
         )
+        self.process_button.configure(
+            text="Proses Otomatis"
+        )
         self._refresh_file_scrollbar()
         self._refresh_ktp_action_state()
 
@@ -1272,6 +1275,9 @@ class FinalScannerUI(SafeScannerUI):
         )
         if not self.files:
             self.selected_text.set("Tidak ada file dipilih")
+        self.process_button.configure(
+            text="Proses Otomatis"
+        )
         self._refresh_file_scrollbar()
         self._refresh_ktp_action_state()
 
