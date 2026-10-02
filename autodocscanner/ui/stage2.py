@@ -395,14 +395,17 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             padx=(0, 8),
         )
 
-        ttk.Button(
+        self.save_pdf_button = ttk.Button(
             panel,
             text="Simpan PDF",
             style="Secondary.TButton",
             command=self.save_ktp_pdf,
-        ).pack(side="left")
+            state="disabled",
+        )
+        self.save_pdf_button.pack(side="left")
 
         self._format_panel = panel
+        self._refresh_ktp_action_state()
 
     def process_files(self):
         self._active_output_format = "image"
@@ -660,9 +663,11 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 )
 
         def finish():
+            self._processing_active = False
             self.process_button.configure(
                 state="normal"
             )
+            self._refresh_ktp_action_state()
 
             selection = (
                 self.listbox.curselection()
