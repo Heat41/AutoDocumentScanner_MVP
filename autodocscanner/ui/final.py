@@ -453,7 +453,7 @@ class FinalScannerUI(SafeScannerUI):
             fill="both",
             expand=True,
             padx=(0, 6)
-            if title.startswith("Original")
+            if title.startswith("Foto Asli")
             else (6, 0),
         )
 
