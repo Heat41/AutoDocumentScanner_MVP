@@ -300,7 +300,7 @@ class FinalScannerUI(SafeScannerUI):
             list_frame,
             orient="vertical",
         )
-        scrollbar.pack(side="right", fill="y")
+        self._files_scrollbar = scrollbar
 
         self.listbox = tk.Listbox(
             list_frame,
@@ -371,11 +371,11 @@ class FinalScannerUI(SafeScannerUI):
 
         self.original_label = self._preview_card(
             previews,
-            "Original + Corner",
+            "Foto Asli + Sudut",
         )
         self.result_label = self._preview_card(
             previews,
-            "Hasil Scanner",
+            "Hasil Koreksi",
         )
 
         info = ttk.Frame(footer)
@@ -466,8 +466,8 @@ class FinalScannerUI(SafeScannerUI):
         ttk.Label(
             frame,
             text=(
-                "Area deteksi fisik"
-                if title.startswith("Original")
+                "Area deteksi sudut KTP"
+                if title.startswith("Foto Asli")
                 else "Hasil koreksi perspektif"
             ),
             style="CardMuted.TLabel",
@@ -478,7 +478,7 @@ class FinalScannerUI(SafeScannerUI):
             text=(
                 "Belum ada foto KTP\n"
                 "Pilih atau tarik foto untuk memulai"
-                if title.startswith("Original")
+                if title.startswith("Foto Asli")
                 else
                 "Belum ada hasil\n"
                 "Jalankan Proses Otomatis terlebih dahulu"
@@ -1054,6 +1054,20 @@ class FinalScannerUI(SafeScannerUI):
         except tk.TclError:
             self._hide_loading_popup()
 
+    def _refresh_file_scrollbar(self):
+        scrollbar = getattr(self, "_files_scrollbar", None)
+        if scrollbar is None:
+            return
+
+        try:
+            if len(self.files) > 8:
+                if not scrollbar.winfo_ismapped():
+                    scrollbar.pack(side="right", fill="y")
+            elif scrollbar.winfo_ismapped():
+                scrollbar.pack_forget()
+        except tk.TclError:
+            pass
+
     def _refresh_ktp_action_state(self):
         has_files = bool(self.files)
         has_outputs = bool(
@@ -1106,6 +1120,7 @@ class FinalScannerUI(SafeScannerUI):
                 "Jalankan Proses Otomatis terlebih dahulu"
             ),
         )
+        self._refresh_file_scrollbar()
         self._refresh_ktp_action_state()
 
     def process_files(self):
@@ -1152,6 +1167,7 @@ class FinalScannerUI(SafeScannerUI):
         )
         if not self.files:
             self.selected_text.set("Tidak ada file dipilih")
+        self._refresh_file_scrollbar()
         self._refresh_ktp_action_state()
 
     def _show_selected(self, index):
