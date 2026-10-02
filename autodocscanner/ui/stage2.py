@@ -386,25 +386,23 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         return Path(path).suffix.lower() == ".pdf"
 
     def _install_output_format_controls(self):
-        footer = self.process_button.master
-
-        panel = ttk.Frame(footer)
-        panel.pack(
-            side="right",
-            before=self.process_button,
-            padx=(0, 8),
-        )
+        action_panel = self._action_panel
 
         self.save_pdf_button = ttk.Button(
-            panel,
+            action_panel,
             text="Simpan PDF",
             style="Secondary.TButton",
             command=self.save_ktp_pdf,
             state="disabled",
+            width=12,
         )
-        self.save_pdf_button.pack(side="left")
+        self.save_pdf_button.pack(
+            side="left",
+            before=self.process_button,
+            padx=(8, 0),
+        )
 
-        self._format_panel = panel
+        self._format_panel = action_panel
         self._refresh_ktp_action_state()
 
     def process_files(self):
