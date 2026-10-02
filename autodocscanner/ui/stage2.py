@@ -680,11 +680,15 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 )
 
             if failed == 0:
-                self.status_text.set(
-                    "Selesai — "
-                    f"berhasil {success}, "
-                    "gagal 0."
-                )
+                if success == 1:
+                    self.status_text.set(
+                        "Selesai — 1 KTP berhasil diproses."
+                    )
+                else:
+                    self.status_text.set(
+                        "Selesai — "
+                        f"{success} KTP berhasil diproses."
+                    )
             elif (
                 success == 0
                 and len(self.files) == 1
@@ -695,6 +699,15 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     "Selesai — "
                     f"berhasil {success}, "
                     f"gagal {failed}."
+                )
+
+            if success > 0:
+                self.process_button.configure(
+                    text="Proses Ulang"
+                )
+            else:
+                self.process_button.configure(
+                    text="Proses Otomatis"
                 )
 
             if failed:
