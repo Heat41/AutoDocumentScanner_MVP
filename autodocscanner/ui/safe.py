@@ -82,14 +82,6 @@ class SafeScannerUI(ScannerUI):
 
         output = self._output_by_file.get(key)
 
-        if output is None:
-            default_output = (
-                self.output_dir
-                / f"{path.stem}_scanned.jpg"
-            )
-            if default_output.exists():
-                output = default_output
-
         if output and Path(output).exists():
             self._show_result(output)
         else:
