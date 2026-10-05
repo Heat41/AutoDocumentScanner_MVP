@@ -104,23 +104,6 @@ class ManualDocumentPage(ttk.Frame):
             style="Subheader.TLabel",
         ).pack(anchor="w", pady=(3, 0))
 
-        actions = ttk.Frame(header)
-        actions.pack(side="right")
-        ttk.Button(
-            actions,
-            text="Pilih Dokumen",
-            style="Secondary.TButton",
-            command=self.choose_images,
-        ).pack(side="left")
-        self.clear_button = ttk.Button(
-            actions,
-            text="Kosongkan",
-            style="Quiet.TButton",
-            command=self.clear_pages,
-            state="disabled",
-        )
-        self.clear_button.pack(side="left", padx=(8, 0))
-
         self._drop_zone = tk.Frame(
             self,
             bg="#EFF6FF",
@@ -132,23 +115,44 @@ class ManualDocumentPage(ttk.Frame):
         )
         self._drop_zone.pack(fill="x", pady=(0, 12))
 
-        self._drop_zone_title = tk.Label(
+        drop_text = tk.Frame(
             self._drop_zone,
+            bg="#EFF6FF",
+        )
+        drop_text.pack(side="left", fill="x", expand=True)
+        self._drop_text = drop_text
+
+        self._drop_zone_title = tk.Label(
+            drop_text,
             text="⇧  Upload Dokumen",
             bg="#EFF6FF",
             fg="#1D4ED8",
             font=("Segoe UI Semibold", 10),
         )
-        self._drop_zone_title.pack(side="left")
+        self._drop_zone_title.pack(anchor="w")
 
         self._drop_zone_hint = tk.Label(
-            self._drop_zone,
-            text="Tarik & lepas file  •  JPG • PNG • JPEG • BMP • WEBP",
+            drop_text,
+            text="Tarik & lepas file di area ini  •  JPG • JPEG • PNG • BMP • WEBP",
             bg="#EFF6FF",
             fg="#64748B",
             font=("Segoe UI", 8),
         )
-        self._drop_zone_hint.pack(side="right")
+        self._drop_zone_hint.pack(anchor="w", pady=(3, 0))
+
+        drop_actions = tk.Frame(
+            self._drop_zone,
+            bg="#EFF6FF",
+        )
+        drop_actions.pack(side="right", padx=(16, 0))
+        self._drop_actions = drop_actions
+
+        ttk.Button(
+            drop_actions,
+            text="Pilih Dokumen",
+            style="Secondary.TButton",
+            command=self.choose_images,
+        ).pack(side="left")
 
         self._drop_zone.bind(
             "<Button-1>",
@@ -241,6 +245,15 @@ class ManualDocumentPage(ttk.Frame):
             expand=True,
             padx=(6, 0),
         )
+
+        self.clear_button = ttk.Button(
+            sidebar,
+            text="Kosongkan",
+            style="Quiet.TButton",
+            command=self.clear_pages,
+            state="disabled",
+        )
+        self.clear_button.pack(fill="x", pady=(8, 0))
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -1430,6 +1443,12 @@ class ManualDocumentPage(ttk.Frame):
             self._drop_zone_hint.configure(
                 bg=palette["surface_soft"],
                 fg=palette["muted"],
+            )
+            self._drop_text.configure(
+                bg=palette["surface_soft"],
+            )
+            self._drop_actions.configure(
+                bg=palette["surface_soft"],
             )
         except Exception:
             pass
