@@ -1,4 +1,5 @@
 from pathlib import Path
+import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -54,6 +55,8 @@ class ManualDocumentPage(ttk.Frame):
         self._active_corner = None
         self._responsive_mode = None
         self._resize_after_id = None
+        self._drop_queue = queue.Queue()
+        self._drop_poll_id = None
         self._build_ui()
         self.bind(
             "<Configure>",
@@ -109,12 +112,14 @@ class ManualDocumentPage(ttk.Frame):
             style="Secondary.TButton",
             command=self.choose_images,
         ).pack(side="left")
-        ttk.Button(
+        self.clear_button = ttk.Button(
             actions,
             text="Kosongkan",
             style="Quiet.TButton",
             command=self.clear_pages,
-        ).pack(side="left", padx=(8, 0))
+            state="disabled",
+        )
+        self.clear_button.pack(side="left", padx=(8, 0))
 
         self._drop_zone = tk.Frame(
             self,
@@ -154,6 +159,7 @@ class ManualDocumentPage(ttk.Frame):
             lambda _event: self.choose_images(),
         )
         self.after_idle(self._install_file_drop)
+        self.after_idle(self._start_drop_queue_poll)
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True)
@@ -193,7 +199,7 @@ class ManualDocumentPage(ttk.Frame):
         list_wrap.pack(fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(list_wrap, orient="vertical")
-        scrollbar.pack(side="right", fill="y")
+        self._page_scrollbar = scrollbar
 
         self.page_list = tk.Listbox(
             list_wrap,
@@ -213,25 +219,28 @@ class ManualDocumentPage(ttk.Frame):
 
         page_nav = ttk.Frame(sidebar, style="Surface.TFrame")
         page_nav.pack(fill="x", pady=(10, 0))
-        ttk.Button(
+        self.previous_button = ttk.Button(
             page_nav,
             text="‹",
             style="Quiet.TButton",
             command=self.select_previous_page,
-        ).pack(side="left", fill="x", expand=True)
-        ttk.Button(
+            state="disabled",
+        )
+        self.previous_button.pack(side="left", fill="x", expand=True)
+
+        self.next_button = ttk.Button(
             page_nav,
             text="›",
             style="Quiet.TButton",
             command=self.select_next_page,
-        ).pack(side="left", fill="x", expand=True, padx=(6, 0))
-
-        ttk.Button(
-            sidebar,
-            text="Folder Output",
-            style="Secondary.TButton",
-            command=self.choose_output_dir,
-        ).pack(fill="x", pady=(10, 0))
+            state="disabled",
+        )
+        self.next_button.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(6, 0),
+        )
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -312,62 +321,81 @@ class ManualDocumentPage(ttk.Frame):
         controls.pack(fill="x", pady=(12, 0))
         self._document_controls = controls
 
-        ttk.Button(
+        self.reset_button = ttk.Button(
             controls,
             text="Reset Titik",
             style="Quiet.TButton",
             command=self.reset_current,
-        ).pack(side="left")
-        ttk.Button(
+            state="disabled",
+        )
+        self.reset_button.pack(side="left")
+
+        self.rotate_left_button = ttk.Button(
             controls,
             text="↺ Putar Kiri",
             style="Secondary.TButton",
             command=lambda: self.rotate_current("left"),
-        ).pack(side="left", padx=(8, 0))
-        ttk.Button(
+            state="disabled",
+        )
+        self.rotate_left_button.pack(side="left", padx=(8, 0))
+
+        self.rotate_right_button = ttk.Button(
             controls,
             text="Putar Kanan ↻",
             style="Secondary.TButton",
             command=lambda: self.rotate_current("right"),
-        ).pack(side="left", padx=(8, 0))
-        ttk.Button(
+            state="disabled",
+        )
+        self.rotate_right_button.pack(side="left", padx=(8, 0))
+
+        self.apply_button = ttk.Button(
             controls,
             text="Terapkan Koreksi",
             style="Accent.TButton",
             command=self.apply_current,
-        ).pack(side="left", padx=(12, 0))
+            state="disabled",
+        )
+        self.apply_button.pack(side="left", padx=(12, 0))
 
         export_group = ttk.Frame(controls)
         export_group.pack(side="right")
-        ttk.Label(
+
+        self.save_images_button = ttk.Button(
             export_group,
-            text="Output",
-            style="Subheader.TLabel",
-        ).pack(side="left", padx=(0, 8))
-        ttk.Radiobutton(
+            text="Simpan",
+            style="Secondary.TButton",
+            command=lambda: self.export_results("image"),
+            state="disabled",
+            width=11,
+        )
+        self.save_images_button.pack(side="left")
+
+        self.save_pdf_button = ttk.Button(
             export_group,
-            text="Gambar",
-            variable=self.output_format,
-            value="image",
-        ).pack(side="left")
-        ttk.Radiobutton(
-            export_group,
-            text="PDF",
-            variable=self.output_format,
-            value="pdf",
-        ).pack(side="left", padx=(8, 0))
-        ttk.Button(
-            export_group,
-            text="Export",
-            style="Accent.TButton",
-            command=self.export_results,
-        ).pack(side="left", padx=(12, 0))
+            text="Simpan PDF",
+            style="Secondary.TButton",
+            command=lambda: self.export_results("pdf"),
+            state="disabled",
+            width=12,
+        )
+        self.save_pdf_button.pack(side="left", padx=(8, 0))
+
+        status_row = ttk.Frame(self)
+        status_row.pack(fill="x", pady=(10, 0))
 
         ttk.Label(
-            self,
+            status_row,
+            text="STATUS",
+            style="Badge.TLabel",
+        ).pack(side="left")
+
+        ttk.Label(
+            status_row,
             textvariable=self.status_text,
             style="Subheader.TLabel",
-        ).pack(fill="x", pady=(10, 0))
+        ).pack(side="left", padx=(8, 0))
+
+        self._refresh_action_state()
 
     def _on_page_resize(self, event):
         if event.widget is not self:
@@ -554,21 +582,122 @@ class ManualDocumentPage(ttk.Frame):
         except Exception:
             return
 
-    def _on_drop_files(self, raw_paths):
-        paths = self._collect_dropped_images(raw_paths)
-        if not paths:
-            self.after(
-                0,
-                self.status_text.set,
-                "Tidak ada gambar dokumen yang valid pada drop.",
-            )
+    def _start_drop_queue_poll(self):
+        if self._drop_poll_id is not None:
             return
+        self._poll_drop_queue()
 
-        self.after(
-            0,
-            self._add_image_paths,
-            paths,
+    def _poll_drop_queue(self):
+        self._drop_poll_id = None
+
+        try:
+            while True:
+                paths = self._drop_queue.get_nowait()
+                if paths:
+                    self._add_image_paths(paths)
+                else:
+                    self.status_text.set(
+                        "Tidak ada gambar dokumen yang valid pada drop."
+                    )
+        except queue.Empty:
+            pass
+        except (tk.TclError, RuntimeError, OSError, ValueError) as exc:
+            try:
+                self.status_text.set(
+                    f"Drag & drop gagal: {exc}"
+                )
+            except tk.TclError:
+                return
+
+        try:
+            if self.winfo_exists():
+                self._drop_poll_id = self.after(
+                    80,
+                    self._poll_drop_queue,
+                )
+        except tk.TclError:
+            self._drop_poll_id = None
+
+    def _on_drop_files(self, raw_paths):
+        """Receive native drop payload without touching Tk directly."""
+        try:
+            paths = self._collect_dropped_images(raw_paths)
+            self._drop_queue.put(paths)
+        except Exception:
+            try:
+                self._drop_queue.put([])
+            except Exception:
+                pass
+
+    def _refresh_page_scrollbar(self):
+        scrollbar = getattr(self, "_page_scrollbar", None)
+        if scrollbar is None:
+            return
+        try:
+            if len(self.session.pages) > 8:
+                if not scrollbar.winfo_ismapped():
+                    scrollbar.pack(side="right", fill="y")
+            elif scrollbar.winfo_ismapped():
+                scrollbar.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _refresh_action_state(self):
+        total = len(self.session.pages)
+        has_page = (
+            self.current_index is not None
+            and 0 <= self.current_index < total
         )
+        all_corrected = bool(
+            total and self.session.all_corrected()
+        )
+
+        for name in (
+            "reset_button",
+            "rotate_left_button",
+            "rotate_right_button",
+            "apply_button",
+        ):
+            button = getattr(self, name, None)
+            if button is not None:
+                button.configure(
+                    state="normal" if has_page else "disabled"
+                )
+
+        clear_button = getattr(self, "clear_button", None)
+        if clear_button is not None:
+            clear_button.configure(
+                state="normal" if total else "disabled"
+            )
+
+        previous = getattr(self, "previous_button", None)
+        if previous is not None:
+            previous.configure(
+                state=(
+                    "normal"
+                    if has_page and self.current_index > 0
+                    else "disabled"
+                )
+            )
+
+        next_button = getattr(self, "next_button", None)
+        if next_button is not None:
+            next_button.configure(
+                state=(
+                    "normal"
+                    if has_page and self.current_index < total - 1
+                    else "disabled"
+                )
+            )
+
+        for name in ("save_images_button", "save_pdf_button"):
+            button = getattr(self, name, None)
+            if button is not None:
+                button.configure(
+                    state="normal" if all_corrected else "disabled"
+                )
+
+        self._refresh_page_scrollbar()
 
     def _add_image_paths(self, paths):
         first_added = len(self.session.pages)
@@ -603,6 +732,7 @@ class ManualDocumentPage(ttk.Frame):
         self.status_text.set(
             f"{len(self.session.pages)} halaman siap dikoreksi."
         )
+        self._refresh_action_state()
 
     def choose_images(self):
         paths = filedialog.askopenfilenames(
@@ -637,6 +767,7 @@ class ManualDocumentPage(ttk.Frame):
         )
         self._update_page_position()
         self.status_text.set("Daftar halaman dikosongkan.")
+        self._refresh_action_state()
 
     def choose_output_dir(self):
         folder = filedialog.askdirectory(title="Pilih folder output dokumen")
@@ -677,6 +808,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.see(index)
         self._update_page_position()
         self._render_current()
+        self._refresh_action_state()
 
     def _on_page_select(self, _event=None):
         selection = self.page_list.curselection()
@@ -950,6 +1082,7 @@ class ManualDocumentPage(ttk.Frame):
             f"Koreksi berhasil • "
             f"{self._mode_label(selected_mode)} • {scope}."
         )
+        self._refresh_action_state()
 
     @staticmethod
     def _mode_label(mode):
@@ -1275,7 +1408,7 @@ class ManualDocumentPage(ttk.Frame):
         except Exception:
             pass
 
-    def export_results(self):
+    def export_results(self, output_format=None):
         if not self.session.pages:
             messagebox.showinfo(
                 "Export Dokumen",
@@ -1302,7 +1435,10 @@ class ManualDocumentPage(ttk.Frame):
         ]
 
         try:
-            if self.output_format.get() == "pdf":
+            output_format = (
+                output_format or self.output_format.get()
+            )
+            if output_format == "pdf":
                 self.output_dir.mkdir(parents=True, exist_ok=True)
                 target = filedialog.asksaveasfilename(
                     title="Simpan PDF dokumen",
