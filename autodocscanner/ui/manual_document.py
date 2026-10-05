@@ -316,7 +316,7 @@ class ManualDocumentPage(ttk.Frame):
         self._result_card = result_card
         ttk.Label(
             result_card,
-            text="Preview Hasil",
+            text="Hasil Koreksi",
             style="CardLabel.TLabel",
         ).pack(anchor="w", pady=(0, 8))
 
@@ -409,6 +409,27 @@ class ManualDocumentPage(ttk.Frame):
         ).pack(side="left", padx=(8, 0))
 
         self._refresh_action_state()
+        self.after_idle(self._render_empty_canvas)
+
+    def _render_empty_canvas(self):
+        try:
+            self.canvas.delete("all")
+            width = max(int(self.canvas.winfo_width()), 120)
+            height = max(int(self.canvas.winfo_height()), 120)
+            self.canvas.create_text(
+                width / 2,
+                height / 2,
+                text=(
+                    "Belum ada dokumen\n"
+                    "Pilih atau tarik file untuk memulai"
+                ),
+                fill="#737D85",
+                font=("Segoe UI", 9),
+                justify="center",
+                tags="empty-state",
+            )
+        except tk.TclError:
+            pass
 
     def _on_page_resize(self, event):
         if event.widget is not self:
@@ -791,6 +812,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.delete(0, tk.END)
         self.canvas.delete("all")
         self._canvas_photo = None
+        self.after_idle(self._render_empty_canvas)
         self._result_photo = None
         self.result_label.configure(
             image="",
@@ -888,6 +910,9 @@ class ManualDocumentPage(ttk.Frame):
         )
 
     def _on_canvas_resize(self, _event=None):
+        if self.current_index is None:
+            self._render_empty_canvas()
+            return
         if self.current_index is not None:
             self.after_idle(self._render_current)
 
