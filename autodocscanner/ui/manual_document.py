@@ -963,7 +963,8 @@ class ManualDocumentPage(ttk.Frame):
             tags="overlay",
         )
 
-        for label, (x, y) in zip(("TL", "TR", "BR", "BL"), points):
+        labels = ("TL", "TR", "BR", "BL")
+        for index, (label, (x, y)) in enumerate(zip(labels, points)):
             radius = self.HANDLE_RADIUS
             self.canvas.create_oval(
                 x - radius,
@@ -975,10 +976,19 @@ class ManualDocumentPage(ttk.Frame):
                 width=2,
                 tags="overlay",
             )
+
+            is_right = index in (1, 2)
+            is_bottom = index in (2, 3)
+
+            text_x = x - 14 if is_right else x + 14
+            text_y = y - 14 if is_bottom else y + 14
+            anchor = "e" if is_right else "w"
+
             self.canvas.create_text(
-                x + 14,
-                y - 14,
+                text_x,
+                text_y,
                 text=label,
+                anchor=anchor,
                 fill="#26323A",
                 font=("Segoe UI Semibold", 8),
                 tags="overlay",
@@ -1380,12 +1390,12 @@ class ManualDocumentPage(ttk.Frame):
         try:
             self.update_idletasks()
             target_width = max(
-                int(self.result_label.winfo_width()) - 20,
-                160,
+                int(self._result_card.winfo_width()) - 28,
+                180,
             )
             target_height = max(
-                int(self.result_label.winfo_height()) - 20,
-                120,
+                int(self._result_card.winfo_height()) - 58,
+                140,
             )
         except (tk.TclError, TypeError, ValueError):
             target_width, target_height = 420, 520
