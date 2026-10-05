@@ -664,6 +664,27 @@ class ManualDocumentPage(ttk.Frame):
                     state="normal" if has_page else "disabled"
                 )
 
+        apply_button = getattr(self, "apply_button", None)
+        if apply_button is not None:
+            is_corrected = False
+            if has_page:
+                try:
+                    is_corrected = (
+                        self.session.pages[
+                            self.current_index
+                        ].corrected_image
+                        is not None
+                    )
+                except (IndexError, TypeError):
+                    is_corrected = False
+            apply_button.configure(
+                text=(
+                    "Terapkan Ulang"
+                    if is_corrected
+                    else "Terapkan Koreksi"
+                )
+            )
+
         clear_button = getattr(self, "clear_button", None)
         if clear_button is not None:
             clear_button.configure(
@@ -874,7 +895,7 @@ class ManualDocumentPage(ttk.Frame):
             height,
             canvas_width,
             canvas_height,
-            padding=22,
+            padding=12,
         )
 
         rgb = cv2.cvtColor(
@@ -1020,6 +1041,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.selection_set(self.current_index)
         self._render_current()
         self.status_text.set("Titik sudut dikembalikan ke posisi awal.")
+        self._refresh_action_state()
 
     def rotate_current(self, direction):
         if self.current_index is None:
@@ -1030,6 +1052,7 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.selection_set(self.current_index)
         self._render_current()
         self.status_text.set("Halaman diputar. Titik sudut di-reset.")
+        self._refresh_action_state()
 
     def apply_current(self):
         if self.current_index is None:
@@ -1354,8 +1377,21 @@ class ManualDocumentPage(ttk.Frame):
             )
             pil = Image.fromarray(rgb)
 
+        try:
+            self.update_idletasks()
+            target_width = max(
+                int(self.result_label.winfo_width()) - 20,
+                160,
+            )
+            target_height = max(
+                int(self.result_label.winfo_height()) - 20,
+                120,
+            )
+        except (tk.TclError, TypeError, ValueError):
+            target_width, target_height = 420, 520
+
         pil.thumbnail(
-            (420, 520),
+            (target_width, target_height),
             Image.Resampling.LANCZOS,
         )
         self._result_photo = ImageTk.PhotoImage(pil)
