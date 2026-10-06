@@ -29,7 +29,7 @@ if (-not (Test-Path $LogoIco)) {
 }
 
 Write-Host "`n[5/7] Run regression tests"
-python -m unittest discover -s tests -v
+python -m pytest -q
 
 Write-Host "`n[6/7] Clean old build output"
 if (Test-Path build) {
