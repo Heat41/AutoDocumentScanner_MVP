@@ -1015,12 +1015,13 @@ class ManualDocumentPage(ttk.Frame):
                 tags="overlay",
             )
 
-            is_right = index in (1, 2)
-            is_bottom = index in (2, 3)
-
-            text_x = x - 14 if is_right else x + 14
-            text_y = y - 14 if is_bottom else y + 14
-            anchor = "e" if is_right else "w"
+            label_positions = (
+                (x + 12, y - 10, "sw"),
+                (x - 12, y - 10, "se"),
+                (x - 12, y + 10, "ne"),
+                (x + 12, y + 10, "nw"),
+            )
+            text_x, text_y, anchor = label_positions[index]
 
             self.canvas.create_text(
                 text_x,
