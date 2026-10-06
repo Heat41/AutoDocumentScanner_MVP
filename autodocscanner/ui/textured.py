@@ -13,19 +13,19 @@ class TexturedScannerUI(FinalScannerUI):
     FinalScannerUI and the locked pipeline below it.
     """
 
-    BG = "#EEF1F3"
-    CARD = "#FCFDFD"
-    TEXT = "#273038"
-    MUTED = "#6F7880"
-    BORDER = "#D7DDE1"
-    SOFT = "#E8ECEF"
-    ACCENT = "#506371"
+    BG = "#F4F7FB"
+    CARD = "#FFFFFF"
+    TEXT = "#0F172A"
+    MUTED = "#64748B"
+    BORDER = "#DDE5F0"
+    SOFT = "#EEF3F8"
+    ACCENT = "#2563EB"
 
-    PANEL = "#F6F8F9"
-    SHADOW = "#D6DCE0"
-    TEXTURE_LIGHT = "#F7F9FA"
-    TEXTURE_MID = "#E8ECEF"
-    TEXTURE_DARK = "#DCE2E6"
+    PANEL = "#0F172A"
+    SHADOW = "#D9E2EC"
+    TEXTURE_LIGHT = "#F8FAFC"
+    TEXTURE_MID = "#E2E8F0"
+    TEXTURE_DARK = "#CBD5E1"
 
     def __init__(self):
         super().__init__()
@@ -73,8 +73,18 @@ class TexturedScannerUI(FinalScannerUI):
             relief="solid",
         )
         style.configure(
+            "Surface.TFrame",
+            background=self.CARD,
+        )
+        style.configure(
             "Sidebar.TFrame",
             background=self.PANEL,
+            borderwidth=0,
+            relief="flat",
+        )
+        style.configure(
+            "PremiumCard.TFrame",
+            background=self.CARD,
             borderwidth=1,
             relief="solid",
         )
@@ -88,6 +98,46 @@ class TexturedScannerUI(FinalScannerUI):
             background=self.BG,
             foreground=self.TEXT,
             font=("Segoe UI Semibold", 20),
+        )
+        style.configure(
+            "SectionTitle.TLabel",
+            background=self.CARD,
+            foreground=self.TEXT,
+            font=("Segoe UI Semibold", 11),
+        )
+        style.configure(
+            "Badge.TLabel",
+            background="#EFF6FF",
+            foreground="#1D4ED8",
+            font=("Segoe UI Semibold", 8),
+            padding=(8, 3),
+        )
+        style.configure(
+            "StatusGood.TLabel",
+            background="#12372A",
+            foreground="#6EE7B7",
+            font=("Segoe UI Semibold", 8),
+            padding=(8, 5),
+        )
+        style.configure(
+            "StatusChip.TLabel",
+            background="#EFF6FF",
+            foreground="#1D4ED8",
+            font=("Segoe UI Semibold", 8),
+            padding=(9, 5),
+        )
+        style.configure(
+            "NeutralChip.TLabel",
+            background="#F1F5F9",
+            foreground="#475569",
+            font=("Segoe UI Semibold", 8),
+            padding=(9, 5),
+        )
+        style.configure(
+            "Eyebrow.TLabel",
+            background=self.BG,
+            foreground="#2563EB",
+            font=("Segoe UI Semibold", 8),
         )
         style.configure(
             "Subheader.TLabel",
@@ -107,12 +157,20 @@ class TexturedScannerUI(FinalScannerUI):
         style.configure(
             "SidebarTitle.TLabel",
             background=self.PANEL,
-            foreground=self.TEXT,
+            foreground="#F8FAFC",
+            font=("Segoe UI Semibold", 10),
         )
         style.configure(
             "SidebarMuted.TLabel",
             background=self.PANEL,
-            foreground=self.MUTED,
+            foreground="#94A3B8",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "SidebarSection.TLabel",
+            background=self.PANEL,
+            foreground="#64748B",
+            font=("Segoe UI Semibold", 8),
         )
         style.configure(
             "Quality.TLabel",
@@ -122,21 +180,61 @@ class TexturedScannerUI(FinalScannerUI):
 
         style.configure(
             "TButton",
-            background="#F8FAFB",
+            background="#FFFFFF",
             foreground=self.TEXT,
             borderwidth=1,
             relief="solid",
             padding=(12, 8),
         )
+        style.configure(
+            "Nav.TButton",
+            background=self.PANEL,
+            foreground="#CBD5E1",
+            borderwidth=0,
+            relief="flat",
+            padding=(14, 11),
+            anchor="w",
+            font=("Segoe UI Semibold", 9),
+        )
+        style.configure(
+            "NavActive.TButton",
+            background="#1D4ED8",
+            foreground="#FFFFFF",
+            borderwidth=0,
+            relief="flat",
+            padding=(14, 11),
+            anchor="w",
+            font=("Segoe UI Semibold", 9),
+        )
         style.map(
             "TButton",
             background=[
-                ("active", "#EFF3F5"),
-                ("pressed", "#E4E9EC"),
-                ("disabled", "#F1F3F4"),
+                ("active", "#F8FAFC"),
+                ("pressed", "#F1F5F9"),
+                ("disabled", "#F8FAFC"),
             ],
             foreground=[
-                ("disabled", "#9AA2A8"),
+                ("disabled", "#94A3B8"),
+            ],
+        )
+        style.map(
+            "Nav.TButton",
+            background=[
+                ("active", "#1E293B"),
+                ("pressed", "#1E293B"),
+            ],
+            foreground=[
+                ("active", "#FFFFFF"),
+            ],
+        )
+        style.map(
+            "NavActive.TButton",
+            background=[
+                ("active", "#2563EB"),
+                ("pressed", "#1D4ED8"),
+            ],
+            foreground=[
+                ("active", "#FFFFFF"),
             ],
         )
 
@@ -151,19 +249,20 @@ class TexturedScannerUI(FinalScannerUI):
         style.map(
             "Accent.TButton",
             background=[
-                ("active", "#5C7180"),
-                ("pressed", "#435560"),
-                ("disabled", "#9AA5AC"),
+                ("active", "#1D4ED8"),
+                ("pressed", "#1E40AF"),
+                ("disabled", "#94A3B8"),
             ],
             foreground=[
-                ("disabled", "#EEF1F3"),
+                ("disabled", "#F8FAFC"),
             ],
         )
 
         style.configure(
             "TRadiobutton",
             background=self.BG,
-            foreground=self.TEXT,
+            foreground="#334155",
+            font=("Segoe UI", 9),
         )
         style.map(
             "TRadiobutton",
@@ -229,20 +328,30 @@ class TexturedScannerUI(FinalScannerUI):
             )
 
     def _preview_card(self, parent, title):
-        # A small shadow plus a micro-pattern strip gives the UI texture and
-        # depth without turning it into a visually heavy dashboard.
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+            uniform="preview",
+        )
+        parent.grid_columnconfigure(
+            1,
+            weight=1,
+            uniform="preview",
+        )
+
+        column = 0 if title.startswith("Foto Asli") else 1
+
         shadow = tk.Frame(
             parent,
-            bg=self.SHADOW,
+            bg=self.BG,
             bd=0,
         )
-        shadow.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(0, 7)
-            if title.startswith("Original")
-            else (7, 0),
+        shadow.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
+            padx=(0, 7) if column == 0 else (7, 0),
             pady=(0, 2),
         )
 
@@ -250,8 +359,7 @@ class TexturedScannerUI(FinalScannerUI):
             shadow,
             bg=self.CARD,
             bd=0,
-            highlightbackground=self.BORDER,
-            highlightthickness=1,
+            highlightthickness=0,
         )
         frame.pack(
             fill="both",
@@ -263,8 +371,8 @@ class TexturedScannerUI(FinalScannerUI):
         header = tk.Frame(
             frame,
             bg=self.CARD,
-            padx=13,
-            pady=11,
+            padx=14,
+            pady=12,
         )
         header.pack(fill="x")
 
@@ -279,74 +387,44 @@ class TexturedScannerUI(FinalScannerUI):
         tk.Label(
             header,
             text=(
-                "Area deteksi fisik"
-                if title.startswith("Original")
-                else "Perspective corrected"
+                "Area deteksi sudut KTP"
+                if title.startswith("Foto Asli")
+                else "Hasil koreksi perspektif"
             ),
             bg=self.CARD,
             fg=self.MUTED,
-            font=("Segoe UI", 9),
-        ).pack(anchor="w", pady=(2, 0))
-
-        texture = tk.Canvas(
-            frame,
-            height=8,
-            bg=self.TEXTURE_LIGHT,
-            bd=0,
-            highlightthickness=0,
-        )
-        texture.pack(fill="x")
-        texture.bind(
-            "<Configure>",
-            lambda _event, target=texture: self._paint_texture_strip(target),
-        )
+            font=("Segoe UI", 8),
+        ).pack(anchor="w", pady=(3, 0))
 
         content = tk.Frame(
             frame,
             bg=self.CARD,
-            padx=12,
-            pady=12,
+            padx=8,
+            pady=8,
         )
         content.pack(fill="both", expand=True)
 
         label = tk.Label(
             content,
-            text="Belum ada gambar",
-            bg="#E9EDF0",
-            fg="#737D85",
+            text=(
+                "Belum ada preview\n"
+                "Pilih file untuk memulai"
+            ),
+            bg="#F8FAFC",
+            fg="#94A3B8",
             bd=0,
             relief="flat",
             font=("Segoe UI", 9),
+            justify="center",
         )
         label.pack(fill="both", expand=True)
+
+        label._responsive_card = shadow
         return label
 
     def _show_loading_popup(self):
+        # The final UI now owns the complete themed loading experience.
         super()._show_loading_popup()
-
-        window = self._loading_window
-        if window is None:
-            return
-
-        try:
-            accent = tk.Canvas(
-                window,
-                height=6,
-                bg=self.ACCENT,
-                bd=0,
-                highlightthickness=0,
-            )
-            accent.place(
-                x=0,
-                y=0,
-                relwidth=1.0,
-            )
-            accent.bind(
-                "<Configure>",
-                lambda _event, target=accent: self._paint_texture_strip(target),
-            )
-        except tk.TclError:
-            pass
 
 
 def main():

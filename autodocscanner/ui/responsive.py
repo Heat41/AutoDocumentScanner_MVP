@@ -4,23 +4,15 @@ from autodocscanner.ui.textured import TexturedScannerUI
 
 
 class ResponsiveScannerUI(TexturedScannerUI):
-    """Responsive shell on top of the locked final/textured UI.
+    """Responsive presentation layer for desktop and windowed modes."""
 
-    The scanner pipeline and processing behavior stay untouched. This layer
-    only adapts layout when the user resizes, maximizes, or restores the
-    application window.
-    """
-
-    NARROW_BREAKPOINT = 900
-    COMPACT_BREAKPOINT = 1050
+    NARROW_BREAKPOINT = 980
+    COMPACT_BREAKPOINT = 1200
     RESIZE_DEBOUNCE_MS = 160
 
     def _configure_style(self):
         super()._configure_style()
-
-        # Allow the window to become meaningfully smaller while keeping the
-        # footer usable. The layout itself will reflow at narrow widths.
-        self.minsize(760, 560)
+        self.minsize(820, 600)
 
     def _build_ui(self):
         super()._build_ui()
@@ -28,19 +20,40 @@ class ResponsiveScannerUI(TexturedScannerUI):
         self._responsive_mode = None
         self._responsive_after_id = None
 
-        # These references are derived from the widgets created by the locked
-        # UI hierarchy, so no scanner/UI behavior has to be duplicated here.
-        self._responsive_sidebar = self.listbox.master.master
-
-        original_shadow = self.original_label.master.master.master
-        result_shadow = self.result_label.master.master.master
-        self._responsive_preview_parent = original_shadow.master
-        self._responsive_preview_cards = (
-            original_shadow,
-            result_shadow,
+        self._responsive_sidebar = getattr(
+            self,
+            "_files_panel",
+            self.listbox.master.master,
+        )
+        self._responsive_root = getattr(
+            self,
+            "_page_root",
+            None,
+        )
+        self._responsive_preview_parent = getattr(
+            self,
+            "_preview_parent",
+            None,
         )
 
-        self.bind("<Configure>", self._on_responsive_configure, add="+")
+        self._responsive_preview_cards = (
+            getattr(
+                self.original_label,
+                "_responsive_card",
+                None,
+            ),
+            getattr(
+                self.result_label,
+                "_responsive_card",
+                None,
+            ),
+        )
+
+        self.bind(
+            "<Configure>",
+            self._on_responsive_configure,
+            add="+",
+        )
         self.after_idle(self._apply_responsive_layout)
 
     @staticmethod
@@ -60,13 +73,12 @@ class ResponsiveScannerUI(TexturedScannerUI):
 
         if self._responsive_after_id is not None:
             try:
-                self.after_cancel(self._responsive_after_id)
+                self.after_cancel(
+                    self._responsive_after_id
+                )
             except tk.TclError:
                 pass
 
-        # Re-render the currently selected preview after resizing has stopped,
-        # so images also follow the new preview area instead of keeping their
-        # old dimensions.
         self._responsive_after_id = self.after(
             self.RESIZE_DEBOUNCE_MS,
             self._refresh_resized_preview,
@@ -86,57 +98,122 @@ class ResponsiveScannerUI(TexturedScannerUI):
 
         try:
             if mode == "wide":
-                self._responsive_sidebar.configure(width=250)
-                self._pack_preview_cards_horizontal()
+                self._set_root_padding(
+                    (28, 24, 28, 20)
+                )
+                self._responsive_sidebar.configure(
+                    width=230
+                )
+                self._pack_preview_cards_horizontal(
+                    gap=7
+                )
+
             elif mode == "compact":
-                self._responsive_sidebar.configure(width=220)
-                self._pack_preview_cards_horizontal()
+                self._set_root_padding(
+                    (18, 18, 18, 16)
+                )
+                self._responsive_sidebar.configure(
+                    width=190
+                )
+                self._pack_preview_cards_horizontal(
+                    gap=5
+                )
+
             else:
-                self._responsive_sidebar.configure(width=190)
+                self._set_root_padding(
+                    (12, 14, 12, 12)
+                )
+                self._responsive_sidebar.configure(
+                    width=160
+                )
                 self._pack_preview_cards_vertical()
+
         except tk.TclError:
             return
 
-    def _pack_preview_cards_horizontal(self):
+    def _set_root_padding(self, padding):
+        root = self._responsive_root
+        if root is not None:
+            root.configure(padding=padding)
+
+    def _pack_preview_cards_horizontal(self, gap=7):
+        parent = self._responsive_preview_parent
         original, result = self._responsive_preview_cards
 
-        original.pack_forget()
-        result.pack_forget()
+        if (
+            parent is None
+            or original is None
+            or result is None
+        ):
+            return
 
-        original.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(0, 7),
+        original.grid_forget()
+        result.grid_forget()
+
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(1, weight=0)
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+            uniform="preview",
+        )
+        parent.grid_columnconfigure(
+            1,
+            weight=1,
+            uniform="preview",
+        )
+
+        original.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(0, gap),
             pady=(0, 2),
         )
-        result.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(7, 0),
+        result.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(gap, 0),
             pady=(0, 2),
         )
 
     def _pack_preview_cards_vertical(self):
+        parent = self._responsive_preview_parent
         original, result = self._responsive_preview_cards
 
-        original.pack_forget()
-        result.pack_forget()
+        if (
+            parent is None
+            or original is None
+            or result is None
+        ):
+            return
 
-        original.pack(
-            side="top",
-            fill="both",
-            expand=True,
-            padx=0,
-            pady=(0, 6),
+        original.grid_forget()
+        result.grid_forget()
+
+        parent.grid_columnconfigure(
+            0,
+            weight=1,
+            uniform="",
         )
-        result.pack(
-            side="top",
-            fill="both",
-            expand=True,
+        parent.grid_columnconfigure(1, weight=0)
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(1, weight=1)
+
+        original.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
             padx=0,
-            pady=(6, 0),
+            pady=(0, 5),
+        )
+        result.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=0,
+            pady=(5, 0),
         )
 
     def _refresh_resized_preview(self):
@@ -145,8 +222,14 @@ class ResponsiveScannerUI(TexturedScannerUI):
         try:
             selection = self.listbox.curselection()
             if selection:
-                self._show_selected(int(selection[0]))
-        except (tk.TclError, ValueError, IndexError):
+                self._show_selected(
+                    int(selection[0])
+                )
+        except (
+            tk.TclError,
+            ValueError,
+            IndexError,
+        ):
             pass
 
 

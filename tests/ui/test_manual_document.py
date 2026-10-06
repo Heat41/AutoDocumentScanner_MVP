@@ -37,6 +37,20 @@ class TestManualDocumentPageContract(unittest.TestCase):
             "02  ✓  scan two.jpg",
         )
 
+    def test_mode_labels_are_stable(self):
+        self.assertEqual(
+            ManualDocumentPage._mode_label("color"),
+            "Warna",
+        )
+        self.assertEqual(
+            ManualDocumentPage._mode_label("grayscale"),
+            "Grayscale",
+        )
+        self.assertEqual(
+            ManualDocumentPage._mode_label("bw"),
+            "B&W",
+        )
+
     def test_supported_extensions_include_common_scan_images(self):
         for suffix in (
             ".jpg",

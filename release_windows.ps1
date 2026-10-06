@@ -61,6 +61,10 @@ foreach ($RuntimeName in @("input", "output")) {
 # Release metadata only. No source code, tests, local input, or local output are copied.
 Copy-Item (Join-Path $Root "VERSION.txt") (Join-Path $PackageDir "VERSION.txt") -Force
 Copy-Item (Join-Path $Root "DEPLOYMENT.md") (Join-Path $PackageDir "DEPLOYMENT.md") -Force
+$ReleaseNotes = Join-Path $Root "RELEASE_NOTES_v$Version.md"
+if (Test-Path $ReleaseNotes) {
+    Copy-Item $ReleaseNotes (Join-Path $PackageDir "RELEASE_NOTES.md") -Force
+}
 
 Write-Host "`n[3/5] Buat checksum isi paket"
 $ChecksumFile = Join-Path $PackageDir "SHA256SUMS.txt"
