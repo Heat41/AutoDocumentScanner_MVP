@@ -1,4 +1,4 @@
-# AutoDocumentScanner v1.0.1
+# AutoDocumentScanner v1.1.0
 
 ## Paket distribusi Windows
 
@@ -18,9 +18,10 @@ Gunakan ZIP yang dibuat oleh `release_windows.ps1`.
 1. Ekstrak ZIP ke folder lokal PC, misalnya `D:\AutoDocumentScanner`.
 2. Jalankan `AutoDocumentScanner.exe`.
 3. Pilih foto atau folder melalui UI.
-4. Pilih mode output Warna atau Grayscale.
+4. Pilih mode proses Warna, Grayscale, atau B&W saat diminta.
 5. Tekan `Proses Otomatis`.
-6. Hasil tersimpan di folder output yang dipilih. Jika tidak memilih folder lain, aplikasi memakai folder `output` di samping EXE.
+6. Gunakan `Simpan` untuk gambar atau `Simpan PDF` untuk PDF KTP.
+7. Hasil tersimpan di lokasi yang dipilih melalui dialog simpan.
 
 Aplikasi tidak memerlukan Python pada PC tujuan karena runtime dibundel oleh PyInstaller.
 
@@ -67,13 +68,14 @@ Semua artefak akhir dibuat di folder `release\`.
 ## Struktur ZIP portable
 
 ```text
-AutoDocumentScanner-v1.0.1-windows-x64\
+AutoDocumentScanner-v1.1.0-windows-x64\
 |-- AutoDocumentScanner.exe
 |-- _internal\
 |-- input\
 |-- output\
 |-- VERSION.txt
 |-- DEPLOYMENT.md
+|-- RELEASE_NOTES.md
 `-- SHA256SUMS.txt
 ```
 
@@ -83,11 +85,11 @@ Folder `input` dan `output` pada paket release harus kosong. Data pengujian loka
 
 ```text
 release\
-|-- AutoDocumentScanner-v1.0.1-windows-x64\
-|-- AutoDocumentScanner-v1.0.1-windows-x64.zip
-|-- AutoDocumentScanner-v1.0.1-windows-x64.zip.sha256.txt
-|-- AutoDocumentScanner-v1.0.1-Setup.exe
-`-- AutoDocumentScanner-v1.0.1-Setup.exe.sha256.txt
+|-- AutoDocumentScanner-v1.1.0-windows-x64\
+|-- AutoDocumentScanner-v1.1.0-windows-x64.zip
+|-- AutoDocumentScanner-v1.1.0-windows-x64.zip.sha256.txt
+|-- AutoDocumentScanner-v1.1.0-Setup.exe
+`-- AutoDocumentScanner-v1.1.0-Setup.exe.sha256.txt
 ```
 
 ## UAT PC induk
@@ -98,10 +100,15 @@ Setelah dipindahkan ke PC induk, lakukan pengujian singkat sebelum dipakai opera
 - UI tampil normal dan responsif saat resize, maximize, dan restore;
 - tombol `Proses Otomatis` tetap terlihat pada ukuran window yang didukung;
 - satu foto KTP yang representatif dapat diproses;
+- drag & drop KTP tidak menyebabkan aplikasi force close;
 - popup loading tampil selama proses;
 - hasil perspective/crop sesuai baseline;
-- mode Warna dan Grayscale dapat digunakan;
-- file hasil dapat ditulis ke folder output;
+- mode Warna, Grayscale, dan B&W dapat digunakan;
+- `Simpan` dan `Simpan PDF` bekerja;
+- PDF KTP mempertahankan proporsi kartu dan dapat menampung sampai 6 kartu per halaman A4;
+- Dokumen Manual dapat menerima file, menggeser empat titik, rotate, menerapkan koreksi, dan ekspor gambar/PDF;
+- state `Terapkan Ulang` muncul setelah koreksi Dokumen Manual;
+- Tracking KTP pada release publik tetap tampil sebagai `Coming Soon`;
 - aplikasi dapat ditutup dan dibuka kembali tanpa error.
 
 Untuk installer, cek juga Start Menu, shortcut Desktop bila dipilih, serta menu uninstall Windows.
