@@ -7,7 +7,7 @@ class ResponsiveScannerUI(TexturedScannerUI):
     """Responsive presentation layer for desktop and windowed modes."""
 
     NARROW_BREAKPOINT = 980
-    COMPACT_BREAKPOINT = 1450
+    COMPACT_BREAKPOINT = 1200
     RESIZE_DEBOUNCE_MS = 160
 
     def _configure_style(self):
