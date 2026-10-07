@@ -385,6 +385,46 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
             metadata,
         )
 
+    def test_outer_photo_frame_does_not_beat_ktp(self):
+        destination = np.array(
+            [
+                [205, 170],
+                [748, 132],
+                [792, 520],
+                [160, 558],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(92, 92, 92),
+            destination=destination,
+        )
+
+        # Simulasikan tepi foto / layar / alas hitam yang membentuk quad
+        # sangat kuat di luar badan KTP.
+        cv2.rectangle(
+            image,
+            (42, 34),
+            (918, 686),
+            (12, 12, 12),
+            16,
+        )
+
+        cv2.rectangle(
+            image,
+            (58, 50),
+            (902, 670),
+            (32, 32, 32),
+            4,
+        )
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.11,
+        )
+
     def test_detection_variants_keep_geometry(self):
         image = self._place_card()
 
