@@ -387,7 +387,7 @@ class TexturedScannerUI(FinalScannerUI):
         tk.Label(
             header,
             text=(
-                "Area deteksi sudut KTP"
+                "Foto sumber KTP"
                 if title.startswith("Foto Asli")
                 else "Hasil koreksi perspektif"
             ),

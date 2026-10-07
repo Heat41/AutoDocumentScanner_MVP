@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
@@ -176,9 +177,9 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
         self.assertIn(
             metadata.get("robustness_mode"),
             {
-                "baseline_locked",
-                "baseline_preserved",
-                "fallback_selected",
+                "stable_v1_1_0_locked",
+                "stable_v1_1_0_preserved",
+                "adaptive_fallback_selected",
             },
         )
 
@@ -506,6 +507,166 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
             image,
             destination,
             max_normalized_error=0.12,
+        )
+
+    def test_stable_v1_1_0_baseline_is_locked_when_healthy(self):
+        image = np.full(
+            (720, 960, 3),
+            90,
+            dtype=np.uint8,
+        )
+        baseline_corners = np.array(
+            [
+                [150, 140],
+                [770, 120],
+                [800, 540],
+                [120, 565],
+            ],
+            dtype=np.float32,
+        )
+
+        self.engine.stable_baseline_engine.detect = MagicMock(
+            return_value=(
+                baseline_corners,
+                {
+                    "score": 0.91,
+                    "selected_source": "baseline",
+                },
+            )
+        )
+
+        with (
+            patch.object(
+                self.engine,
+                "_baseline_suspicion",
+                return_value={
+                    "suspicious": False,
+                    "nested_ktp_evidence": 0.0,
+                    "area_ratio": 0.52,
+                },
+            ),
+            patch(
+                "autodocscanner.core.robustness_engine.AutoPerspectiveEngine.detect"
+            ) as adaptive_detect,
+        ):
+            corners, metadata = self.engine.detect(
+                image
+            )
+
+        adaptive_detect.assert_not_called()
+        self.assertTrue(
+            np.allclose(
+                corners,
+                baseline_corners,
+            )
+        )
+        self.assertEqual(
+            metadata.get("strategy"),
+            "stable_v1_1_0",
+        )
+        self.assertEqual(
+            metadata.get("robustness_mode"),
+            "stable_v1_1_0_locked",
+        )
+
+    def test_adaptive_detector_only_takes_over_suspicious_baseline(self):
+        image = np.full(
+            (720, 960, 3),
+            90,
+            dtype=np.uint8,
+        )
+        baseline_corners = np.array(
+            [
+                [45, 40],
+                [915, 42],
+                [918, 680],
+                [42, 678],
+            ],
+            dtype=np.float32,
+        )
+        adaptive_corners = np.array(
+            [
+                [210, 165],
+                [750, 145],
+                [780, 520],
+                [175, 545],
+            ],
+            dtype=np.float32,
+        )
+
+        self.engine.stable_baseline_engine.detect = MagicMock(
+            return_value=(
+                baseline_corners,
+                {
+                    "score": 0.92,
+                    "selected_source": "baseline",
+                },
+            )
+        )
+
+        def score_candidate(
+            _image,
+            corners,
+            source="robust",
+        ):
+            if np.allclose(
+                corners,
+                adaptive_corners,
+            ):
+                return 0.90
+            return 0.60
+
+        with (
+            patch.object(
+                self.engine,
+                "_baseline_suspicion",
+                return_value={
+                    "suspicious": True,
+                    "nested_ktp_evidence": 0.70,
+                    "area_ratio": 0.88,
+                },
+            ),
+            patch.object(
+                self.engine,
+                "_evaluate_on_original",
+                side_effect=score_candidate,
+            ),
+            patch.object(
+                self.engine,
+                "_variants",
+                return_value=(),
+            ),
+            patch(
+                "autodocscanner.core.robustness_engine.AutoPerspectiveEngine.detect",
+                return_value=(
+                    adaptive_corners,
+                    {
+                        "score": 0.82,
+                        "selected_source": "adaptive",
+                    },
+                ),
+            ) as adaptive_detect,
+        ):
+            corners, metadata = self.engine.detect(
+                image
+            )
+
+        self.assertTrue(
+            adaptive_detect.called
+        )
+        self.assertTrue(
+            np.allclose(
+                corners,
+                adaptive_corners,
+            )
+        )
+        self.assertEqual(
+            metadata.get("strategy"),
+            "adaptive",
+        )
+        self.assertEqual(
+            metadata.get("robustness_mode"),
+            "adaptive_fallback_selected",
         )
 
     def test_detection_variants_keep_geometry(self):
