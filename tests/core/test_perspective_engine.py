@@ -148,6 +148,57 @@ class TestAutoPerspectiveEngine(unittest.TestCase):
         )
 
 
+class TestKtpOutputGeometry(unittest.TestCase):
+    def test_normalize_ktp_ratio_is_exact(self):
+        scanner = AutoDocumentScanner()
+        image = np.full(
+            (410, 620, 3),
+            180,
+            dtype=np.uint8,
+        )
+
+        result = scanner.normalize_ktp_ratio(
+            image
+        )
+
+        h, w = result.shape[:2]
+        ratio = w / float(h)
+
+        self.assertLess(
+            abs(
+                ratio
+                - scanner.KTP_ASPECT_RATIO
+            ),
+            0.005,
+        )
+
+    def test_normalize_ktp_ratio_rotates_portrait_input(self):
+        scanner = AutoDocumentScanner()
+        image = np.full(
+            (620, 410, 3),
+            180,
+            dtype=np.uint8,
+        )
+
+        result = scanner.normalize_ktp_ratio(
+            image
+        )
+
+        h, w = result.shape[:2]
+
+        self.assertGreater(
+            w,
+            h,
+        )
+        self.assertLess(
+            abs(
+                (w / float(h))
+                - scanner.KTP_ASPECT_RATIO
+            ),
+            0.005,
+        )
+
+
 class TestScannerOutput(unittest.TestCase):
     def test_grayscale_mode_keeps_three_channels(self):
         image = np.zeros(
