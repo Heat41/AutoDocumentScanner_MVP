@@ -434,6 +434,16 @@ class FinalScannerUI(SafeScannerUI):
         )
         self.save_button.pack(side="left")
 
+        self.manual_button = ttk.Button(
+            self._action_panel,
+            text="Koreksi Manual",
+            style="Secondary.TButton",
+            command=self.open_manual_correction,
+            state="disabled",
+            width=14,
+        )
+        self.manual_button.pack(side="left", padx=(8, 0))
+
         self.process_button = ttk.Button(
             self._action_panel,
             text="Proses Otomatis",
@@ -595,6 +605,612 @@ class FinalScannerUI(SafeScannerUI):
                 )
 
         return ImageTk.PhotoImage(image)
+
+    def _active_file_index(self):
+        selection = self.listbox.curselection()
+        if selection:
+            return int(selection[0])
+
+        if self.files:
+            return 0
+
+        return None
+
+    def _active_file_has_corners(self):
+        index = self._active_file_index()
+        if index is None or not (
+            0 <= index < len(self.files)
+        ):
+            return False
+
+        key = str(
+            self.files[index]
+        )
+
+        corners = self._corners_by_file.get(
+            key
+        )
+        return corners is not None
+
+    def open_manual_correction(self):
+        index = self._active_file_index()
+
+        if index is None or not (
+            0 <= index < len(self.files)
+        ):
+            return
+
+        path = Path(
+            self.files[index]
+        )
+        key = str(path)
+        corners = self._corners_by_file.get(
+            key
+        )
+
+        if corners is None:
+            self.status_text.set(
+                "Jalankan Proses Otomatis terlebih dahulu sebelum koreksi manual."
+            )
+            return
+
+        try:
+            source = Image.open(
+                path
+            ).convert("RGB")
+        except Exception as exc:
+            self.status_text.set(
+                f"Gagal membuka gambar: {exc}"
+            )
+            return
+
+        try:
+            from autodocscanner.ui.theme import get_theme
+            mode_var = getattr(
+                self,
+                "theme_mode",
+                None,
+            )
+            theme_name = (
+                mode_var.get()
+                if mode_var is not None
+                else "light"
+            )
+            palette = get_theme(
+                theme_name
+            )
+        except Exception:
+            palette = {
+                "surface": "#FFFFFF",
+                "surface_soft": "#F8FAFC",
+                "text": "#172033",
+                "muted": "#64748B",
+                "accent": "#2563EB",
+                "border": "#E2E8F0",
+            }
+
+        dialog = tk.Toplevel(
+            self
+        )
+        dialog.title(
+            "Koreksi Manual KTP"
+        )
+        dialog.transient(
+            self
+        )
+        dialog.grab_set()
+        dialog.configure(
+            bg=palette["surface"]
+        )
+        dialog.minsize(
+            760,
+            560,
+        )
+
+        shell = tk.Frame(
+            dialog,
+            bg=palette["surface"],
+            padx=18,
+            pady=16,
+        )
+        shell.pack(
+            fill="both",
+            expand=True,
+        )
+
+        tk.Label(
+            shell,
+            text="Koreksi Manual KTP",
+            bg=palette["surface"],
+            fg=palette["text"],
+            font=("Segoe UI Semibold", 13),
+            anchor="w",
+        ).pack(
+            fill="x"
+        )
+
+        tk.Label(
+            shell,
+            text=(
+                "Geser empat titik ke sudut fisik KTP. "
+                "Koreksi ini hanya dipakai bila hasil otomatis belum sesuai."
+            ),
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).pack(
+            fill="x",
+            pady=(3, 10),
+        )
+
+        canvas = tk.Canvas(
+            shell,
+            bg=palette["surface_soft"],
+            highlightthickness=1,
+            highlightbackground=palette["border"],
+            cursor="crosshair",
+        )
+        canvas.pack(
+            fill="both",
+            expand=True,
+        )
+
+        button_row = tk.Frame(
+            shell,
+            bg=palette["surface"],
+        )
+        button_row.pack(
+            fill="x",
+            pady=(12, 0),
+        )
+
+        source_width, source_height = source.size
+        working_corners = [
+            [
+                float(point[0]),
+                float(point[1]),
+            ]
+            for point in corners
+        ]
+        active = {
+            "index": None,
+        }
+        render_state = {
+            "photo": None,
+            "display_size": None,
+            "offset": None,
+        }
+
+        def render():
+            canvas.delete(
+                "all"
+            )
+            canvas.update_idletasks()
+
+            canvas_width = max(
+                int(canvas.winfo_width()),
+                100,
+            )
+            canvas_height = max(
+                int(canvas.winfo_height()),
+                100,
+            )
+
+            padding = 24
+            scale = min(
+                (
+                    canvas_width
+                    - padding * 2
+                ) / max(
+                    source_width,
+                    1,
+                ),
+                (
+                    canvas_height
+                    - padding * 2
+                ) / max(
+                    source_height,
+                    1,
+                ),
+            )
+            scale = max(
+                scale,
+                0.01,
+            )
+
+            display_width = max(
+                1,
+                int(round(
+                    source_width
+                    * scale
+                )),
+            )
+            display_height = max(
+                1,
+                int(round(
+                    source_height
+                    * scale
+                )),
+            )
+            offset_x = (
+                canvas_width
+                - display_width
+            ) / 2.0
+            offset_y = (
+                canvas_height
+                - display_height
+            ) / 2.0
+
+            preview = source.resize(
+                (
+                    display_width,
+                    display_height,
+                ),
+                Image.Resampling.LANCZOS,
+            )
+            photo = ImageTk.PhotoImage(
+                preview
+            )
+            render_state[
+                "photo"
+            ] = photo
+            render_state[
+                "display_size"
+            ] = (
+                display_width,
+                display_height,
+            )
+            render_state[
+                "offset"
+            ] = (
+                offset_x,
+                offset_y,
+            )
+
+            canvas.create_image(
+                offset_x,
+                offset_y,
+                image=photo,
+                anchor="nw",
+            )
+
+            scaled = []
+            for point in working_corners:
+                x = (
+                    offset_x
+                    + point[0]
+                    * display_width
+                    / max(
+                        source_width,
+                        1,
+                    )
+                )
+                y = (
+                    offset_y
+                    + point[1]
+                    * display_height
+                    / max(
+                        source_height,
+                        1,
+                    )
+                )
+                scaled.append(
+                    (x, y)
+                )
+
+            if len(scaled) == 4:
+                polygon = (
+                    scaled
+                    + [scaled[0]]
+                )
+                flat = [
+                    value
+                    for point in polygon
+                    for value in point
+                ]
+                canvas.create_line(
+                    *flat,
+                    fill=palette["accent"],
+                    width=3,
+                )
+
+                labels = (
+                    "TL",
+                    "TR",
+                    "BR",
+                    "BL",
+                )
+                for label, (
+                    x,
+                    y,
+                ) in zip(
+                    labels,
+                    scaled,
+                ):
+                    radius = 8
+                    canvas.create_oval(
+                        x - radius,
+                        y - radius,
+                        x + radius,
+                        y + radius,
+                        fill="#FFFFFF",
+                        outline=palette[
+                            "accent"
+                        ],
+                        width=2,
+                    )
+                    canvas.create_text(
+                        x + 14,
+                        y - 12,
+                        text=label,
+                        fill=palette[
+                            "text"
+                        ],
+                        font=(
+                            "Segoe UI Semibold",
+                            8,
+                        ),
+                    )
+
+        def canvas_point_for_corner(point):
+            display_size = render_state[
+                "display_size"
+            ]
+            offset = render_state[
+                "offset"
+            ]
+
+            if (
+                display_size is None
+                or offset is None
+            ):
+                return None
+
+            display_width, display_height = display_size
+            offset_x, offset_y = offset
+
+            return (
+                offset_x
+                + point[0]
+                * display_width
+                / max(
+                    source_width,
+                    1,
+                ),
+                offset_y
+                + point[1]
+                * display_height
+                / max(
+                    source_height,
+                    1,
+                ),
+            )
+
+        def image_point_from_canvas(x, y):
+            display_size = render_state[
+                "display_size"
+            ]
+            offset = render_state[
+                "offset"
+            ]
+
+            if (
+                display_size is None
+                or offset is None
+            ):
+                return None
+
+            display_width, display_height = display_size
+            offset_x, offset_y = offset
+
+            image_x = (
+                x - offset_x
+            ) * source_width / max(
+                display_width,
+                1,
+            )
+            image_y = (
+                y - offset_y
+            ) * source_height / max(
+                display_height,
+                1,
+            )
+
+            image_x = min(
+                max(
+                    image_x,
+                    0.0,
+                ),
+                source_width - 1,
+            )
+            image_y = min(
+                max(
+                    image_y,
+                    0.0,
+                ),
+                source_height - 1,
+            )
+
+            return [
+                image_x,
+                image_y,
+            ]
+
+        def on_press(event):
+            closest = None
+            best_distance = 24.0
+
+            for corner_index, point in enumerate(
+                working_corners
+            ):
+                canvas_point = canvas_point_for_corner(
+                    point
+                )
+                if canvas_point is None:
+                    continue
+
+                dx = (
+                    canvas_point[0]
+                    - event.x
+                )
+                dy = (
+                    canvas_point[1]
+                    - event.y
+                )
+                distance = (
+                    dx * dx
+                    + dy * dy
+                ) ** 0.5
+
+                if distance <= best_distance:
+                    best_distance = distance
+                    closest = corner_index
+
+            active[
+                "index"
+            ] = closest
+
+        def on_drag(event):
+            corner_index = active[
+                "index"
+            ]
+            if corner_index is None:
+                return
+
+            point = image_point_from_canvas(
+                event.x,
+                event.y,
+            )
+            if point is None:
+                return
+
+            working_corners[
+                corner_index
+            ] = point
+            render()
+
+        def on_release(_event):
+            active[
+                "index"
+            ] = None
+
+        def apply_manual():
+            output_path = self._output_by_file.get(
+                key
+            )
+
+            if output_path is None:
+                output_path = (
+                    self.output_dir
+                    / f"{path.stem}_scanned.jpg"
+                )
+
+            try:
+                _, manual_corners = self.scanner.scan_with_corners(
+                    path,
+                    working_corners,
+                    output_path,
+                    mode="ktp",
+                    output_mode=(
+                        self.output_mode.get()
+                        or "color"
+                    ),
+                )
+            except Exception as exc:
+                self.status_text.set(
+                    f"Koreksi manual gagal: {exc}"
+                )
+                return
+
+            self._failure_by_file.pop(
+                key,
+                None,
+            )
+            self._corners_by_file[
+                key
+            ] = manual_corners.copy()
+            self._metadata_by_file[
+                key
+            ] = dict(
+                self.scanner.last_detection
+                or {}
+            )
+            self._output_by_file[
+                key
+            ] = Path(
+                output_path
+            )
+
+            self.status_text.set(
+                "Koreksi manual diterapkan."
+            )
+            self._show_selected(
+                index
+            )
+            self._refresh_ktp_action_state()
+            dialog.destroy()
+
+        def reset_to_auto():
+            for idx, point in enumerate(
+                corners
+            ):
+                working_corners[
+                    idx
+                ] = [
+                    float(point[0]),
+                    float(point[1]),
+                ]
+            render()
+
+        canvas.bind(
+            "<Button-1>",
+            on_press,
+        )
+        canvas.bind(
+            "<B1-Motion>",
+            on_drag,
+        )
+        canvas.bind(
+            "<ButtonRelease-1>",
+            on_release,
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda _event: render(),
+        )
+
+        ttk.Button(
+            button_row,
+            text="Reset Otomatis",
+            style="Quiet.TButton",
+            command=reset_to_auto,
+        ).pack(
+            side="left"
+        )
+
+        ttk.Button(
+            button_row,
+            text="Batal",
+            style="Quiet.TButton",
+            command=dialog.destroy,
+        ).pack(
+            side="right"
+        )
+
+        ttk.Button(
+            button_row,
+            text="Terapkan Koreksi",
+            style="Accent.TButton",
+            command=apply_manual,
+        ).pack(
+            side="right",
+            padx=(0, 8),
+        )
+
+        dialog.after_idle(
+            render
+        )
 
     @staticmethod
     def _ktp_mode_label(mode):
@@ -1207,6 +1823,19 @@ class FinalScannerUI(SafeScannerUI):
                 state="normal" if has_outputs else "disabled"
             )
 
+        manual_button = getattr(self, "manual_button", None)
+        if manual_button is not None:
+            manual_button.configure(
+                state=(
+                    "normal"
+                    if (
+                        not self._processing_active
+                        and self._active_file_has_corners()
+                    )
+                    else "disabled"
+                )
+            )
+
     def clear_files(self):
         super().clear_files()
         self.batch_text.set("Belum ada file")
@@ -1290,6 +1919,7 @@ class FinalScannerUI(SafeScannerUI):
             self.selected_text.set("Tidak ada file dipilih")
 
         super()._show_selected(index)
+        self._refresh_ktp_action_state()
 
 
 def main():
