@@ -199,6 +199,82 @@ class TestKtpOutputGeometry(unittest.TestCase):
         )
 
 
+class TestKtpSafeMargin(unittest.TestCase):
+    def test_safe_margin_expands_quad_outward(self):
+        scanner = AutoDocumentScanner(
+            ktp_safe_margin=0.015,
+        )
+
+        corners = np.array(
+            [
+                [100, 100],
+                [500, 100],
+                [500, 350],
+                [100, 350],
+            ],
+            dtype=np.float32,
+        )
+
+        expanded = scanner.expand_ktp_corners(
+            (500, 700, 3),
+            corners,
+        )
+
+        self.assertLess(
+            expanded[0][0],
+            corners[0][0],
+        )
+        self.assertLess(
+            expanded[0][1],
+            corners[0][1],
+        )
+        self.assertGreater(
+            expanded[2][0],
+            corners[2][0],
+        )
+        self.assertGreater(
+            expanded[2][1],
+            corners[2][1],
+        )
+
+    def test_safe_margin_is_clamped_to_image(self):
+        scanner = AutoDocumentScanner(
+            ktp_safe_margin=0.03,
+        )
+
+        corners = np.array(
+            [
+                [2, 3],
+                [695, 4],
+                [696, 496],
+                [3, 495],
+            ],
+            dtype=np.float32,
+        )
+
+        expanded = scanner.expand_ktp_corners(
+            (500, 700, 3),
+            corners,
+        )
+
+        self.assertGreaterEqual(
+            float(np.min(expanded[:, 0])),
+            0.0,
+        )
+        self.assertGreaterEqual(
+            float(np.min(expanded[:, 1])),
+            0.0,
+        )
+        self.assertLessEqual(
+            float(np.max(expanded[:, 0])),
+            699.0,
+        )
+        self.assertLessEqual(
+            float(np.max(expanded[:, 1])),
+            499.0,
+        )
+
+
 class TestScannerOutput(unittest.TestCase):
     def test_grayscale_mode_keeps_three_channels(self):
         image = np.zeros(
