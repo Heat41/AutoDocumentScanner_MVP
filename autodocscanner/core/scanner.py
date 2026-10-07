@@ -17,7 +17,7 @@ class AutoDocumentScanner:
         detection_height=1000,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
         ktp_edge_trim=0.0,
-        ktp_safe_margin=0.015,
+        ktp_safe_margin=0.0,
     ):
         self.ktp_aspect_ratio = ktp_aspect_ratio
         self.ktp_edge_trim = ktp_edge_trim
@@ -319,6 +319,119 @@ class AutoDocumentScanner:
             expanded
         )
 
+    def warp_ktp_to_ratio(
+        self,
+        image,
+        corners,
+    ):
+        """
+        Warp empat sudut langsung ke rasio fisik KTP.
+
+        Berbeda dari resize setelah warp, rasio target dimasukkan ke destination
+        homography. Dengan begitu seluruh area yang dipilih tetap dipertahankan
+        dan hasil tidak perlu dipotong/ditarik lagi sesudah perspective.
+        """
+        rect = self.perspective_engine.order_points(
+            corners
+        )
+        tl, tr, br, bl = rect
+
+        width_top = float(
+            np.linalg.norm(
+                tr - tl
+            )
+        )
+        width_bottom = float(
+            np.linalg.norm(
+                br - bl
+            )
+        )
+        height_left = float(
+            np.linalg.norm(
+                bl - tl
+            )
+        )
+        height_right = float(
+            np.linalg.norm(
+                br - tr
+            )
+        )
+
+        avg_width = max(
+            (
+                width_top
+                + width_bottom
+            ) / 2.0,
+            2.0,
+        )
+        avg_height = max(
+            (
+                height_left
+                + height_right
+            ) / 2.0,
+            2.0,
+        )
+
+        if avg_width >= avg_height:
+            target_width = max(
+                int(round(avg_width)),
+                2,
+            )
+            target_height = max(
+                int(round(
+                    target_width
+                    / self.ktp_aspect_ratio
+                )),
+                2,
+            )
+        else:
+            target_height = max(
+                int(round(avg_height)),
+                2,
+            )
+            target_width = max(
+                int(round(
+                    target_height
+                    / self.ktp_aspect_ratio
+                )),
+                2,
+            )
+
+        destination = np.array(
+            [
+                [0, 0],
+                [
+                    target_width - 1,
+                    0,
+                ],
+                [
+                    target_width - 1,
+                    target_height - 1,
+                ],
+                [
+                    0,
+                    target_height - 1,
+                ],
+            ],
+            dtype=np.float32,
+        )
+
+        matrix = cv2.getPerspectiveTransform(
+            rect,
+            destination,
+        )
+
+        return cv2.warpPerspective(
+            image,
+            matrix,
+            (
+                target_width,
+                target_height,
+            ),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
     def trim_edges(self, image):
         if self.ktp_edge_trim <= 0:
             return image
@@ -572,12 +685,19 @@ class AutoDocumentScanner:
                 "Geometri empat sudut manual gagal validasi."
             )
 
-        # Untuk koreksi manual, titik pengguna dianggap sebagai batas yang
-        # disengaja sehingga tidak ditambah safe margin otomatis.
-        result = self.perspective_engine.warp(
-            image,
-            points,
-        )
+        # Untuk koreksi manual, titik pengguna adalah boundary final.
+        # Warp langsung ke rasio fisik KTP agar area pilihan tidak dipotong
+        # atau ditarik ulang setelah perspective.
+        if mode == "ktp":
+            result = self.warp_ktp_to_ratio(
+                image,
+                points,
+            )
+        else:
+            result = self.perspective_engine.warp(
+                image,
+                points,
+            )
 
         result = self.auto_rotate(
             result,
@@ -589,10 +709,6 @@ class AutoDocumentScanner:
                 result
             )
             result = self.trim_edges(
-                result
-            )
-        else:
-            result = self.normalize_ktp_ratio(
                 result
             )
 
@@ -716,24 +832,20 @@ class AutoDocumentScanner:
                 "Geometri empat sudut gagal validasi akhir."
             )
 
-        result = corrected
-
         if mode == "ktp":
-            safe_corners = self.expand_ktp_corners(
-                image.shape,
+            # Gunakan boundary hasil detector apa adanya. Safety expansion
+            # sebelumnya dapat membawa background masuk secara tidak merata
+            # pada foto yang sangat miring. Rasio KTP sekarang diterapkan
+            # langsung pada destination homography.
+            result = self.warp_ktp_to_ratio(
+                image,
                 corners,
             )
-
-            result = self.perspective_engine.warp(
-                image,
-                safe_corners,
-            )
-
             self.last_detection[
                 "safe_margin"
-            ] = float(
-                self.ktp_safe_margin
-            )
+            ] = 0.0
+        else:
+            result = corrected
 
         result = self.auto_rotate(
             result,
@@ -756,11 +868,6 @@ class AutoDocumentScanner:
         # terpotong. Trim tetap dipertahankan untuk mode dokumen umum.
         if mode != "ktp":
             result = self.trim_edges(
-                result
-            )
-
-        if mode == "ktp":
-            result = self.normalize_ktp_ratio(
                 result
             )
 
