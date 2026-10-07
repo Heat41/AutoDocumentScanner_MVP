@@ -274,6 +274,13 @@ class AutoDocumentScanner:
         ]
 
     def normalize_ktp_ratio(self, image):
+        """
+        Paksa hasil akhir KTP ke rasio fisik ID-1 (85.60 x 53.98 mm).
+
+        Perspective detector menentukan empat sisi fisik kartu. Setelah warp,
+        output dinormalisasi tepat ke rasio KTP agar hasil dari foto random
+        selalu berbentuk kartu, bukan mengikuti rasio frame/background kamera.
+        """
         h, w = image.shape[:2]
 
         if h > w:
@@ -283,26 +290,43 @@ class AutoDocumentScanner:
             )
             h, w = image.shape[:2]
 
+        if h < 2 or w < 2:
+            return image
+
+        # Pertahankan sisi panjang/resolusi hasil deteksi, lalu hitung tinggi
+        # tepat dari rasio fisik KTP. Tidak ada toleransi 2.5% lagi karena
+        # output KTP memang harus selalu konsisten.
+        target_width = max(
+            int(w),
+            2,
+        )
         target_height = max(
             2,
             int(round(
-                w / self.ktp_aspect_ratio
+                target_width
+                / self.ktp_aspect_ratio
             )),
         )
 
-        # Hanya koreksi geometri kecil setelah perspective selesai.
-        current_ratio = w / max(h, 1)
-        error = abs(
-            current_ratio - self.ktp_aspect_ratio
-        ) / self.ktp_aspect_ratio
-
-        if error <= 0.025:
+        if (
+            w == target_width
+            and h == target_height
+        ):
             return image
+
+        interpolation = (
+            cv2.INTER_AREA
+            if target_height < h
+            else cv2.INTER_CUBIC
+        )
 
         return cv2.resize(
             image,
-            (w, target_height),
-            interpolation=cv2.INTER_CUBIC,
+            (
+                target_width,
+                target_height,
+            ),
+            interpolation=interpolation,
         )
 
     @staticmethod
