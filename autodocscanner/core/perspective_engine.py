@@ -1143,6 +1143,203 @@ class AutoPerspectiveEngine:
 
         return float(score)
 
+    def _penalize_nested_frame_candidates(
+        self,
+        candidates,
+        image_shape,
+    ):
+        """
+        Turunkan skor kandidat frame/background yang membungkus kandidat
+        KTP lain yang lebih kecil dan rasio-nya masih masuk akal.
+
+        Foto KTP dari HP sering memiliki border monitor, bingkai meja, atau
+        tepi foto yang membentuk quad sangat kuat. Kandidat seperti itu bisa
+        menang dari edge/area walaupun KTP sebenarnya berada di dalamnya.
+        Penalti ini hanya aktif untuk parent yang cukup besar dan memiliki
+        child quad KTP-like yang benar-benar berada di dalam parent.
+        """
+        if len(candidates) < 2:
+            return candidates
+
+        h, w = image_shape[:2]
+        image_area = float(max(h * w, 1))
+
+        prepared = []
+
+        for candidate in candidates:
+            quad = self.order_points(
+                candidate.points
+            )
+            area = abs(
+                cv2.contourArea(
+                    quad.astype(np.float32)
+                )
+            )
+
+            tl, tr, br, bl = quad
+            width_top = np.linalg.norm(tr - tl)
+            width_bottom = np.linalg.norm(br - bl)
+            height_left = np.linalg.norm(bl - tl)
+            height_right = np.linalg.norm(br - tr)
+
+            avg_width = (
+                width_top + width_bottom
+            ) / 2.0
+            avg_height = (
+                height_left + height_right
+            ) / 2.0
+
+            long_side = max(
+                avg_width,
+                avg_height,
+            )
+            short_side = max(
+                min(avg_width, avg_height),
+                1.0,
+            )
+            ratio = long_side / short_side
+            ratio_error = abs(
+                ratio - self.target_ratio
+            ) / self.target_ratio
+
+            prepared.append(
+                (
+                    candidate,
+                    quad,
+                    area,
+                    ratio_error,
+                )
+            )
+
+        for (
+            outer,
+            outer_quad,
+            outer_area,
+            _,
+        ) in prepared:
+            outer_area_ratio = (
+                outer_area / image_area
+            )
+
+            # Kandidat kecil/menengah bukan tipikal frame foto.
+            if outer_area_ratio < 0.42:
+                continue
+
+            min_x = float(
+                np.min(outer_quad[:, 0])
+            )
+            max_x = float(
+                np.max(outer_quad[:, 0])
+            )
+            min_y = float(
+                np.min(outer_quad[:, 1])
+            )
+            max_y = float(
+                np.max(outer_quad[:, 1])
+            )
+
+            mean_margin = (
+                max(min_x, 0.0) / max(w, 1)
+                + max(w - 1 - max_x, 0.0) / max(w, 1)
+                + max(min_y, 0.0) / max(h, 1)
+                + max(h - 1 - max_y, 0.0) / max(h, 1)
+            ) / 4.0
+
+            edge_likeness = max(
+                0.0,
+                1.0 - mean_margin / 0.14,
+            )
+
+            strongest_nested = 0.0
+
+            outer_polygon = (
+                outer_quad.astype(np.float32)
+            )
+
+            for (
+                inner,
+                inner_quad,
+                inner_area,
+                inner_ratio_error,
+            ) in prepared:
+                if inner is outer:
+                    continue
+
+                area_fraction = (
+                    inner_area
+                    / max(outer_area, 1.0)
+                )
+
+                # Hindari kandidat duplikat dan elemen internal kecil.
+                if not (
+                    0.10
+                    <= area_fraction
+                    <= 0.86
+                ):
+                    continue
+
+                # Child harus tetap terlihat seperti kartu ID-1/KTP.
+                if inner_ratio_error > 0.28:
+                    continue
+
+                if inner.score < 0.30:
+                    continue
+
+                inside = True
+
+                for point in inner_quad:
+                    if cv2.pointPolygonTest(
+                        outer_polygon,
+                        (
+                            float(point[0]),
+                            float(point[1]),
+                        ),
+                        False,
+                    ) < -2:
+                        inside = False
+                        break
+
+                if not inside:
+                    continue
+
+                score_strength = min(
+                    max(inner.score, 0.0)
+                    / 0.78,
+                    1.0,
+                )
+                size_strength = min(
+                    area_fraction / 0.45,
+                    1.0,
+                )
+
+                nested_strength = (
+                    score_strength
+                    * (
+                        0.55
+                        + size_strength * 0.45
+                    )
+                )
+
+                strongest_nested = max(
+                    strongest_nested,
+                    nested_strength,
+                )
+
+            if strongest_nested <= 0.0:
+                continue
+
+            # Parent besar yang dekat tepi frame mendapat penalti ekstra.
+            # Nilainya sengaja terbatas agar crop KTP yang memang rapat ke
+            # frame tetap bisa menang bila tidak ada child KTP-like yang kuat.
+            penalty = (
+                0.20
+                + 0.10 * edge_likeness
+            ) * strongest_nested
+
+            outer.score -= penalty
+
+        return candidates
+
     @staticmethod
     def _candidate_distance(a, b, diagonal):
         a = AutoPerspectiveEngine.order_points(a)
@@ -1352,6 +1549,11 @@ class AutoPerspectiveEngine:
             for candidate in candidates
             if candidate.score >= 0.0
         ]
+
+        candidates = self._penalize_nested_frame_candidates(
+            candidates,
+            resized.shape,
+        )
 
         candidates = self._deduplicate(
             candidates,
