@@ -16,10 +16,12 @@ class AutoDocumentScanner:
         self,
         detection_height=1000,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
-        ktp_edge_trim=0.004,
+        ktp_edge_trim=0.0,
+        ktp_safe_margin=0.015,
     ):
         self.ktp_aspect_ratio = ktp_aspect_ratio
         self.ktp_edge_trim = ktp_edge_trim
+        self.ktp_safe_margin = ktp_safe_margin
 
         self.perspective_engine = RobustPerspectiveEngine(
             target_ratio=ktp_aspect_ratio,
@@ -247,6 +249,76 @@ class AutoDocumentScanner:
             borderMode=cv2.BORDER_REPLICATE,
         )
 
+    def expand_ktp_corners(
+        self,
+        image_shape,
+        corners,
+    ):
+        """
+        Tambahkan safety margin geometris kecil di luar quad KTP.
+
+        Detector tetap bertugas menemukan batas fisik kartu. Margin ini hanya
+        dipakai saat warp final agar rounded corner, glare, atau edge yang
+        terbaca sedikit masuk ke badan kartu tidak memotong teks/foto di tepi.
+
+        Nilainya bersifat relatif terhadap ukuran kartu, bukan pixel tetap,
+        sehingga berlaku konsisten untuk foto KTP random beresolusi berbeda.
+        """
+        if corners is None:
+            return corners
+
+        quad = np.asarray(
+            corners,
+            dtype=np.float32,
+        ).reshape(4, 2)
+
+        margin = max(
+            float(self.ktp_safe_margin),
+            0.0,
+        )
+
+        if margin <= 0:
+            return quad
+
+        center = np.mean(
+            quad,
+            axis=0,
+        )
+
+        # margin adalah tambahan per sisi. Faktor 2 karena vektor center->corner
+        # hanya merepresentasikan setengah dimensi kartu.
+        scale = 1.0 + 2.0 * margin
+        expanded = (
+            center
+            + (
+                quad - center
+            ) * scale
+        )
+
+        h, w = image_shape[:2]
+
+        expanded[:, 0] = np.clip(
+            expanded[:, 0],
+            0.0,
+            max(float(w - 1), 0.0),
+        )
+        expanded[:, 1] = np.clip(
+            expanded[:, 1],
+            0.0,
+            max(float(h - 1), 0.0),
+        )
+
+        if not cv2.isContourConvex(
+            expanded.astype(
+                np.int32
+            )
+        ):
+            return quad
+
+        return self.perspective_engine.order_points(
+            expanded
+        )
+
     def trim_edges(self, image):
         if self.ktp_edge_trim <= 0:
             return image
@@ -274,6 +346,13 @@ class AutoDocumentScanner:
         ]
 
     def normalize_ktp_ratio(self, image):
+        """
+        Paksa hasil akhir KTP ke rasio fisik ID-1 (85.60 x 53.98 mm).
+
+        Perspective detector menentukan empat sisi fisik kartu. Setelah warp,
+        output dinormalisasi tepat ke rasio KTP agar hasil dari foto random
+        selalu berbentuk kartu, bukan mengikuti rasio frame/background kamera.
+        """
         h, w = image.shape[:2]
 
         if h > w:
@@ -283,26 +362,43 @@ class AutoDocumentScanner:
             )
             h, w = image.shape[:2]
 
+        if h < 2 or w < 2:
+            return image
+
+        # Pertahankan sisi panjang/resolusi hasil deteksi, lalu hitung tinggi
+        # tepat dari rasio fisik KTP. Tidak ada toleransi 2.5% lagi karena
+        # output KTP memang harus selalu konsisten.
+        target_width = max(
+            int(w),
+            2,
+        )
         target_height = max(
             2,
             int(round(
-                w / self.ktp_aspect_ratio
+                target_width
+                / self.ktp_aspect_ratio
             )),
         )
 
-        # Hanya koreksi geometri kecil setelah perspective selesai.
-        current_ratio = w / max(h, 1)
-        error = abs(
-            current_ratio - self.ktp_aspect_ratio
-        ) / self.ktp_aspect_ratio
-
-        if error <= 0.025:
+        if (
+            w == target_width
+            and h == target_height
+        ):
             return image
+
+        interpolation = (
+            cv2.INTER_AREA
+            if target_height < h
+            else cv2.INTER_CUBIC
+        )
 
         return cv2.resize(
             image,
-            (w, target_height),
-            interpolation=cv2.INTER_CUBIC,
+            (
+                target_width,
+                target_height,
+            ),
+            interpolation=interpolation,
         )
 
     @staticmethod
@@ -380,6 +476,172 @@ class AutoDocumentScanner:
             "'grayscale', atau 'bw'."
         )
 
+    def scan_with_corners(
+        self,
+        image_path,
+        corners,
+        output_path=None,
+        mode="ktp",
+        output_mode="color",
+    ):
+        """
+        Koreksi perspektif menggunakan empat sudut pilihan pengguna.
+
+        Dipakai sebagai fallback setelah proses otomatis. Jalur output tetap
+        memakai validasi, normalisasi rasio KTP, enhancement, dan mode hasil
+        yang sama dengan proses otomatis.
+        """
+        image_path = Path(
+            image_path
+        )
+        image = cv2.imread(
+            str(image_path)
+        )
+
+        if image is None:
+            raise ValueError(
+                f"Gambar tidak dapat dibaca: {image_path}"
+            )
+
+        points = np.asarray(
+            corners,
+            dtype=np.float32,
+        ).reshape(4, 2)
+
+        h, w = image.shape[:2]
+        points[:, 0] = np.clip(
+            points[:, 0],
+            0,
+            max(w - 1, 0),
+        )
+        points[:, 1] = np.clip(
+            points[:, 1],
+            0,
+            max(h - 1, 0),
+        )
+
+        points = self.perspective_engine.order_points(
+            points
+        )
+
+        area = abs(
+            cv2.contourArea(
+                points.astype(
+                    np.float32
+                )
+            )
+        )
+
+        if area < 4.0:
+            raise ValueError(
+                "Empat titik manual menghasilkan area terlalu kecil."
+            )
+
+        self.last_corners = points.copy()
+        self.last_detection = {
+            "candidate_count": 1,
+            "selected_source": "manual_correction",
+            "score": 1.0,
+            "manual": True,
+        }
+        self.last_validation = {}
+
+        corner_validation = self.final_validator.validate_corners(
+            image.shape,
+            points,
+        )
+
+        if not corner_validation.get(
+            "hard_valid",
+            False,
+        ):
+            self.last_validation = {
+                "status": "review",
+                "hard_valid": False,
+                "warnings": list(
+                    corner_validation.get(
+                        "warnings"
+                    ) or []
+                ),
+                "corner": corner_validation,
+            }
+            self.last_detection[
+                "validation"
+            ] = self.last_validation
+            raise RuntimeError(
+                "Geometri empat sudut manual gagal validasi."
+            )
+
+        # Untuk koreksi manual, titik pengguna dianggap sebagai batas yang
+        # disengaja sehingga tidak ditambah safe margin otomatis.
+        result = self.perspective_engine.warp(
+            image,
+            points,
+        )
+
+        result = self.auto_rotate(
+            result,
+            mode=mode,
+        )
+
+        if mode != "ktp":
+            result = self.deskew_small_angle(
+                result
+            )
+            result = self.trim_edges(
+                result
+            )
+        else:
+            result = self.normalize_ktp_ratio(
+                result
+            )
+
+        result = self.enhance(
+            result
+        )
+
+        self.last_quality = self.quality_checker.assess(
+            result,
+            detection_metadata=self.last_detection,
+        )
+        self.last_detection[
+            "quality"
+        ] = self.last_quality
+
+        output_validation = self.final_validator.validate_output(
+            result,
+            detection_metadata=self.last_detection,
+            quality=self.last_quality,
+        )
+        self.last_validation = self.final_validator.combine(
+            corner_validation,
+            output_validation,
+        )
+        self.last_detection[
+            "validation"
+        ] = self.last_validation
+
+        if not self.last_validation.get(
+            "hard_valid",
+            False,
+        ):
+            raise RuntimeError(
+                "Hasil koreksi manual gagal validasi geometri akhir."
+            )
+
+        result = self.apply_output_mode(
+            result,
+            output_mode=output_mode,
+        )
+
+        if output_path:
+            atomic_imwrite(
+                output_path,
+                result,
+            )
+
+        return result, points
+
     def scan(
         self,
         image_path,
@@ -456,6 +718,23 @@ class AutoDocumentScanner:
 
         result = corrected
 
+        if mode == "ktp":
+            safe_corners = self.expand_ktp_corners(
+                image.shape,
+                corners,
+            )
+
+            result = self.perspective_engine.warp(
+                image,
+                safe_corners,
+            )
+
+            self.last_detection[
+                "safe_margin"
+            ] = float(
+                self.ktp_safe_margin
+            )
+
         result = self.auto_rotate(
             result,
             mode=mode,
@@ -472,9 +751,13 @@ class AutoDocumentScanner:
                 result
             )
 
-        result = self.trim_edges(
-            result
-        )
+        # Untuk KTP jangan trim ke dalam lagi setelah warp. Hasil detector
+        # sudah di-warp dengan safety margin kecil agar konten tepi tidak
+        # terpotong. Trim tetap dipertahankan untuk mode dokumen umum.
+        if mode != "ktp":
+            result = self.trim_edges(
+                result
+            )
 
         if mode == "ktp":
             result = self.normalize_ktp_ratio(

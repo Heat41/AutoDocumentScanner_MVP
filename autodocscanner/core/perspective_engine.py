@@ -1143,6 +1143,277 @@ class AutoPerspectiveEngine:
 
         return float(score)
 
+    def _penalize_nested_frame_candidates(
+        self,
+        candidates,
+        image_shape,
+    ):
+        """
+        Turunkan skor kandidat frame/background yang membungkus kandidat
+        KTP lain yang lebih kecil dan rasio-nya masih masuk akal.
+
+        Foto KTP dari HP sering memiliki border monitor, bingkai meja, atau
+        tepi foto yang membentuk quad sangat kuat. Kandidat seperti itu bisa
+        menang dari edge/area walaupun KTP sebenarnya berada di dalamnya.
+        Penalti ini hanya aktif untuk parent yang cukup besar dan memiliki
+        child quad KTP-like yang benar-benar berada di dalam parent.
+        """
+        if len(candidates) < 2:
+            return candidates
+
+        h, w = image_shape[:2]
+        image_area = float(max(h * w, 1))
+
+        prepared = []
+
+        for candidate in candidates:
+            quad = self.order_points(
+                candidate.points
+            )
+            area = abs(
+                cv2.contourArea(
+                    quad.astype(np.float32)
+                )
+            )
+
+            tl, tr, br, bl = quad
+            width_top = np.linalg.norm(tr - tl)
+            width_bottom = np.linalg.norm(br - bl)
+            height_left = np.linalg.norm(bl - tl)
+            height_right = np.linalg.norm(br - tr)
+
+            avg_width = (
+                width_top + width_bottom
+            ) / 2.0
+            avg_height = (
+                height_left + height_right
+            ) / 2.0
+
+            long_side = max(
+                avg_width,
+                avg_height,
+            )
+            short_side = max(
+                min(avg_width, avg_height),
+                1.0,
+            )
+            ratio = long_side / short_side
+            ratio_error = abs(
+                ratio - self.target_ratio
+            ) / self.target_ratio
+
+            prepared.append(
+                (
+                    candidate,
+                    quad,
+                    area,
+                    ratio_error,
+                )
+            )
+
+        for (
+            outer,
+            outer_quad,
+            outer_area,
+            _,
+        ) in prepared:
+            outer_area_ratio = (
+                outer_area / image_area
+            )
+
+            # Kandidat kecil/menengah bukan tipikal frame foto.
+            if outer_area_ratio < 0.42:
+                continue
+
+            min_x = float(
+                np.min(outer_quad[:, 0])
+            )
+            max_x = float(
+                np.max(outer_quad[:, 0])
+            )
+            min_y = float(
+                np.min(outer_quad[:, 1])
+            )
+            max_y = float(
+                np.max(outer_quad[:, 1])
+            )
+
+            mean_margin = (
+                max(min_x, 0.0) / max(w, 1)
+                + max(w - 1 - max_x, 0.0) / max(w, 1)
+                + max(min_y, 0.0) / max(h, 1)
+                + max(h - 1 - max_y, 0.0) / max(h, 1)
+            ) / 4.0
+
+            edge_likeness = max(
+                0.0,
+                1.0 - mean_margin / 0.14,
+            )
+
+            strongest_nested = 0.0
+
+            outer_polygon = (
+                outer_quad.astype(np.float32)
+            )
+
+            for (
+                inner,
+                inner_quad,
+                inner_area,
+                inner_ratio_error,
+            ) in prepared:
+                if inner is outer:
+                    continue
+
+                area_fraction = (
+                    inner_area
+                    / max(outer_area, 1.0)
+                )
+
+                # Hindari kandidat duplikat dan elemen internal kecil.
+                if not (
+                    0.10
+                    <= area_fraction
+                    <= 0.86
+                ):
+                    continue
+
+                # Child harus tetap terlihat seperti kartu ID-1/KTP.
+                if inner_ratio_error > 0.28:
+                    continue
+
+                if inner.score < 0.30:
+                    continue
+
+                inside = True
+
+                for point in inner_quad:
+                    if cv2.pointPolygonTest(
+                        outer_polygon,
+                        (
+                            float(point[0]),
+                            float(point[1]),
+                        ),
+                        False,
+                    ) < -2:
+                        inside = False
+                        break
+
+                if not inside:
+                    continue
+
+                score_strength = min(
+                    max(inner.score, 0.0)
+                    / 0.78,
+                    1.0,
+                )
+                size_strength = min(
+                    area_fraction / 0.45,
+                    1.0,
+                )
+
+                nested_strength = (
+                    score_strength
+                    * (
+                        0.55
+                        + size_strength * 0.45
+                    )
+                )
+
+                strongest_nested = max(
+                    strongest_nested,
+                    nested_strength,
+                )
+
+            if strongest_nested <= 0.0:
+                continue
+
+            # Parent besar yang dekat tepi frame mendapat penalti ekstra.
+            # Nilainya sengaja terbatas agar crop KTP yang memang rapat ke
+            # frame tetap bisa menang bila tidak ada child KTP-like yang kuat.
+            penalty = (
+                0.20
+                + 0.10 * edge_likeness
+            ) * strongest_nested
+
+            outer.score -= penalty
+
+            # Kandidat child yang paling menyerupai KTP juga sedikit
+            # dipromosikan. Ini membuat pemilihan adaptif: engine tidak cuma
+            # menolak frame luar, tetapi aktif berpindah ke quad di dalamnya
+            # saat evidence child memang lebih kuat.
+            best_child = None
+            best_child_strength = 0.0
+
+            for (
+                inner,
+                inner_quad,
+                inner_area,
+                inner_ratio_error,
+            ) in prepared:
+                if inner is outer:
+                    continue
+
+                area_fraction = (
+                    inner_area
+                    / max(outer_area, 1.0)
+                )
+
+                if not (
+                    0.10
+                    <= area_fraction
+                    <= 0.86
+                ):
+                    continue
+
+                if inner_ratio_error > 0.28:
+                    continue
+
+                inside = True
+
+                for point in inner_quad:
+                    if cv2.pointPolygonTest(
+                        outer_polygon,
+                        (
+                            float(point[0]),
+                            float(point[1]),
+                        ),
+                        False,
+                    ) < -2:
+                        inside = False
+                        break
+
+                if not inside:
+                    continue
+
+                child_strength = (
+                    max(inner.score, 0.0)
+                    * (
+                        1.0
+                        - min(
+                            inner_ratio_error / 0.28,
+                            1.0,
+                        )
+                    )
+                    * min(
+                        area_fraction / 0.45,
+                        1.0,
+                    )
+                )
+
+                if child_strength > best_child_strength:
+                    best_child_strength = child_strength
+                    best_child = inner
+
+            if best_child is not None:
+                best_child.score += min(
+                    0.10,
+                    0.04
+                    + best_child_strength * 0.08,
+                )
+
+        return candidates
+
     @staticmethod
     def _candidate_distance(a, b, diagonal):
         a = AutoPerspectiveEngine.order_points(a)
@@ -1221,6 +1492,212 @@ class AutoPerspectiveEngine:
             borderMode=cv2.BORDER_REPLICATE,
         )
 
+    def _nested_ktp_evidence_in_warp(self, warped):
+        """
+        Cari bukti bahwa hasil warp masih berisi satu kartu lain di dalamnya.
+
+        Jika kandidat yang dipilih sebenarnya frame foto/meja/laptop, setelah
+        di-warp biasanya masih terlihat quad lain berbentuk KTP di area tengah.
+        Kandidat KTP yang benar seharusnya tidak memiliki lagi rectangle ID-1
+        besar di dalam frame hasil warp.
+        """
+        h, w = warped.shape[:2]
+
+        if min(h, w) < 90:
+            return 0.0
+
+        detection_maps, _ = self._build_detection_maps(
+            warped
+        )
+
+        image_area = float(
+            max(h * w, 1)
+        )
+        strongest = 0.0
+
+        for edge_map in detection_maps:
+            contours, _ = cv2.findContours(
+                edge_map,
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+
+            for contour in sorted(
+                contours,
+                key=cv2.contourArea,
+                reverse=True,
+            )[:60]:
+                area = float(
+                    abs(
+                        cv2.contourArea(
+                            contour
+                        )
+                    )
+                )
+                area_ratio = (
+                    area / image_area
+                )
+
+                # Terlalu kecil = elemen internal KTP.
+                # Terlalu besar = border warp itu sendiri.
+                if not (
+                    0.12
+                    <= area_ratio
+                    <= 0.82
+                ):
+                    continue
+
+                perimeter = cv2.arcLength(
+                    contour,
+                    True,
+                )
+
+                if perimeter <= 0:
+                    continue
+
+                quad = None
+
+                for eps in (
+                    0.012,
+                    0.018,
+                    0.024,
+                    0.032,
+                    0.045,
+                    0.060,
+                ):
+                    approx = cv2.approxPolyDP(
+                        contour,
+                        eps * perimeter,
+                        True,
+                    )
+
+                    if len(approx) != 4:
+                        continue
+
+                    points = (
+                        approx.reshape(
+                            4,
+                            2,
+                        ).astype(
+                            np.float32
+                        )
+                    )
+
+                    if not cv2.isContourConvex(
+                        points.astype(
+                            np.int32
+                        )
+                    ):
+                        continue
+
+                    quad = self.order_points(
+                        points
+                    )
+                    break
+
+                if quad is None:
+                    continue
+
+                tl, tr, br, bl = quad
+                width_top = np.linalg.norm(
+                    tr - tl
+                )
+                width_bottom = np.linalg.norm(
+                    br - bl
+                )
+                height_left = np.linalg.norm(
+                    bl - tl
+                )
+                height_right = np.linalg.norm(
+                    br - tr
+                )
+
+                avg_width = (
+                    width_top + width_bottom
+                ) / 2.0
+                avg_height = (
+                    height_left + height_right
+                ) / 2.0
+
+                long_side = max(
+                    avg_width,
+                    avg_height,
+                )
+                short_side = max(
+                    min(
+                        avg_width,
+                        avg_height,
+                    ),
+                    1.0,
+                )
+                ratio = (
+                    long_side
+                    / short_side
+                )
+                ratio_error = abs(
+                    ratio
+                    - self.target_ratio
+                ) / self.target_ratio
+
+                if ratio_error > 0.32:
+                    continue
+
+                center = quad.mean(
+                    axis=0
+                )
+                dx = abs(
+                    float(center[0])
+                    - w / 2.0
+                ) / max(
+                    w / 2.0,
+                    1.0,
+                )
+                dy = abs(
+                    float(center[1])
+                    - h / 2.0
+                ) / max(
+                    h / 2.0,
+                    1.0,
+                )
+
+                center_score = max(
+                    0.0,
+                    1.0
+                    - (
+                        dx + dy
+                    ) / 1.6,
+                )
+                ratio_score = max(
+                    0.0,
+                    1.0
+                    - ratio_error
+                    / 0.32,
+                )
+                size_score = min(
+                    area_ratio
+                    / 0.45,
+                    1.0,
+                )
+
+                evidence = (
+                    ratio_score * 0.44
+                    + center_score * 0.24
+                    + size_score * 0.32
+                )
+
+                strongest = max(
+                    strongest,
+                    evidence,
+                )
+
+        return float(
+            np.clip(
+                strongest,
+                0.0,
+                1.0,
+            )
+        )
+
     def _warp_quality(self, warped):
         if warped is None or warped.size == 0:
             return -1.0
@@ -1281,12 +1758,35 @@ class AutoPerspectiveEngine:
             1.0,
         )
 
-        return (
+        nested_ktp_evidence = (
+            self._nested_ktp_evidence_in_warp(
+                warped
+            )
+        )
+
+        quality = (
             ratio_score * 0.12
             + contrast_score * 0.13
             + detail_score * 0.18
             + card_score * 0.32
             + border_score * 0.25
+        )
+
+        # Bila hasil warp masih memuat satu quad besar berbentuk KTP di dalam,
+        # kemungkinan besar kandidat saat ini adalah frame/background luar.
+        # Penalti ini tidak bergantung pada warna KTP sehingga tetap bekerja
+        # pada KTP lama, pudar, pencahayaan hangat, dan background bermotif.
+        quality -= (
+            nested_ktp_evidence
+            * 0.38
+        )
+
+        return float(
+            np.clip(
+                quality,
+                0.0,
+                1.0,
+            )
         )
 
     def detect(self, image):
@@ -1353,6 +1853,11 @@ class AutoPerspectiveEngine:
             if candidate.score >= 0.0
         ]
 
+        candidates = self._penalize_nested_frame_candidates(
+            candidates,
+            resized.shape,
+        )
+
         candidates = self._deduplicate(
             candidates,
             resized.shape,
@@ -1360,10 +1865,14 @@ class AutoPerspectiveEngine:
 
         best = None
         best_total = -1.0
+        best_quality = 0.0
+        best_nested = 0.0
+        best_area_ratio = 0.0
 
         # Jangan langsung percaya kandidat #1. Coba beberapa kandidat terbaik,
-        # warp, lalu validasi hasilnya.
-        for candidate in candidates[:14]:
+        # warp, lalu validasi hasilnya. Bobot dibuat adaptif supaya kandidat
+        # frame besar tidak otomatis menang hanya karena area/edge kuat.
+        for candidate in candidates[:18]:
             points_original = (
                 candidate.points / scale
             ).astype(np.float32)
@@ -1376,14 +1885,89 @@ class AutoPerspectiveEngine:
             quality = self._warp_quality(
                 warped
             )
+            nested_evidence = (
+                self._nested_ktp_evidence_in_warp(
+                    warped
+                )
+            )
+
+            candidate_area = abs(
+                cv2.contourArea(
+                    candidate.points.astype(
+                        np.float32
+                    )
+                )
+            )
+            detection_area = float(
+                max(
+                    resized.shape[0]
+                    * resized.shape[1],
+                    1,
+                )
+            )
+            area_ratio = (
+                candidate_area
+                / detection_area
+            )
+
+            geometry_weight = 0.54
+
+            if candidate.source.startswith(
+                "color"
+            ):
+                geometry_weight += 0.05
+
+            if area_ratio > 0.62:
+                geometry_weight -= min(
+                    0.12,
+                    (
+                        area_ratio - 0.62
+                    ) * 0.35,
+                )
+
+            if nested_evidence > 0.20:
+                geometry_weight -= min(
+                    0.10,
+                    nested_evidence * 0.10,
+                )
+
+            geometry_weight = float(
+                np.clip(
+                    geometry_weight,
+                    0.38,
+                    0.62,
+                )
+            )
+            quality_weight = (
+                1.0 - geometry_weight
+            )
 
             total = (
-                candidate.score * 0.58
-                + quality * 0.42
+                candidate.score
+                * geometry_weight
+                + quality
+                * quality_weight
             )
+
+            # Suspicious outer-frame candidate: semakin besar area dan semakin
+            # jelas masih ada KTP-shaped quad di dalam warp, semakin turun.
+            if nested_evidence > 0.18:
+                total -= (
+                    nested_evidence
+                    * (
+                        0.08
+                        + max(
+                            area_ratio - 0.40,
+                            0.0,
+                        ) * 0.20
+                    )
+                )
 
             if total > best_total:
                 best_total = total
+                best_quality = quality
+                best_nested = nested_evidence
+                best_area_ratio = area_ratio
                 best = PerspectiveCandidate(
                     points=points_original,
                     score=total,
@@ -1395,12 +1979,29 @@ class AutoPerspectiveEngine:
                 "candidate_count": len(candidates),
                 "selected_source": None,
                 "score": max(best_total, 0.0),
+                "warp_quality": max(
+                    best_quality,
+                    0.0,
+                ),
+                "nested_ktp_evidence": max(
+                    best_nested,
+                    0.0,
+                ),
             }
 
         return best.points, {
             "candidate_count": len(candidates),
             "selected_source": best.source,
             "score": float(best.score),
+            "warp_quality": float(
+                best_quality
+            ),
+            "nested_ktp_evidence": float(
+                best_nested
+            ),
+            "selected_area_ratio": float(
+                best_area_ratio
+            ),
         }
 
     def correct(self, image):

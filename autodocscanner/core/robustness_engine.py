@@ -230,11 +230,29 @@ class RobustPerspectiveEngine(AutoPerspectiveEngine):
             or 0.0
         )
 
-        # Baseline yang sudah kuat kita kunci. Ini jalur untuk dua kasus PASS
-        # yang sudah diuji sebelumnya dan mencegah regression akibat fallback.
+        base_nested = float(
+            (base_metadata or {}).get(
+                "nested_ktp_evidence",
+                0.0,
+            )
+            or 0.0
+        )
+        base_warp_quality = float(
+            (base_metadata or {}).get(
+                "warp_quality",
+                0.0,
+            )
+            or 0.0
+        )
+
+        # Baseline hanya dikunci bila confidence tinggi DAN hasil warp tidak
+        # masih mengandung quad KTP lain. Ini mencegah outer frame yang kuat
+        # secara edge/area lolos sebagai "baseline_locked".
         if (
             base_corners is not None
             and base_score >= self.stable_score
+            and base_nested < 0.24
+            and base_warp_quality >= 0.48
         ):
             return base_corners, self._metadata(
                 base_metadata,
