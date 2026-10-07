@@ -16,10 +16,12 @@ class AutoDocumentScanner:
         self,
         detection_height=1000,
         ktp_aspect_ratio=KTP_ASPECT_RATIO,
-        ktp_edge_trim=0.004,
+        ktp_edge_trim=0.0,
+        ktp_safe_margin=0.015,
     ):
         self.ktp_aspect_ratio = ktp_aspect_ratio
         self.ktp_edge_trim = ktp_edge_trim
+        self.ktp_safe_margin = ktp_safe_margin
 
         self.perspective_engine = RobustPerspectiveEngine(
             target_ratio=ktp_aspect_ratio,
@@ -245,6 +247,76 @@ class AutoDocumentScanner:
             (w, h),
             flags=cv2.INTER_CUBIC,
             borderMode=cv2.BORDER_REPLICATE,
+        )
+
+    def expand_ktp_corners(
+        self,
+        image_shape,
+        corners,
+    ):
+        """
+        Tambahkan safety margin geometris kecil di luar quad KTP.
+
+        Detector tetap bertugas menemukan batas fisik kartu. Margin ini hanya
+        dipakai saat warp final agar rounded corner, glare, atau edge yang
+        terbaca sedikit masuk ke badan kartu tidak memotong teks/foto di tepi.
+
+        Nilainya bersifat relatif terhadap ukuran kartu, bukan pixel tetap,
+        sehingga berlaku konsisten untuk foto KTP random beresolusi berbeda.
+        """
+        if corners is None:
+            return corners
+
+        quad = np.asarray(
+            corners,
+            dtype=np.float32,
+        ).reshape(4, 2)
+
+        margin = max(
+            float(self.ktp_safe_margin),
+            0.0,
+        )
+
+        if margin <= 0:
+            return quad
+
+        center = np.mean(
+            quad,
+            axis=0,
+        )
+
+        # margin adalah tambahan per sisi. Faktor 2 karena vektor center->corner
+        # hanya merepresentasikan setengah dimensi kartu.
+        scale = 1.0 + 2.0 * margin
+        expanded = (
+            center
+            + (
+                quad - center
+            ) * scale
+        )
+
+        h, w = image_shape[:2]
+
+        expanded[:, 0] = np.clip(
+            expanded[:, 0],
+            0.0,
+            max(float(w - 1), 0.0),
+        )
+        expanded[:, 1] = np.clip(
+            expanded[:, 1],
+            0.0,
+            max(float(h - 1), 0.0),
+        )
+
+        if not cv2.isContourConvex(
+            expanded.astype(
+                np.int32
+            )
+        ):
+            return quad
+
+        return self.perspective_engine.order_points(
+            expanded
         )
 
     def trim_edges(self, image):
@@ -480,6 +552,23 @@ class AutoDocumentScanner:
 
         result = corrected
 
+        if mode == "ktp":
+            safe_corners = self.expand_ktp_corners(
+                image.shape,
+                corners,
+            )
+
+            result = self.perspective_engine.warp(
+                image,
+                safe_corners,
+            )
+
+            self.last_detection[
+                "safe_margin"
+            ] = float(
+                self.ktp_safe_margin
+            )
+
         result = self.auto_rotate(
             result,
             mode=mode,
@@ -496,9 +585,13 @@ class AutoDocumentScanner:
                 result
             )
 
-        result = self.trim_edges(
-            result
-        )
+        # Untuk KTP jangan trim ke dalam lagi setelah warp. Hasil detector
+        # sudah di-warp dengan safety margin kecil agar konten tepi tidak
+        # terpotong. Trim tetap dipertahankan untuk mode dokumen umum.
+        if mode != "ktp":
+            result = self.trim_edges(
+                result
+            )
 
         if mode == "ktp":
             result = self.normalize_ktp_ratio(
