@@ -1338,6 +1338,80 @@ class AutoPerspectiveEngine:
 
             outer.score -= penalty
 
+            # Kandidat child yang paling menyerupai KTP juga sedikit
+            # dipromosikan. Ini membuat pemilihan adaptif: engine tidak cuma
+            # menolak frame luar, tetapi aktif berpindah ke quad di dalamnya
+            # saat evidence child memang lebih kuat.
+            best_child = None
+            best_child_strength = 0.0
+
+            for (
+                inner,
+                inner_quad,
+                inner_area,
+                inner_ratio_error,
+            ) in prepared:
+                if inner is outer:
+                    continue
+
+                area_fraction = (
+                    inner_area
+                    / max(outer_area, 1.0)
+                )
+
+                if not (
+                    0.10
+                    <= area_fraction
+                    <= 0.86
+                ):
+                    continue
+
+                if inner_ratio_error > 0.28:
+                    continue
+
+                inside = True
+
+                for point in inner_quad:
+                    if cv2.pointPolygonTest(
+                        outer_polygon,
+                        (
+                            float(point[0]),
+                            float(point[1]),
+                        ),
+                        False,
+                    ) < -2:
+                        inside = False
+                        break
+
+                if not inside:
+                    continue
+
+                child_strength = (
+                    max(inner.score, 0.0)
+                    * (
+                        1.0
+                        - min(
+                            inner_ratio_error / 0.28,
+                            1.0,
+                        )
+                    )
+                    * min(
+                        area_fraction / 0.45,
+                        1.0,
+                    )
+                )
+
+                if child_strength > best_child_strength:
+                    best_child_strength = child_strength
+                    best_child = inner
+
+            if best_child is not None:
+                best_child.score += min(
+                    0.10,
+                    0.04
+                    + best_child_strength * 0.08,
+                )
+
         return candidates
 
     @staticmethod
@@ -1791,10 +1865,14 @@ class AutoPerspectiveEngine:
 
         best = None
         best_total = -1.0
+        best_quality = 0.0
+        best_nested = 0.0
+        best_area_ratio = 0.0
 
         # Jangan langsung percaya kandidat #1. Coba beberapa kandidat terbaik,
-        # warp, lalu validasi hasilnya.
-        for candidate in candidates[:14]:
+        # warp, lalu validasi hasilnya. Bobot dibuat adaptif supaya kandidat
+        # frame besar tidak otomatis menang hanya karena area/edge kuat.
+        for candidate in candidates[:18]:
             points_original = (
                 candidate.points / scale
             ).astype(np.float32)
@@ -1807,14 +1885,89 @@ class AutoPerspectiveEngine:
             quality = self._warp_quality(
                 warped
             )
+            nested_evidence = (
+                self._nested_ktp_evidence_in_warp(
+                    warped
+                )
+            )
+
+            candidate_area = abs(
+                cv2.contourArea(
+                    candidate.points.astype(
+                        np.float32
+                    )
+                )
+            )
+            detection_area = float(
+                max(
+                    resized.shape[0]
+                    * resized.shape[1],
+                    1,
+                )
+            )
+            area_ratio = (
+                candidate_area
+                / detection_area
+            )
+
+            geometry_weight = 0.54
+
+            if candidate.source.startswith(
+                "color"
+            ):
+                geometry_weight += 0.05
+
+            if area_ratio > 0.62:
+                geometry_weight -= min(
+                    0.12,
+                    (
+                        area_ratio - 0.62
+                    ) * 0.35,
+                )
+
+            if nested_evidence > 0.20:
+                geometry_weight -= min(
+                    0.10,
+                    nested_evidence * 0.10,
+                )
+
+            geometry_weight = float(
+                np.clip(
+                    geometry_weight,
+                    0.38,
+                    0.62,
+                )
+            )
+            quality_weight = (
+                1.0 - geometry_weight
+            )
 
             total = (
-                candidate.score * 0.58
-                + quality * 0.42
+                candidate.score
+                * geometry_weight
+                + quality
+                * quality_weight
             )
+
+            # Suspicious outer-frame candidate: semakin besar area dan semakin
+            # jelas masih ada KTP-shaped quad di dalam warp, semakin turun.
+            if nested_evidence > 0.18:
+                total -= (
+                    nested_evidence
+                    * (
+                        0.08
+                        + max(
+                            area_ratio - 0.40,
+                            0.0,
+                        ) * 0.20
+                    )
+                )
 
             if total > best_total:
                 best_total = total
+                best_quality = quality
+                best_nested = nested_evidence
+                best_area_ratio = area_ratio
                 best = PerspectiveCandidate(
                     points=points_original,
                     score=total,
@@ -1826,12 +1979,29 @@ class AutoPerspectiveEngine:
                 "candidate_count": len(candidates),
                 "selected_source": None,
                 "score": max(best_total, 0.0),
+                "warp_quality": max(
+                    best_quality,
+                    0.0,
+                ),
+                "nested_ktp_evidence": max(
+                    best_nested,
+                    0.0,
+                ),
             }
 
         return best.points, {
             "candidate_count": len(candidates),
             "selected_source": best.source,
             "score": float(best.score),
+            "warp_quality": float(
+                best_quality
+            ),
+            "nested_ktp_evidence": float(
+                best_nested
+            ),
+            "selected_area_ratio": float(
+                best_area_ratio
+            ),
         }
 
     def correct(self, image):
