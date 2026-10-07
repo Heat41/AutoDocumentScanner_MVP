@@ -780,13 +780,22 @@ class FinalScannerUI(SafeScannerUI):
             "photo": None,
             "display_size": None,
             "offset": None,
+            "image_item": None,
+            "canvas_size": None,
         }
 
-        def render():
-            canvas.delete(
-                "all"
-            )
-            canvas.update_idletasks()
+        def render(
+            refresh_image=True,
+        ):
+            if refresh_image:
+                canvas.delete(
+                    "all"
+                )
+                canvas.update_idletasks()
+            else:
+                canvas.delete(
+                    "manual-overlay"
+                )
 
             canvas_width = max(
                 int(canvas.winfo_width()),
@@ -842,38 +851,75 @@ class FinalScannerUI(SafeScannerUI):
                 - display_height
             ) / 2.0
 
-            preview = source.resize(
-                (
-                    display_width,
-                    display_height,
-                ),
-                Image.Resampling.LANCZOS,
-            )
-            photo = ImageTk.PhotoImage(
-                preview
-            )
-            render_state[
-                "photo"
-            ] = photo
-            render_state[
-                "display_size"
-            ] = (
-                display_width,
-                display_height,
-            )
-            render_state[
-                "offset"
-            ] = (
-                offset_x,
-                offset_y,
+            canvas_size = (
+                canvas_width,
+                canvas_height,
             )
 
-            canvas.create_image(
-                offset_x,
-                offset_y,
-                image=photo,
-                anchor="nw",
-            )
+            if (
+                refresh_image
+                or render_state[
+                    "photo"
+                ] is None
+                or render_state[
+                    "canvas_size"
+                ] != canvas_size
+                or render_state[
+                    "display_size"
+                ] != (
+                    display_width,
+                    display_height,
+                )
+            ):
+                preview = source.resize(
+                    (
+                        display_width,
+                        display_height,
+                    ),
+                    Image.Resampling.LANCZOS,
+                )
+                photo = ImageTk.PhotoImage(
+                    preview,
+                    master=dialog,
+                )
+                render_state[
+                    "photo"
+                ] = photo
+                render_state[
+                    "display_size"
+                ] = (
+                    display_width,
+                    display_height,
+                )
+                render_state[
+                    "offset"
+                ] = (
+                    offset_x,
+                    offset_y,
+                )
+                render_state[
+                    "canvas_size"
+                ] = canvas_size
+
+                image_item = canvas.create_image(
+                    offset_x,
+                    offset_y,
+                    image=photo,
+                    anchor="nw",
+                    tags=(
+                        "manual-base-image",
+                    ),
+                )
+                render_state[
+                    "image_item"
+                ] = image_item
+            else:
+                render_state[
+                    "offset"
+                ] = (
+                    offset_x,
+                    offset_y,
+                )
 
             scaled = []
             for point in working_corners:
@@ -913,6 +959,7 @@ class FinalScannerUI(SafeScannerUI):
                     *flat,
                     fill=palette["accent"],
                     width=3,
+                    tags=("manual-overlay",),
                 )
 
                 labels = (
@@ -939,6 +986,7 @@ class FinalScannerUI(SafeScannerUI):
                             "accent"
                         ],
                         width=2,
+                        tags=("manual-overlay",),
                     )
                     canvas.create_text(
                         x + 14,
@@ -951,6 +999,7 @@ class FinalScannerUI(SafeScannerUI):
                             "Segoe UI Semibold",
                             8,
                         ),
+                        tags=("manual-overlay",),
                     )
 
         def canvas_point_for_corner(point):
@@ -1088,7 +1137,9 @@ class FinalScannerUI(SafeScannerUI):
             working_corners[
                 corner_index
             ] = point
-            render()
+            render(
+                refresh_image=False,
+            )
 
         def on_release(_event):
             active[
@@ -1161,7 +1212,9 @@ class FinalScannerUI(SafeScannerUI):
                     float(point[0]),
                     float(point[1]),
                 ]
-            render()
+            render(
+                refresh_image=False,
+            )
 
         canvas.bind(
             "<Button-1>",
@@ -1177,7 +1230,9 @@ class FinalScannerUI(SafeScannerUI):
         )
         canvas.bind(
             "<Configure>",
-            lambda _event: render(),
+            lambda _event: render(
+                refresh_image=True,
+            ),
         )
 
         ttk.Button(
