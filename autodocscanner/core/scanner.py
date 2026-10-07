@@ -476,6 +476,172 @@ class AutoDocumentScanner:
             "'grayscale', atau 'bw'."
         )
 
+    def scan_with_corners(
+        self,
+        image_path,
+        corners,
+        output_path=None,
+        mode="ktp",
+        output_mode="color",
+    ):
+        """
+        Koreksi perspektif menggunakan empat sudut pilihan pengguna.
+
+        Dipakai sebagai fallback setelah proses otomatis. Jalur output tetap
+        memakai validasi, normalisasi rasio KTP, enhancement, dan mode hasil
+        yang sama dengan proses otomatis.
+        """
+        image_path = Path(
+            image_path
+        )
+        image = cv2.imread(
+            str(image_path)
+        )
+
+        if image is None:
+            raise ValueError(
+                f"Gambar tidak dapat dibaca: {image_path}"
+            )
+
+        points = np.asarray(
+            corners,
+            dtype=np.float32,
+        ).reshape(4, 2)
+
+        h, w = image.shape[:2]
+        points[:, 0] = np.clip(
+            points[:, 0],
+            0,
+            max(w - 1, 0),
+        )
+        points[:, 1] = np.clip(
+            points[:, 1],
+            0,
+            max(h - 1, 0),
+        )
+
+        points = self.perspective_engine.order_points(
+            points
+        )
+
+        area = abs(
+            cv2.contourArea(
+                points.astype(
+                    np.float32
+                )
+            )
+        )
+
+        if area < 4.0:
+            raise ValueError(
+                "Empat titik manual menghasilkan area terlalu kecil."
+            )
+
+        self.last_corners = points.copy()
+        self.last_detection = {
+            "candidate_count": 1,
+            "selected_source": "manual_correction",
+            "score": 1.0,
+            "manual": True,
+        }
+        self.last_validation = {}
+
+        corner_validation = self.final_validator.validate_corners(
+            image.shape,
+            points,
+        )
+
+        if not corner_validation.get(
+            "hard_valid",
+            False,
+        ):
+            self.last_validation = {
+                "status": "review",
+                "hard_valid": False,
+                "warnings": list(
+                    corner_validation.get(
+                        "warnings"
+                    ) or []
+                ),
+                "corner": corner_validation,
+            }
+            self.last_detection[
+                "validation"
+            ] = self.last_validation
+            raise RuntimeError(
+                "Geometri empat sudut manual gagal validasi."
+            )
+
+        # Untuk koreksi manual, titik pengguna dianggap sebagai batas yang
+        # disengaja sehingga tidak ditambah safe margin otomatis.
+        result = self.perspective_engine.warp(
+            image,
+            points,
+        )
+
+        result = self.auto_rotate(
+            result,
+            mode=mode,
+        )
+
+        if mode != "ktp":
+            result = self.deskew_small_angle(
+                result
+            )
+            result = self.trim_edges(
+                result
+            )
+        else:
+            result = self.normalize_ktp_ratio(
+                result
+            )
+
+        result = self.enhance(
+            result
+        )
+
+        self.last_quality = self.quality_checker.assess(
+            result,
+            detection_metadata=self.last_detection,
+        )
+        self.last_detection[
+            "quality"
+        ] = self.last_quality
+
+        output_validation = self.final_validator.validate_output(
+            result,
+            detection_metadata=self.last_detection,
+            quality=self.last_quality,
+        )
+        self.last_validation = self.final_validator.combine(
+            corner_validation,
+            output_validation,
+        )
+        self.last_detection[
+            "validation"
+        ] = self.last_validation
+
+        if not self.last_validation.get(
+            "hard_valid",
+            False,
+        ):
+            raise RuntimeError(
+                "Hasil koreksi manual gagal validasi geometri akhir."
+            )
+
+        result = self.apply_output_mode(
+            result,
+            output_mode=output_mode,
+        )
+
+        if output_path:
+            atomic_imwrite(
+                output_path,
+                result,
+            )
+
+        return result, points
+
     def scan(
         self,
         image_path,
