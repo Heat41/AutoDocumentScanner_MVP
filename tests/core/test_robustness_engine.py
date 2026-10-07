@@ -425,6 +425,89 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
             max_normalized_error=0.11,
         )
 
+    def test_patterned_background_outer_frame_does_not_win(self):
+        destination = np.array(
+            [
+                [255, 205],
+                [705, 185],
+                [735, 485],
+                [225, 505],
+            ],
+            dtype=np.float32,
+        )
+
+        image = self._place_card(
+            background=(55, 75, 105),
+            destination=destination,
+        )
+
+        # Background bermotif dengan edge kuat seperti alas/meja pada foto
+        # random pengguna. Pola sengaja dibuat di luar kartu.
+        for y in range(55, 690, 26):
+            cv2.line(
+                image,
+                (45, y),
+                (915, y),
+                (35, 55, 85),
+                5,
+            )
+
+        for x in range(60, 920, 32):
+            cv2.line(
+                image,
+                (x, 45),
+                (x, 675),
+                (70, 90, 120),
+                3,
+            )
+
+        # Gambar ulang kartu setelah pola agar badan KTP tetap utuh.
+        clean = self._place_card(
+            background=(55, 75, 105),
+            destination=destination,
+        )
+
+        card_mask = np.zeros(
+            image.shape[:2],
+            dtype=np.uint8,
+        )
+        cv2.fillConvexPoly(
+            card_mask,
+            destination.astype(
+                np.int32
+            ),
+            255,
+        )
+        image[
+            card_mask > 0
+        ] = clean[
+            card_mask > 0
+        ]
+
+        # Tambahkan frame luar yang rasio-nya juga cukup mirip ID card.
+        outer = np.array(
+            [
+                [95, 92],
+                [865, 80],
+                [885, 622],
+                [78, 635],
+            ],
+            dtype=np.int32,
+        )
+        cv2.polylines(
+            image,
+            [outer],
+            True,
+            (10, 10, 10),
+            14,
+        )
+
+        self._assert_detected_near(
+            image,
+            destination,
+            max_normalized_error=0.12,
+        )
+
     def test_detection_variants_keep_geometry(self):
         image = self._place_card()
 
