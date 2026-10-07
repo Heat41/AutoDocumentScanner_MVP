@@ -177,9 +177,9 @@ class TestRobustPerspectiveEngine(unittest.TestCase):
         self.assertIn(
             metadata.get("robustness_mode"),
             {
-                "baseline_locked",
-                "baseline_preserved",
-                "fallback_selected",
+                "stable_v1_1_0_locked",
+                "stable_v1_1_0_preserved",
+                "adaptive_fallback_selected",
             },
         )
 
