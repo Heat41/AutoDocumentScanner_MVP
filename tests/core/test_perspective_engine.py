@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -273,6 +275,78 @@ class TestKtpSafeMargin(unittest.TestCase):
             float(np.max(expanded[:, 1])),
             499.0,
         )
+
+
+class TestManualKtpFallback(unittest.TestCase):
+    def test_scan_with_corners_uses_manual_source_and_ktp_ratio(self):
+        scanner = AutoDocumentScanner()
+
+        image = np.full(
+            (500, 760, 3),
+            210,
+            dtype=np.uint8,
+        )
+        cv2.rectangle(
+            image,
+            (110, 120),
+            (650, 460),
+            (190, 205, 120),
+            -1,
+        )
+
+        corners = np.array(
+            [
+                [110, 120],
+                [650, 120],
+                [650, 460],
+                [110, 460],
+            ],
+            dtype=np.float32,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "ktp.jpg"
+            output_path = Path(temp_dir) / "out.jpg"
+            cv2.imwrite(
+                str(input_path),
+                image,
+            )
+
+            result, used_corners = scanner.scan_with_corners(
+                input_path,
+                corners,
+                output_path,
+                mode="ktp",
+                output_mode="color",
+            )
+
+            self.assertTrue(
+                output_path.exists()
+            )
+            self.assertEqual(
+                scanner.last_detection.get(
+                    "selected_source"
+                ),
+                "manual_correction",
+            )
+            self.assertTrue(
+                scanner.last_detection.get(
+                    "manual"
+                )
+            )
+            self.assertEqual(
+                used_corners.shape,
+                (4, 2),
+            )
+
+            h, w = result.shape[:2]
+            self.assertLess(
+                abs(
+                    (w / float(h))
+                    - scanner.KTP_ASPECT_RATIO
+                ),
+                0.005,
+            )
 
 
 class TestScannerOutput(unittest.TestCase):
