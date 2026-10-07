@@ -373,7 +373,7 @@ class FinalScannerUI(SafeScannerUI):
 
         self.original_label = self._preview_card(
             previews,
-            "Foto Asli + Sudut",
+            "Foto Asli",
         )
         self.result_label = self._preview_card(
             previews,
@@ -478,7 +478,7 @@ class FinalScannerUI(SafeScannerUI):
         ttk.Label(
             frame,
             text=(
-                "Area deteksi sudut KTP"
+                "Foto sumber KTP"
                 if title.startswith("Foto Asli")
                 else "Hasil koreksi perspektif"
             ),
@@ -547,64 +547,14 @@ class FinalScannerUI(SafeScannerUI):
         return ImageTk.PhotoImage(image)
 
     def _load_preview_with_corners(self, path, corners):
-        image = Image.open(path).convert("RGB")
-        original_width, original_height = image.size
+        """
+        Preview Auto KTP tidak menampilkan titik/garis deteksi.
 
-        image.thumbnail(
-            self._preview_target_size(),
-            Image.Resampling.LANCZOS,
-        )
-
-        preview_width, preview_height = image.size
-        scale_x = preview_width / max(original_width, 1)
-        scale_y = preview_height / max(original_height, 1)
-
-        draw = ImageDraw.Draw(image)
-        scaled = [
-            (
-                float(point[0]) * scale_x,
-                float(point[1]) * scale_y,
-            )
-            for point in corners
-        ]
-
-        if len(scaled) == 4:
-            line_width = max(
-                2,
-                min(4, int(round(min(image.size) / 180))),
-            )
-            radius = max(
-                5,
-                min(8, int(round(min(image.size) / 90))),
-            )
-
-            polygon = scaled + [scaled[0]]
-            draw.line(
-                polygon,
-                fill=(82, 92, 102),
-                width=line_width,
-            )
-
-            labels = ("TL", "TR", "BR", "BL")
-            for label, (x, y) in zip(labels, scaled):
-                draw.ellipse(
-                    (
-                        x - radius,
-                        y - radius,
-                        x + radius,
-                        y + radius,
-                    ),
-                    fill=(245, 247, 249),
-                    outline=(55, 62, 70),
-                    width=max(1, line_width - 1),
-                )
-                draw.text(
-                    (x + radius + 3, y - radius),
-                    label,
-                    fill=(55, 62, 70),
-                )
-
-        return ImageTk.PhotoImage(image)
+        Koordinat corner tetap disimpan dan dipakai internal untuk perspective
+        serta sebagai titik awal Koreksi Manual, tetapi hasil review otomatis
+        dibuat bersih agar pengguna fokus pada foto dan hasil koreksi.
+        """
+        return self._load_preview(path)
 
     def _active_file_index(self):
         selection = self.listbox.curselection()
