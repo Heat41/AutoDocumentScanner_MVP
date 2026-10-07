@@ -1418,6 +1418,212 @@ class AutoPerspectiveEngine:
             borderMode=cv2.BORDER_REPLICATE,
         )
 
+    def _nested_ktp_evidence_in_warp(self, warped):
+        """
+        Cari bukti bahwa hasil warp masih berisi satu kartu lain di dalamnya.
+
+        Jika kandidat yang dipilih sebenarnya frame foto/meja/laptop, setelah
+        di-warp biasanya masih terlihat quad lain berbentuk KTP di area tengah.
+        Kandidat KTP yang benar seharusnya tidak memiliki lagi rectangle ID-1
+        besar di dalam frame hasil warp.
+        """
+        h, w = warped.shape[:2]
+
+        if min(h, w) < 90:
+            return 0.0
+
+        detection_maps, _ = self._build_detection_maps(
+            warped
+        )
+
+        image_area = float(
+            max(h * w, 1)
+        )
+        strongest = 0.0
+
+        for edge_map in detection_maps:
+            contours, _ = cv2.findContours(
+                edge_map,
+                cv2.RETR_LIST,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+
+            for contour in sorted(
+                contours,
+                key=cv2.contourArea,
+                reverse=True,
+            )[:60]:
+                area = float(
+                    abs(
+                        cv2.contourArea(
+                            contour
+                        )
+                    )
+                )
+                area_ratio = (
+                    area / image_area
+                )
+
+                # Terlalu kecil = elemen internal KTP.
+                # Terlalu besar = border warp itu sendiri.
+                if not (
+                    0.12
+                    <= area_ratio
+                    <= 0.82
+                ):
+                    continue
+
+                perimeter = cv2.arcLength(
+                    contour,
+                    True,
+                )
+
+                if perimeter <= 0:
+                    continue
+
+                quad = None
+
+                for eps in (
+                    0.012,
+                    0.018,
+                    0.024,
+                    0.032,
+                    0.045,
+                    0.060,
+                ):
+                    approx = cv2.approxPolyDP(
+                        contour,
+                        eps * perimeter,
+                        True,
+                    )
+
+                    if len(approx) != 4:
+                        continue
+
+                    points = (
+                        approx.reshape(
+                            4,
+                            2,
+                        ).astype(
+                            np.float32
+                        )
+                    )
+
+                    if not cv2.isContourConvex(
+                        points.astype(
+                            np.int32
+                        )
+                    ):
+                        continue
+
+                    quad = self.order_points(
+                        points
+                    )
+                    break
+
+                if quad is None:
+                    continue
+
+                tl, tr, br, bl = quad
+                width_top = np.linalg.norm(
+                    tr - tl
+                )
+                width_bottom = np.linalg.norm(
+                    br - bl
+                )
+                height_left = np.linalg.norm(
+                    bl - tl
+                )
+                height_right = np.linalg.norm(
+                    br - tr
+                )
+
+                avg_width = (
+                    width_top + width_bottom
+                ) / 2.0
+                avg_height = (
+                    height_left + height_right
+                ) / 2.0
+
+                long_side = max(
+                    avg_width,
+                    avg_height,
+                )
+                short_side = max(
+                    min(
+                        avg_width,
+                        avg_height,
+                    ),
+                    1.0,
+                )
+                ratio = (
+                    long_side
+                    / short_side
+                )
+                ratio_error = abs(
+                    ratio
+                    - self.target_ratio
+                ) / self.target_ratio
+
+                if ratio_error > 0.32:
+                    continue
+
+                center = quad.mean(
+                    axis=0
+                )
+                dx = abs(
+                    float(center[0])
+                    - w / 2.0
+                ) / max(
+                    w / 2.0,
+                    1.0,
+                )
+                dy = abs(
+                    float(center[1])
+                    - h / 2.0
+                ) / max(
+                    h / 2.0,
+                    1.0,
+                )
+
+                center_score = max(
+                    0.0,
+                    1.0
+                    - (
+                        dx + dy
+                    ) / 1.6,
+                )
+                ratio_score = max(
+                    0.0,
+                    1.0
+                    - ratio_error
+                    / 0.32,
+                )
+                size_score = min(
+                    area_ratio
+                    / 0.45,
+                    1.0,
+                )
+
+                evidence = (
+                    ratio_score * 0.44
+                    + center_score * 0.24
+                    + size_score * 0.32
+                )
+
+                strongest = max(
+                    strongest,
+                    evidence,
+                )
+
+        return float(
+            np.clip(
+                strongest,
+                0.0,
+                1.0,
+            )
+        )
+
     def _warp_quality(self, warped):
         if warped is None or warped.size == 0:
             return -1.0
@@ -1478,12 +1684,35 @@ class AutoPerspectiveEngine:
             1.0,
         )
 
-        return (
+        nested_ktp_evidence = (
+            self._nested_ktp_evidence_in_warp(
+                warped
+            )
+        )
+
+        quality = (
             ratio_score * 0.12
             + contrast_score * 0.13
             + detail_score * 0.18
             + card_score * 0.32
             + border_score * 0.25
+        )
+
+        # Bila hasil warp masih memuat satu quad besar berbentuk KTP di dalam,
+        # kemungkinan besar kandidat saat ini adalah frame/background luar.
+        # Penalti ini tidak bergantung pada warna KTP sehingga tetap bekerja
+        # pada KTP lama, pudar, pencahayaan hangat, dan background bermotif.
+        quality -= (
+            nested_ktp_evidence
+            * 0.38
+        )
+
+        return float(
+            np.clip(
+                quality,
+                0.0,
+                1.0,
+            )
         )
 
     def detect(self, image):
