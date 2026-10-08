@@ -10,6 +10,7 @@ except ImportError:
 
 import cv2
 from PIL import Image, ImageTk
+from autodocscanner.ui.magnifier import draw_corner_magnifier
 
 from autodocscanner.documents.document_canvas import (
     canvas_to_image,
@@ -53,6 +54,7 @@ class ManualDocumentPage(ttk.Frame):
         self._display_size = None
         self._display_offset = None
         self._active_corner = None
+        self._magnifier_photo = None
         self._responsive_mode = None
         self._resize_after_id = None
         self._drop_queue = queue.Queue()
@@ -1048,8 +1050,28 @@ class ManualDocumentPage(ttk.Frame):
             return index
         return None
 
+    def _show_corner_magnifier(self, event):
+        if self._active_corner is None or self.current_index is None:
+            return
+        if not 0 <= self.current_index < len(self.session.pages):
+            return
+        page = self.session.pages[self.current_index]
+        if self._display_size is None or self._display_offset is None:
+            return
+        height, width = page.original_image.shape[:2]
+        point = page.corners[self._active_corner]
+        rgb = cv2.cvtColor(page.original_image, cv2.COLOR_BGR2RGB)
+        self._magnifier_photo = draw_corner_magnifier(
+            self.canvas,
+            Image.fromarray(rgb),
+            point,
+            (event.x, event.y),
+        )
+
     def _on_canvas_press(self, event):
         self._active_corner = self._nearest_corner(event.x, event.y)
+        if self._active_corner is not None:
+            self._show_corner_magnifier(event)
 
     def _on_canvas_drag(self, event):
         if (
@@ -1074,12 +1096,15 @@ class ManualDocumentPage(ttk.Frame):
         self.session.set_corners(self.current_index, corners)
 
         self._draw_overlay()
+        self._show_corner_magnifier(event)
         self._render_result(None)
         self._refresh_page_list()
         self.page_list.selection_set(self.current_index)
 
     def _on_canvas_release(self, _event=None):
         self._active_corner = None
+        self.canvas.delete("corner-magnifier")
+        self._magnifier_photo = None
 
     def reset_current(self):
         if self.current_index is None:
