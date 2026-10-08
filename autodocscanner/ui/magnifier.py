@@ -11,7 +11,7 @@ def draw_corner_magnifier(
     tag="corner-magnifier",
     zoom=4,
     size=160,
-    crop_radius=24,
+    crop_radius=None,
 ):
     """Draw magnified pixels from the ORIGINAL image; never modify source/corners.
 
@@ -29,7 +29,7 @@ def draw_corner_magnifier(
     y = min(max(int(round(image_point[1])), 0), height - 1)
 
     # Crop with padding to ensure the crosshair always marks the exact point.
-    radius = max(2, int(crop_radius))
+    radius = max(2, int(crop_radius)) if crop_radius is not None else max(2, int(round(size / (2 * max(zoom, 1)))))
     padded = Image.new("RGB", (radius * 2, radius * 2), "#ECEFF4")
     left = max(0, x - radius)
     top = max(0, y - radius)
