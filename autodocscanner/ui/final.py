@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from PIL import Image, ImageDraw, ImageTk
 from autodocscanner.ui.magnifier import draw_corner_magnifier
+from autodocscanner.ui.corner_snap import snap_corner
 
 try:
     import windnd
@@ -716,6 +717,20 @@ class FinalScannerUI(SafeScannerUI):
             pady=(12, 0),
         )
 
+        snap_enabled = tk.BooleanVar(master=dialog, value=True)
+        ttk.Checkbutton(
+            button_row,
+            text="Snap sudut otomatis",
+            variable=snap_enabled,
+        ).pack(side="left", padx=(0, 12))
+
+        source_bgr = cv2.imread(str(path))
+        if source_bgr is None:
+            import numpy as np
+            source_bgr = cv2.cvtColor(
+                np.asarray(source), cv2.COLOR_RGB2BGR
+            )
+
         source_width, source_height = source.size
         working_corners = [
             [
@@ -1106,9 +1121,16 @@ class FinalScannerUI(SafeScannerUI):
             )
 
         def on_release(_event):
-            active[
-                "index"
-            ] = None
+            index_to_snap = active["index"]
+            if index_to_snap is not None and snap_enabled.get():
+                point = working_corners[index_to_snap]
+                display_width = (render_state["display_size"] or (1, 1))[0]
+                radius = min(22, max(5, int(round(8 * source_width / max(display_width, 1)))))
+                working_corners[index_to_snap] = snap_corner(
+                    source_bgr, point, radius=radius
+                )
+                render(refresh_image=False)
+            active["index"] = None
             canvas.delete("corner-magnifier")
             render_state["magnifier_photo"] = None
 
