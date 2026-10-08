@@ -719,11 +719,46 @@ class FinalScannerUI(SafeScannerUI):
         )
 
         snap_enabled = tk.BooleanVar(master=dialog, value=True)
+        snap_message = tk.StringVar(
+            master=dialog,
+            value="Snap aktif: geser sudut dan lepaskan mouse.",
+        )
+        def snap_visible_corners():
+            if not snap_enabled.get():
+                snap_message.set("Snap nonaktif. Posisi sudut sepenuhnya manual.")
+                return
+            display_size = render_state.get("display_size") or (1, 1)
+            radius = min(22, max(5, int(round(
+                8 * source_width / max(display_size[0], 1)
+            ))))
+            moved = 0
+            for i, point in enumerate(working_corners):
+                adjusted = snap_corner(source_bgr, point, radius=radius)
+                if abs(float(adjusted[0]) - point[0]) + abs(float(adjusted[1]) - point[1]) > 0.5:
+                    working_corners[i] = [float(adjusted[0]), float(adjusted[1])]
+                    moved += 1
+            if moved:
+                render(refresh_image=False)
+            snap_message.set(
+                f"Snap aktif: {moved} titik disesuaikan."
+                if moved else
+                "Snap aktif, belum ada sudut tepi yang cukup dekat. Geser titik mendekati tepi KTP."
+            )
+
         ttk.Checkbutton(
             button_row,
             text="Snap sudut otomatis",
             variable=snap_enabled,
+            command=snap_visible_corners,
         ).pack(side="left", padx=(0, 12))
+        tk.Label(
+            shell,
+            textvariable=snap_message,
+            bg=palette["surface"],
+            fg=palette["muted"],
+            font=("Segoe UI", 8),
+            anchor="w",
+        ).pack(fill="x", pady=(5, 0))
 
         source_bgr = cv2.imread(str(path))
         if source_bgr is None:
@@ -1131,6 +1166,15 @@ class FinalScannerUI(SafeScannerUI):
                     source_bgr, point, radius=radius
                 )
                 render(refresh_image=False)
+            if index_to_snap is not None and snap_enabled.get():
+                original = point
+                updated = working_corners[index_to_snap]
+                moved = abs(float(updated[0]) - original[0]) + abs(float(updated[1]) - original[1])
+                snap_message.set(
+                    "Snap: sudut disesuaikan ke tepi."
+                    if moved > 0.5 else
+                    "Snap: belum ditemukan perpotongan tepi yang cukup dekat."
+                )
             active["index"] = None
             canvas.delete("corner-magnifier")
             render_state["magnifier_photo"] = None
