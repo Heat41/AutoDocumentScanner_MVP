@@ -55,6 +55,7 @@ class ManualDocumentPage(ttk.Frame):
         self._display_offset = None
         self._active_corner = None
         self._magnifier_photo = None
+        self._magnifier_source = None
         self._responsive_mode = None
         self._resize_after_id = None
         self._drop_queue = queue.Queue()
@@ -943,6 +944,7 @@ class ManualDocumentPage(ttk.Frame):
             cv2.COLOR_BGR2RGB,
         )
         pil = Image.fromarray(rgb)
+        self._magnifier_source = pil
         pil = pil.resize(
             (display_width, display_height),
             Image.Resampling.LANCZOS,
@@ -1058,12 +1060,12 @@ class ManualDocumentPage(ttk.Frame):
         page = self.session.pages[self.current_index]
         if self._display_size is None or self._display_offset is None:
             return
-        height, width = page.original_image.shape[:2]
         point = page.corners[self._active_corner]
-        rgb = cv2.cvtColor(page.original_image, cv2.COLOR_BGR2RGB)
+        if self._magnifier_source is None:
+            return
         self._magnifier_photo = draw_corner_magnifier(
             self.canvas,
-            Image.fromarray(rgb),
+            self._magnifier_source,
             point,
             (event.x, event.y),
         )
