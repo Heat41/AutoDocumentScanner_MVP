@@ -11,6 +11,7 @@ except ImportError:
 import cv2
 from PIL import Image, ImageTk
 from autodocscanner.ui.magnifier import draw_corner_magnifier
+from autodocscanner.ui.corner_snap import snap_corner
 
 from autodocscanner.documents.document_canvas import (
     canvas_to_image,
@@ -54,6 +55,7 @@ class ManualDocumentPage(ttk.Frame):
         self._display_size = None
         self._display_offset = None
         self._active_corner = None
+        self.corner_snap_enabled = tk.BooleanVar(master=self, value=True)
         self._magnifier_photo = None
         self._magnifier_source = None
         self._responsive_mode = None
@@ -345,6 +347,12 @@ class ManualDocumentPage(ttk.Frame):
             state="disabled",
         )
         self.reset_button.pack(side="left")
+
+        ttk.Checkbutton(
+            controls,
+            text="Snap sudut otomatis",
+            variable=self.corner_snap_enabled,
+        ).pack(side="left", padx=(12, 0))
 
         self.rotate_left_button = ttk.Button(
             controls,
@@ -1104,6 +1112,25 @@ class ManualDocumentPage(ttk.Frame):
         self.page_list.selection_set(self.current_index)
 
     def _on_canvas_release(self, _event=None):
+        if (
+            self._active_corner is not None
+            and self.corner_snap_enabled.get()
+            and self.current_index is not None
+            and self._display_size is not None
+            and 0 <= self.current_index < len(self.session.pages)
+        ):
+            page = self.session.pages[self.current_index]
+            corners = page.corners.copy()
+            radius = min(22, max(5, int(round(
+                8 * page.original_image.shape[1] / max(self._display_size[0], 1)
+            ))))
+            corners[self._active_corner] = snap_corner(
+                page.original_image,
+                corners[self._active_corner],
+                radius=radius,
+            )
+            self.session.set_corners(self.current_index, corners)
+            self._draw_overlay()
         self._active_corner = None
         self.canvas.delete("corner-magnifier")
         self._magnifier_photo = None
