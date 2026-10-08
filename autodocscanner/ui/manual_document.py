@@ -9,6 +9,7 @@ except ImportError:
     windnd = None
 
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 from autodocscanner.ui.magnifier import draw_corner_magnifier
 from autodocscanner.ui.corner_snap import snap_corner
@@ -352,6 +353,7 @@ class ManualDocumentPage(ttk.Frame):
             controls,
             text="Snap sudut otomatis",
             variable=self.corner_snap_enabled,
+            command=self._on_snap_toggle,
         ).pack(side="left", padx=(12, 0))
 
         self.rotate_left_button = ttk.Button(
@@ -1110,6 +1112,33 @@ class ManualDocumentPage(ttk.Frame):
         self._render_result(None)
         self._refresh_page_list()
         self.page_list.selection_set(self.current_index)
+
+    def _on_snap_toggle(self):
+        if not self.corner_snap_enabled.get():
+            self.status_text.set("Snap dimatikan. Titik tetap bisa digeser manual.")
+            return
+        if self.current_index is None or self._display_size is None:
+            self.status_text.set("Snap aktif. Pilih dokumen lalu geser titik.")
+            return
+        page = self.session.pages[self.current_index]
+        corners = page.corners.copy()
+        radius = min(22, max(5, int(round(
+            8 * page.original_image.shape[1] / max(self._display_size[0], 1)
+        ))))
+        snapped = 0
+        for idx, point in enumerate(corners):
+            new_point = snap_corner(page.original_image, point, radius=radius)
+            if float(np.linalg.norm(np.asarray(new_point) - point)) > 0.5:
+                corners[idx] = new_point
+                snapped += 1
+        if snapped:
+            self.session.set_corners(self.current_index, corners)
+            self._draw_overlay()
+        self.status_text.set(
+            f"Snap aktif: {snapped} titik disesuaikan."
+            if snapped else
+            "Snap aktif, tetapi belum ditemukan sudut tepi yang meyakinkan. Geser titik mendekati sudut dokumen."
+        )
 
     def _on_canvas_release(self, _event=None):
         if (
