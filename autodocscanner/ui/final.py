@@ -3,6 +3,7 @@ import queue
 import tkinter as tk
 from tkinter import ttk
 
+import cv2
 from PIL import Image, ImageDraw, ImageTk
 from autodocscanner.ui.magnifier import draw_corner_magnifier
 from autodocscanner.ui.corner_snap import snap_corner
