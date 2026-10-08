@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from PIL import Image, ImageDraw, ImageTk
+from autodocscanner.ui.magnifier import draw_corner_magnifier
 
 try:
     import windnd
@@ -1069,6 +1070,13 @@ class FinalScannerUI(SafeScannerUI):
             active[
                 "index"
             ] = closest
+            if closest is not None:
+                render_state["magnifier_photo"] = draw_corner_magnifier(
+                    canvas,
+                    source,
+                    working_corners[closest],
+                    (event.x, event.y),
+                )
 
         def on_drag(event):
             corner_index = active[
@@ -1090,11 +1098,19 @@ class FinalScannerUI(SafeScannerUI):
             render(
                 refresh_image=False,
             )
+            render_state["magnifier_photo"] = draw_corner_magnifier(
+                canvas,
+                source,
+                point,
+                (event.x, event.y),
+            )
 
         def on_release(_event):
             active[
                 "index"
             ] = None
+            canvas.delete("corner-magnifier")
+            render_state["magnifier_photo"] = None
 
         def apply_manual():
             output_path = self._output_by_file.get(
