@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from autodocscanner.core.experimental_candidates import contour_candidates
+from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -22,7 +23,11 @@ def _metric(engine, image, corners, expected=None):
     area = abs(cv2.contourArea(points)) / float(max(image.shape[0]*image.shape[1], 1))
     warped = engine.warp(image, points)
     quality = float(engine._warp_quality(warped))
+    valid, reasons, geometry = validate_quad(points, image.shape)
     data = {
+        "geometry_valid": valid,
+        "geometry_reasons": reasons,
+        "geometry": geometry,
         "found": True,
         "corners": np.round(points, 2).tolist(),
         "area_ratio": round(float(area), 4),
