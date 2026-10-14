@@ -13,6 +13,7 @@ from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
 from autodocscanner.core.review_gate_v3 import assess_review_gate
+from autodocscanner.core.manual_handoff_v3 import prepare_manual_handoff
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -65,6 +66,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     candidates.extend((f"v2_{index}", item) for index, item in enumerate(report["v2"]))
     report["v3_ranking"] = rank_candidates(candidates)
     report["v3_review_gate"] = assess_review_gate(report, image.shape)
+    report["v3_manual_handoff"] = prepare_manual_handoff(report, image.shape)
     # Deliberately no automatic winner: the experiment requires ground truth.
     return report
 
