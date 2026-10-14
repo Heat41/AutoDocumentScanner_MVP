@@ -20,6 +20,7 @@ from autodocscanner.core.perspective_engine_baseline import (
 def _metric(engine, image, corners, expected=None):
     if corners is None:
         return {"found": False}
+    # Validate the exact corners that will be warped and reported.
     points = engine.order_points(np.asarray(corners, dtype=np.float32))
     area = abs(cv2.contourArea(points)) / float(max(image.shape[0]*image.shape[1], 1))
     warped = engine.warp(image, points)
