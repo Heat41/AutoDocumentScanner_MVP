@@ -48,6 +48,12 @@ def _metric(engine, image, corners, expected=None):
     return data
 
 
+def _filter_valid_candidates(evaluated):
+    """Filter post-order metrics, preserving only usable original-image corners."""
+    valid = [item for item in evaluated if item.get("geometry_valid") is True]
+    return valid, len(evaluated) - len(valid)
+
+
 def compare_detectors(image, *, expected=None, max_proposals=24):
     """Side-by-side diagnostics. Scores are NOT proof of correct KTP bounds."""
     stable = StableBaselinePerspectiveEngine()
@@ -62,8 +68,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     proposals = contour_candidates(image, max_candidates=max_proposals)
     evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
     # Filter using the actual ordered corners that are reported and warped.
-    report["v2"] = [item for item in evaluated if item.get("geometry_valid")]
-    report["v2_rejected_post_order"] = len(evaluated) - len(report["v2"])
+    report["v2"], report["v2_rejected_post_order"] = _filter_valid_candidates(evaluated)
     report["v2_proposal_count"] = len(report["v2"])
     candidates = [(name, report[name]) for name in ("stable", "adaptive")]
     candidates.extend((f"v2_{index}", item) for index, item in enumerate(report["v2"]))
