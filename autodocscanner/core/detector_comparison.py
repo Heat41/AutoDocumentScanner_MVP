@@ -11,6 +11,7 @@ import numpy as np
 from autodocscanner.core.experimental_candidates import contour_candidates
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
+from autodocscanner.core.candidate_ranking_v3 import rank_candidates
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -59,6 +60,9 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     proposals = contour_candidates(image, max_candidates=max_proposals)
     report["v2"] = [_metric(adaptive, image, quad, expected) for quad in proposals]
     report["v2_proposal_count"] = len(proposals)
+    candidates = [(name, report[name]) for name in ("stable", "adaptive")]
+    candidates.extend((f"v2_{index}", item) for index, item in enumerate(report["v2"]))
+    report["v3_ranking"] = rank_candidates(candidates)
     # Deliberately no automatic winner: the experiment requires ground truth.
     return report
 
