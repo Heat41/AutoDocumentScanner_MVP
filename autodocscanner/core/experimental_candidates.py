@@ -8,6 +8,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from autodocscanner.core.quad_validation import validate_quad
+
 
 def _ordered(quad):
     """Return four cyclic vertices starting at the top-left-ish vertex."""
@@ -74,6 +76,9 @@ def contour_candidates(
                     min(np.mean(lengths[::2]), np.mean(lengths[1::2])), 1
                 )
                 if abs(estimated - target_ratio) / target_ratio > .85:
+                    continue
+                valid, _, _ = validate_quad(quad, image.shape)
+                if not valid:
                     continue
                 proposals.append((area / image_area, quad))
                 break
