@@ -31,6 +31,7 @@ def boundary_evidence(image, corners, *, samples=48):
     points = points[np.argsort(np.arctan2(points[:, 1]-center[1], points[:, 0]-center[0]))]
     offset = max(2.0, min(w, h) * 0.012)
     side_support = []
+    side_coverage = []
     for i in range(4):
         a, b = points[i], points[(i + 1) % 4]
         tangent = (b - a) / max(np.linalg.norm(b - a), 1e-6)
@@ -53,11 +54,22 @@ def boundary_evidence(image, corners, *, samples=48):
             gradient = abs(float(gx[y, x]*normal[0] + gy[y, x]*normal[1]))
             aligned.append(min(1.0, gradient / 95.0))
             contrast.append(min(1.0, abs(float(blurred[yi, xi])-float(blurred[yo, xo]))/35.0))
-        support = float(0.5*np.mean(aligned)+0.5*np.mean(contrast)) if aligned else 0.0
-        side_support.append(round(support, 4))
-    # Geometric mean discourages one strong side hiding three weak ones.
-    score = float(np.prod(np.asarray(side_support)+1e-6)**0.25)
-    return {"valid": True, "reasons": [], "side_support": side_support,
-            "score": round(score, 4),
-            "weakest_side": round(min(side_support), 4),
-            "frame_suspect": metrics["frame_suspect"]}
+        coverage = len(aligned) / len(locations)
+        side_coverage.append(round(float(coverage), 4))
+        support = float(0.5*np.mean(aligned)+0.5*np.mean(contrast)) if aligned else None
+        side_support.append(round(support, 4) if support is not None else None)
+    # Unobservable edges are unknown, NOT evidence that no physical edge exists.
+    measured = [value for value in side_support if value is not None]
+    score = float(np.prod(np.asarray(measured) + 1e-6)**(1.0/len(measured))) if measured else None
+    complete = len(measured) == 4 and min(side_coverage) >= 0.25
+    review = bool(metrics["frame_suspect"] and
+                  (not complete or (score is not None and score < 0.2)))
+    return {
+        "valid": True, "reasons": [], "side_support": side_support,
+        "side_coverage": side_coverage,
+        "score": round(score, 4) if score is not None else None,
+        "weakest_side": round(min(measured), 4) if measured else None,
+        "evidence_complete": complete,
+        "frame_suspect": metrics["frame_suspect"],
+        "frame_review_needed": review,
+    }
