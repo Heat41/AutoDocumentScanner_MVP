@@ -50,9 +50,9 @@ def validate_quad(corners, image_shape, *, min_area_ratio=0.015,
     if area_ratio > max_area_ratio:
         reasons.append("area_too_large")
 
-    tolerance = max(w, h) * 0.005
-    if ((quad[:, 0] < -tolerance) | (quad[:, 0] > (w - 1 + tolerance)) |
-        (quad[:, 1] < -tolerance) | (quad[:, 1] > (h - 1 + tolerance))).any():
+    # Allow a small scale-relative extrapolation from line intersections.\n    # Record its magnitude separately; never silently clip corners.\n    tolerance_x = max(2.0, w * 0.02)\n    tolerance_y = max(2.0, h * 0.02)\n    excess_x = np.maximum.reduce([np.zeros(4), -quad[:, 0], quad[:, 0] - (w - 1)])\n    excess_y = np.maximum.reduce([np.zeros(4), -quad[:, 1], quad[:, 1] - (h - 1)])\n    metrics["outside_excess_px"] = float(max(excess_x.max(), excess_y.max()))\n    metrics["slight_extrapolation"] = bool((excess_x > 0).any() or (excess_y > 0).any())
+    if ((quad[:, 0] < -tolerance_x) | (quad[:, 0] > (w - 1 + tolerance_x)) |
+        (quad[:, 1] < -tolerance_y) | (quad[:, 1] > (h - 1 + tolerance_y))).any():
         reasons.append("outside_image")
 
     # An informative warning, not a reason for rejection.
@@ -60,5 +60,5 @@ def validate_quad(corners, image_shape, *, min_area_ratio=0.015,
     near = ((quad[:, 0] <= margin) | (quad[:, 0] >= w - 1 - margin) |
             (quad[:, 1] <= margin) | (quad[:, 1] >= h - 1 - margin))
     metrics["near_frame_vertex_count"] = int(near.sum())
-    metrics["frame_suspect"] = bool(area_ratio > 0.82 and near.sum() >= 3)
+    metrics["frame_suspect"] = bool(area_ratio > 0.82 and near.sum() >= 2)
     return not reasons, reasons, metrics
