@@ -23,3 +23,10 @@ data/
 
 # Local KTP detector dataset (sensitive, never commit)
 dataset/
+
+# Private local KTP holdout data and evaluation artifacts
+test-data/
+test-data-holdout/
+holdout_annotations.json
+ktp_*comparison*.json
+ktp_holdout*.json
