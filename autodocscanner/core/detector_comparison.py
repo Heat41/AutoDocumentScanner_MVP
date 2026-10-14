@@ -60,8 +60,11 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
         report[name]["source"] = (meta or {}).get("selected_source")
 
     proposals = contour_candidates(image, max_candidates=max_proposals)
-    report["v2"] = [_metric(adaptive, image, quad, expected) for quad in proposals]
-    report["v2_proposal_count"] = len(proposals)
+    evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
+    # Filter using the actual ordered corners that are reported and warped.
+    report["v2"] = [item for item in evaluated if item.get("geometry_valid")]
+    report["v2_rejected_post_order"] = len(evaluated) - len(report["v2"])
+    report["v2_proposal_count"] = len(report["v2"])
     candidates = [(name, report[name]) for name in ("stable", "adaptive")]
     candidates.extend((f"v2_{index}", item) for index, item in enumerate(report["v2"]))
     report["v3_ranking"] = rank_candidates(candidates)
