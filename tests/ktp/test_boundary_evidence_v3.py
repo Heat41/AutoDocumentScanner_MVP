@@ -29,3 +29,23 @@ def test_uniform_image_cannot_prove_card_boundary():
     data = boundary_evidence(img, quad)
     assert data["valid"]
     assert data["score"] < 0.01
+
+def test_edge_outside_frame_is_unknown_not_zero():
+    image = np.full((250, 400, 3), 125, dtype=np.uint8)
+    quad = [[0, 0], [399, 0], [399, 249], [0, 249]]
+    data = boundary_evidence(image, quad)
+    assert data["valid"]
+    assert data["frame_suspect"]
+    assert not data["evidence_complete"]
+    assert all(side is None for side in data["side_support"])
+    assert data["score"] is None
+    assert data["frame_review_needed"]
+
+
+def test_genuine_near_frame_card_is_flagged_not_rejected():
+    image = np.full((250, 400, 3), 30, dtype=np.uint8)
+    cv2.rectangle(image, (4, 4), (395, 245), (230, 230, 230), -1)
+    data = boundary_evidence(image, [[4, 4], [395, 4], [395, 245], [4, 245]])
+    assert data["valid"]
+    assert data["frame_suspect"]
+    assert len(data["side_support"]) == 4
