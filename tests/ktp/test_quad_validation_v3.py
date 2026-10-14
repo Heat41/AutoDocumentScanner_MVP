@@ -47,3 +47,17 @@ def test_invalid_shape_rejected():
     ok, reasons, _ = validate_quad([[1, 1], [2, 2], [3, 3]], (260, 400))
     assert not ok
     assert "invalid_points" in reasons
+
+
+def test_slight_corner_extrapolation_allowed():
+    quad = [[-3, 25], [370, 20], [380, 220], [2, 218]]
+    ok, reasons, metrics = validate_quad(quad, (260, 400))
+    assert ok, reasons
+    assert metrics["slight_extrapolation"]
+
+
+def test_two_near_frame_vertices_are_suspicious_at_large_area():
+    quad = [[1, 4], [148, 9], [148, 190], [1, 187]]
+    ok, reasons, metrics = validate_quad(quad, (194, 150))
+    assert ok, reasons
+    assert metrics["frame_suspect"]
