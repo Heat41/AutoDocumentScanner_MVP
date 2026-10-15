@@ -5,7 +5,6 @@ misleading internal rectangles or photo-frame proposals. No auto-crop.
 """
 from __future__ import annotations
 
-import math
 import numpy as np
 
 
@@ -34,8 +33,18 @@ def _equivalent(a, b, diagonal):
     x, y = _corners(a), _corners(b)
     if x is None or y is None:
         return False
-    return any(np.mean(np.linalg.norm(x - np.roll(z, i, axis=0), axis=1)) / diagonal <= .012
-               for z in (y, y[::-1]) for i in range(4))
+    # Averages alone can merge a correctly-fitted border with an offset
+    # border whose one corner is substantially misplaced.
+    area_x = abs(float(np.cross(x[1] - x[0], x[2] - x[0]))) + abs(float(np.cross(x[2] - x[0], x[3] - x[0])))
+    area_y = abs(float(np.cross(y[1] - y[0], y[2] - y[0]))) + abs(float(np.cross(y[2] - y[0], y[3] - y[0])))
+    if max(area_x, area_y) <= 0 or min(area_x, area_y) / max(area_x, area_y) < .94:
+        return False
+    for z in (y, y[::-1]):
+        for i in range(4):
+            distances = np.linalg.norm(x - np.roll(z, i, axis=0), axis=1) / diagonal
+            if float(distances.mean()) <= .008 and float(distances.max()) <= .015:
+                return True
+    return False
 
 
 def compare_selection(report, image_shape):
