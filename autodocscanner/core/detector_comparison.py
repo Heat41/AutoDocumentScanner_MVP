@@ -83,11 +83,27 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
         index = int(leader[3:])
         selected = report["v2"][index] if index < len(report["v2"]) else None
     if selected and selected.get("geometry_valid"):
-        proposed, diagnostic = refine_corners(image, selected["corners"])
+        before = _metric(adaptive, image, selected["corners"], expected)
+        if (selected.get("geometry") or {}).get("frame_suspect"):
+            proposed = np.asarray(selected["corners"], dtype=np.float32)
+            diagnostic = {"accepted": False, "reason": "frame_suspect",
+                          "mean_shift_px": 0.0}
+        else:
+            proposed, diagnostic = refine_corners(image, selected["corners"])
+        attempted = _metric(adaptive, image, proposed, expected)
+        # Never use ground-truth errors to decide acceptance: this gate
+        # is based only on the image and detector diagnostics.
+        if diagnostic["accepted"]:
+            old_quality, new_quality = before["warp_quality"], attempted["warp_quality"]
+            if new_quality + 0.03 < old_quality:
+                diagnostic = {**diagnostic, "accepted": False,
+                              "reason": "warp_quality_regression"}
+        after = attempted if diagnostic["accepted"] else before
         report["v3_refinement_shadow"] = {
             "source": leader, **diagnostic,
-            "before": _metric(adaptive, image, selected["corners"], expected),
-            "after": _metric(adaptive, image, proposed, expected),
+            "before": before,
+            "attempted": attempted,
+            "after": after,
         }
     else:
         report["v3_refinement_shadow"] = {"accepted": False, "reason": "no_candidate"}
