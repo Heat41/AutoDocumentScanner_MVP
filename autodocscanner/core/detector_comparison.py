@@ -18,6 +18,7 @@ from autodocscanner.core.corner_refinement_v3 import refine_corners
 from autodocscanner.core.candidate_selection_pr6 import compare_selection
 from autodocscanner.core.pr6_review_gate import assess_pr6_review_gate
 from autodocscanner.core.physical_boundary_pr6 import verify_physical_boundary
+from autodocscanner.core.boundary_localization_pr6 import localize_candidate_boundary
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -82,6 +83,12 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     report["pr6_review_gate_shadow"] = assess_pr6_review_gate(report)
     report["pr6_physical_boundary_shadow"] = {
         group["representative"]: verify_physical_boundary(
+            image, (report[group["representative"]] if group["representative"] in ("stable", "adaptive")
+                    else report["v2"][int(group["representative"][3:])])["corners"])
+        for group in report["pr6_selection_shadow"]["groups"]
+    }
+    report["pr6_boundary_localization_shadow"] = {
+        group["representative"]: localize_candidate_boundary(
             image, (report[group["representative"]] if group["representative"] in ("stable", "adaptive")
                     else report["v2"][int(group["representative"][3:])])["corners"])
         for group in report["pr6_selection_shadow"]["groups"]
