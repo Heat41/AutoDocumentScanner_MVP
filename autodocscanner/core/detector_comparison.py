@@ -16,6 +16,7 @@ from autodocscanner.core.review_gate_v3 import assess_review_gate
 from autodocscanner.core.manual_handoff_v3 import prepare_manual_handoff
 from autodocscanner.core.corner_refinement_v3 import refine_corners
 from autodocscanner.core.candidate_selection_pr6 import compare_selection
+from autodocscanner.core.pr6_review_gate import assess_pr6_review_gate
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -77,6 +78,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     report["v3_ranking"] = rank_candidates(candidates)
     report["pr6_selection_shadow"] = compare_selection(report, image.shape)
     report["v3_review_gate"] = assess_review_gate(report, image.shape)
+    report["pr6_review_gate_shadow"] = assess_pr6_review_gate(report)
     report["v3_manual_handoff"] = prepare_manual_handoff(report, image.shape)
     # PR6 shadow evaluation only: do NOT alter ranking or manual handoff.
     leader = report["v3_ranking"].get("suggested_for_review")
