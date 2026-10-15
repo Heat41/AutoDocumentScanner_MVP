@@ -11,6 +11,8 @@ def assess_pr6_review_gate(report):
     reasons = set(baseline.get("reasons") or [])
     warnings = set(shadow.get("warnings") or [])
     groups = shadow.get("groups") or []
+    if not groups or shadow.get("status") != "offline_diagnostic_only":
+        reasons.add("missing_selection_evidence")
     # Only independent geometry with a plausibly competitive evidence score
     # can invalidate preview. Do not treat stable/adaptive duplicates as votes.
     if len(groups) >= 2:
