@@ -37,3 +37,29 @@ def test_out_of_frame_candidate_refuses_refinement():
     candidate, meta = refine_corners(image, quad)
     assert not meta["accepted"]
     np.testing.assert_array_equal(candidate, quad)
+
+
+def test_shadow_rejects_frame_suspect_without_changing_gate(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+    image = np.full((400, 600, 3), 80, dtype=np.uint8)
+    points = np.asarray([[5, 5], [594, 5], [594, 394], [5, 394]], np.float32)
+    class FakeEngine:
+        def detect(self, img):
+            return points.copy(), {"score": .8, "selected_source": "mock"}
+        def order_points(self, p):
+            return p
+        def warp(self, img, p):
+            return img
+        def _warp_quality(self, img):
+            return .8
+    monkeypatch.setattr(comparison, "StableBaselinePerspectiveEngine", FakeEngine)
+    monkeypatch.setattr(comparison, "AutoPerspectiveEngine", FakeEngine)
+    monkeypatch.setattr(comparison, "contour_candidates", lambda *args, **kwargs: [])
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Do not refine a suspect photo frame")
+    monkeypatch.setattr(comparison, "refine_corners", unexpected)
+    report = comparison.compare_detectors(image)
+    assert report["v3_refinement_shadow"]["reason"] == "frame_suspect"
+    assert not report["v3_refinement_shadow"]["accepted"]
+    assert report["v3_refinement_shadow"]["before"]["corners"] == report["v3_refinement_shadow"]["after"]["corners"]
+    assert not report["v3_review_gate"]["auto_crop_allowed"]
