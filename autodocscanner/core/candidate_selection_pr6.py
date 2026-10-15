@@ -35,8 +35,11 @@ def _equivalent(a, b, diagonal):
         return False
     # Averages alone can merge a correctly-fitted border with an offset
     # border whose one corner is substantially misplaced.
-    area_x = abs(float(np.cross(x[1] - x[0], x[2] - x[0]))) + abs(float(np.cross(x[2] - x[0], x[3] - x[0])))
-    area_y = abs(float(np.cross(y[1] - y[0], y[2] - y[0]))) + abs(float(np.cross(y[2] - y[0], y[3] - y[0])))
+    def cross2d(a, b):
+        return float(a[0] * b[1] - a[1] * b[0])
+
+    area_x = abs(cross2d(x[1] - x[0], x[2] - x[0])) + abs(cross2d(x[2] - x[0], x[3] - x[0]))
+    area_y = abs(cross2d(y[1] - y[0], y[2] - y[0])) + abs(cross2d(y[2] - y[0], y[3] - y[0]))
     if max(area_x, area_y) <= 0 or min(area_x, area_y) / max(area_x, area_y) < .94:
         return False
     for z in (y, y[::-1]):
