@@ -9,7 +9,7 @@ def _base():
 
 def test_competing_shapes_downgrade_preview_to_manual():
     report = {"v3_review_gate": _base(),
-              "pr6_selection_shadow": {"groups": [
+              "pr6_selection_shadow": {"status": "offline_diagnostic_only", "groups": [
                   {"score": .55}, {"score": .43}],
                   "warnings": ["competing_geometries", "different_candidate_extent"]}}
     gate = assess_pr6_review_gate(report)
@@ -20,7 +20,7 @@ def test_competing_shapes_downgrade_preview_to_manual():
 
 def test_duplicates_do_not_create_false_ambiguity():
     report = {"v3_review_gate": _base(),
-              "pr6_selection_shadow": {"groups": [
+              "pr6_selection_shadow": {"status": "offline_diagnostic_only", "groups": [
                   {"score": .72, "sources": ["stable", "adaptive"]}], "warnings": []}}
     gate = assess_pr6_review_gate(report)
     assert gate["status"] == "preview_review"
@@ -30,7 +30,7 @@ def test_duplicates_do_not_create_false_ambiguity():
 def test_existing_manual_gate_is_never_upgraded():
     report = {"v3_review_gate": {"status": "manual_review", "candidate_source": "stable",
                                    "reasons": ["weak_side"]},
-              "pr6_selection_shadow": {"groups": [{"score": .9}], "warnings": []}}
+              "pr6_selection_shadow": {"status": "offline_diagnostic_only", "groups": [{"score": .9}], "warnings": []}}
     gate = assess_pr6_review_gate(report)
     assert gate["status"] == "manual_review"
     assert gate["reasons"] == ["weak_side"]
