@@ -23,6 +23,7 @@ from autodocscanner.core.combined_candidate_pr6 import compare_combined_evidence
 from autodocscanner.core.spatial_relationship_pr6 import compare_spatial_relationships
 from autodocscanner.core.spatial_risk_pr6 import assess_spatial_risk
 from autodocscanner.core.comparative_evidence_pr6 import compare_candidate_evidence
+from autodocscanner.core.evidence_consensus_pr6 import interpret_candidate_consensus
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -101,6 +102,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     report["pr6_spatial_relationship_shadow"] = compare_spatial_relationships(report)
     report["pr6_spatial_risk_shadow"] = assess_spatial_risk(report)
     report["pr6_comparative_evidence_shadow"] = compare_candidate_evidence(report)
+    report["pr6_evidence_consensus_shadow"] = interpret_candidate_consensus(report)
     report["v3_manual_handoff"] = prepare_manual_handoff(report, image.shape)
     # PR6 shadow evaluation only: do NOT alter ranking or manual handoff.
     leader = report["v3_ranking"].get("suggested_for_review")
