@@ -147,7 +147,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     # Read-only context interpretation. Never substitutes for review gates;
     # ground-truth annotation remains evaluation-only and is not consulted.
     report["pr6_physical_refinement_validation_shadow"] = (
-        validate_physical_refinement_context(report)
+        validate_physical_refinement_context(report, image)
     )
     if expected is not None:
         # Annotation may be used to evaluate accuracy only AFTER all shadow
