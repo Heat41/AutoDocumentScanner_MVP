@@ -121,24 +121,18 @@ def validate_physical_refinement_context(report):
 
     membership = {}
     invalid_groups = False
-    for group in groups_raw:
+    for index, group in enumerate(groups_raw):
         if not isinstance(group, dict) or not isinstance(group.get("members"), list):
             invalid_groups = True
             continue
         members = group["members"]
-        if not members or len(members) != len(set(x for x in members if isinstance(x, str))):
+        if not members:
             invalid_groups = True
         for name in members:
             if not isinstance(name, str) or name not in sources or name in membership:
                 invalid_groups = True
                 continue
-            membership[name] = group["members"][0]
-    # Rebuild explicit group IDs for diagnostic comparison only.
-    membership = {
-        name: index for index, group in enumerate(groups_raw)
-        if isinstance(group, dict) for name in group.get("members") or []
-        if isinstance(name, str) and name in sources
-    }
+            membership[name] = index
 
     relation_map = {}
     invalid_relations = False
@@ -147,7 +141,8 @@ def validate_physical_refinement_context(report):
             invalid_relations = True
             continue
         a, b = relation.get("candidate_a"), relation.get("candidate_b")
-        if not isinstance(a, str) or not isinstance(b, str) or a == b:
+        if (not isinstance(a, str) or not isinstance(b, str)
+                or a == b or a not in sources or b not in sources):
             invalid_relations = True
             continue
         key = frozenset((a, b))
@@ -232,15 +227,17 @@ def validate_physical_refinement_context(report):
 
         if len(accepted_rows) > 1:
             reasons.add("multiple_geometric_refinements_accepted")
+        gate_sources = {name}
+        if isinstance(row.get("selection_group_sources"), list):
+            gate_sources.update(x for x in row["selection_group_sources"] if isinstance(x, str))
         if not gate_preview:
             reasons.add("existing_review_gate_requires_manual")
         else:
-            gate_sources = set(row.get("selection_group_sources") or []) | {name}
             for gate in (baseline_gate, pr6_gate):
                 if gate.get("candidate_source") not in gate_sources:
                     reasons.add("review_gate_candidate_mismatch")
-        if decision.get("suggested_for_review") not in (None, name):
-            reasons.add("candidate_decision_disagreement")
+            if decision.get("suggested_for_review") not in gate_sources:
+                reasons.add("candidate_decision_disagreement")
 
         if "unresolved_nested_contour_conflict" in reasons:
             state = "unresolved_nested_geometry"
