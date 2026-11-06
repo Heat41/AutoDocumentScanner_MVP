@@ -1,6 +1,9 @@
 """Synthetic PR6 physical-boundary context tests. No real KTP data or ground truth."""
 from copy import deepcopy
 
+import numpy as np
+
+from autodocscanner.core import physical_refinement_validation_pr6 as validator
 from autodocscanner.core.physical_refinement_validation_pr6 import (
     validate_physical_refinement_context,
 )
@@ -85,10 +88,14 @@ def _add_competitor(report, *, nested=True, smaller="v2_0", larger="adaptive",
     report["pr6_review_gate_shadow"]["status"] = "manual_review"
 
 
-def test_one_supported_refinement_only_eligible_for_explicit_preview():
+def test_one_supported_refinement_only_eligible_for_explicit_preview(monkeypatch):
     report = _report()
     original = deepcopy(report)
-    result = validate_physical_refinement_context(report)
+    monkeypatch.setattr(
+        validator, "_post_refinement_check",
+        lambda image, corners: (True, "post_refinement_four_sides_observed"))
+    image = np.zeros((200, 240, 3), dtype=np.uint8)
+    result = validate_physical_refinement_context(report, image)
     assert result["geometrically_accepted_count"] == 1
     assert result["corroborated_for_review_count"] == 1
     assert result["preview_review_eligible_count"] == 1
@@ -275,3 +282,42 @@ def test_more_than_one_refinement_accepted_cannot_choose_winner():
     row = validate_physical_refinement_context(report)["candidate_assessments"][0]
     assert "multiple_geometric_refinements_accepted" in row["reasons"]
     assert validate_physical_refinement_context(report)["auto_select"] is None
+
+
+def test_missing_image_never_passes_post_refinement_gate():
+    result = validate_physical_refinement_context(_report())
+    row = result["candidate_assessments"][0]
+    assert row["boundary_context_status"] == "insufficient_physical_boundary_evidence"
+    assert row["post_refinement_four_side_evidence"] is False
+    assert row["post_refinement_evidence_reason"] == "source_image_unavailable"
+    assert row["requires_manual_review"] is True
+
+
+def test_blank_image_does_not_claim_a_physical_boundary():
+    image = np.zeros((200, 240, 3), dtype=np.uint8)
+    result = validate_physical_refinement_context(_report(), image)
+    row = result["candidate_assessments"][0]
+    assert row["post_refinement_four_side_evidence"] is False
+    assert not row["eligible_for_preview_review"]
+    assert result["auto_crop_allowed"] is False
+
+
+def test_post_refinement_evidence_is_required_even_with_original_perfect(monkeypatch):
+    monkeypatch.setattr(
+        validator, "_post_refinement_check",
+        lambda img, pts: (False, "weak_post_refinement_external_side"))
+    image = np.zeros((200, 240, 3), dtype=np.uint8)
+    row = validate_physical_refinement_context(_report(), image)["candidate_assessments"][0]
+    assert row["independent_four_side_evidence"] is True
+    assert row["post_refinement_four_side_evidence"] is False
+    assert "post_refinement_four_side_evidence_incomplete" in row["reasons"]
+
+
+def test_invalid_after_corner_coordinates_fail_closed():
+    report = _report()
+    report["pr6_multi_refinement_shadow"]["candidates"][0]["after_corners"] = [
+        [float("nan"), 0], [180, 20], [180, 120], [20, 120]]
+    row = validate_physical_refinement_context(
+        report, np.zeros((200, 240, 3), dtype=np.uint8))["candidate_assessments"][0]
+    assert row["post_refinement_evidence_reason"] == "invalid_refined_corners"
+    assert not row["eligible_for_preview_review"]
