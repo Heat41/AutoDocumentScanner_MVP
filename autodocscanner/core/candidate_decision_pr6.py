@@ -48,11 +48,16 @@ def decide_candidate_review(report):
     """Decide *review routing* only, never candidate correctness or auto-crop."""
     if not isinstance(report, dict):
         report = {}
-    combined = report.get("pr6_combined_candidate_shadow") or {}
-    consensus = report.get("pr6_evidence_consensus_shadow") or {}
-    spatial = report.get("pr6_spatial_relationship_shadow") or {}
-    comparison = report.get("pr6_comparative_evidence_shadow") or {}
-    prior_gate = report.get("pr6_review_gate_shadow") or {}
+    def section(key):
+        value = report.get(key)
+        return value if isinstance(value, dict) else {}
+
+    combined = section("pr6_combined_candidate_shadow")
+    consensus = section("pr6_evidence_consensus_shadow")
+    spatial = section("pr6_spatial_relationship_shadow")
+    comparison = section("pr6_comparative_evidence_shadow")
+    baseline_gate = section("v3_review_gate")
+    prior_gate = section("pr6_review_gate_shadow")
     raw_candidates = combined.get("candidates") or []
     raw_groups = consensus.get("consensus_groups") or []
     raw_interp = consensus.get("candidate_interpretations") or []
@@ -61,6 +66,8 @@ def decide_candidate_review(report):
     if any(not isinstance(report.get(key), dict) or
            report[key].get("status") != "offline_diagnostic_only" for key in _REQUIRED):
         reasons.add("missing_or_invalid_shadow_evidence")
+    if baseline_gate.get("status") != "preview_review" or baseline_gate.get("reasons"):
+        reasons.add("baseline_review_gate_requires_manual")
     if prior_gate.get("status") != "preview_review" or prior_gate.get("reasons"):
         reasons.add("prior_review_gate_requires_manual")
 
@@ -146,6 +153,17 @@ def decide_candidate_review(report):
 
     by_group = {name: group["group_id"] for group in groups for name in group["members"]}
     grouped_relations = defaultdict(list)
+    grouped_comparisons = defaultdict(list)
+    for pair in comparison.get("pairwise_comparisons") or []:
+        if not isinstance(pair, dict):
+            continue
+        a, b = pair.get("candidate_a"), pair.get("candidate_b")
+        if a in by_group and b in by_group and by_group[a] != by_group[b]:
+            key = tuple(sorted((by_group[a], by_group[b])))
+            grouped_comparisons[key].append({
+                "candidate_a": a, "candidate_b": b,
+                "evidence_balance": pair.get("evidence_balance", "insufficient_evidence"),
+            })
     for relation in spatial.get("relationships") or []:
         if not isinstance(relation, dict):
             continue
@@ -160,6 +178,7 @@ def decide_candidate_review(report):
     for i in range(len(groups)):
         for j in range(i + 1, len(groups)):
             relations = grouped_relations.get((i, j)) or []
+            comparisons = grouped_comparisons.get((i, j)) or []
             nested = [rel for rel in relations if rel.get("nested_geometry_risk") is True]
             frame_ambiguity = any(
                 "frame_or_extrapolation_risk" in (candidates.get(rel.get("larger_source")) or {}).get("warnings", [])
@@ -173,11 +192,14 @@ def decide_candidate_review(report):
                 "nested_observations": len(nested),
                 "outer_frame_warning": frame_ambiguity,
                 "well_supported_inner": strong_inner,
+                "comparative_evidence": comparisons,
                 "resolution": "human_four_corner_review",
                 "winner": None,
             })
             if not relations:
                 reasons.add("missing_spatial_relation")
+            if not comparisons:
+                reasons.add("missing_comparative_relation")
     if conflicts:
         reasons.add("unresolved_geometry_conflict")
 
