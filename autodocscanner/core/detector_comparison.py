@@ -26,6 +26,7 @@ from autodocscanner.core.comparative_evidence_pr6 import compare_candidate_evide
 from autodocscanner.core.evidence_consensus_pr6 import interpret_candidate_consensus
 from autodocscanner.core.candidate_decision_pr6 import decide_candidate_review
 from autodocscanner.core.multi_refinement_pr6 import evaluate_multi_candidate_refinement
+from autodocscanner.core.physical_refinement_validation_pr6 import validate_physical_refinement_context
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -142,6 +143,11 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     # not only the top-ranked candidate. Does not update gates, ranking or warp.
     report["pr6_multi_refinement_shadow"] = evaluate_multi_candidate_refinement(
         image, report, adaptive
+    )
+    # Read-only context interpretation. Never substitutes for review gates;
+    # ground-truth annotation remains evaluation-only and is not consulted.
+    report["pr6_physical_refinement_validation_shadow"] = (
+        validate_physical_refinement_context(report)
     )
     if expected is not None:
         # Annotation may be used to evaluate accuracy only AFTER all shadow
