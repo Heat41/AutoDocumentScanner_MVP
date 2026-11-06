@@ -10,6 +10,14 @@ from __future__ import annotations
 
 import math
 
+import cv2
+import numpy as np
+
+from autodocscanner.core.boundary_evidence import boundary_evidence
+from autodocscanner.core.boundary_localization_pr6 import localize_candidate_boundary
+from autodocscanner.core.physical_boundary_pr6 import verify_physical_boundary
+from autodocscanner.core.quad_validation import validate_quad
+
 
 def _section(report, key):
     value = report.get(key)
@@ -59,7 +67,40 @@ def _four_sides(candidate, physical, localized):
     return True
 
 
-def validate_physical_refinement_context(report):
+def _post_refinement_check(image, corners):
+    """Observe physical-boundary signals again at the *refined* vertices."""
+    if not isinstance(image, np.ndarray) or image.size == 0 or image.ndim not in (2, 3):
+        return False, "source_image_unavailable"
+    try:
+        quad = np.asarray(corners, dtype=np.float32)
+        if quad.shape != (4, 2) or not np.isfinite(quad).all():
+            return False, "invalid_refined_corners"
+        valid, _, geometry = validate_quad(quad, image.shape)
+        if not valid or geometry.get("frame_suspect") or geometry.get("slight_extrapolation"):
+            return False, "invalid_or_frame_adjacent_refined_geometry"
+        boundary = boundary_evidence(image, quad)
+        physical = verify_physical_boundary(image, quad)
+        localized = localize_candidate_boundary(image, quad)
+        side_support = boundary.get("side_support")
+        if not boundary.get("evidence_complete") or not isinstance(side_support, list) or len(side_support) != 4:
+            return False, "incomplete_post_refinement_boundary"
+        if any(_finite(x) is None or _finite(x) < .20 for x in side_support):
+            return False, "weak_post_refinement_external_side"
+        post = {
+            "side_checks": {
+                "supported_external": 4, "localized_aligned": 4,
+                "measurable_contrast": 4,
+            },
+            "complete_independent_evidence": True, "warnings": [],
+        }
+        if not _four_sides(post, physical, localized):
+            return False, "incomplete_post_refinement_physical_evidence"
+        return True, "post_refinement_four_sides_observed"
+    except (ValueError, TypeError, OverflowError, cv2.error):
+        return False, "post_refinement_evaluation_error"
+
+
+def validate_physical_refinement_context(report, image=None):
     """Conservative context evaluation; never certify a physical KTP contour.
 
     A single well-supported refinement may be described as corroborated *for
@@ -200,6 +241,9 @@ def validate_physical_refinement_context(report):
         supported = _four_sides(candidate, physical_row, localized_row)
         if not supported:
             reasons.add("independent_four_side_evidence_incomplete")
+        post_supported, post_reason = _post_refinement_check(image, row.get("after_corners"))
+        if not post_supported:
+            reasons.add("post_refinement_four_side_evidence_incomplete")
         group_index = membership.get(name)
         if group_index is not None and group_offset_issue.get(group_index) is True:
             reasons.add("near_equivalent_offset_disagreement")
@@ -243,7 +287,7 @@ def validate_physical_refinement_context(report):
             state = "unresolved_nested_geometry"
         elif "unresolved_distinct_candidate_conflict" in reasons:
             state = "unresolved_competing_geometry"
-        elif not supported:
+        elif not supported or not post_supported:
             state = "insufficient_physical_boundary_evidence"
         elif any(x in reasons for x in
                  ("missing_pairwise_spatial_evidence", "near_equivalent_offset_disagreement",
@@ -264,6 +308,8 @@ def validate_physical_refinement_context(report):
             "geometric_reason": row.get("reason"),
             "boundary_context_status": state,
             "independent_four_side_evidence": supported,
+            "post_refinement_four_side_evidence": post_supported,
+            "post_refinement_evidence_reason": post_reason,
             "spatial_roles": sorted(set(spatial_roles)),
             "eligible_for_preview_review": eligible,
             "requires_manual_review": not eligible,
