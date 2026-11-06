@@ -321,3 +321,33 @@ def test_invalid_after_corner_coordinates_fail_closed():
         report, np.zeros((200, 240, 3), dtype=np.uint8))["candidate_assessments"][0]
     assert row["post_refinement_evidence_reason"] == "invalid_refined_corners"
     assert not row["eligible_for_preview_review"]
+
+
+def test_detector_report_wires_context_after_multi_refinement(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+
+    image = np.full((400, 600, 3), 120, dtype=np.uint8)
+    points = np.asarray([[80, 80], [520, 80], [520, 320], [80, 320]], dtype=np.float32)
+
+    class FakeEngine:
+        def detect(self, img):
+            return points.copy(), {"score": .5, "selected_source": "synthetic"}
+        def order_points(self, p):
+            return np.asarray(p, dtype=np.float32)
+        def warp(self, img, p):
+            return img
+        def _warp_quality(self, img):
+            return .75
+
+    monkeypatch.setattr(comparison, "StableBaselinePerspectiveEngine", FakeEngine)
+    monkeypatch.setattr(comparison, "AutoPerspectiveEngine", FakeEngine)
+    monkeypatch.setattr(comparison, "contour_candidates", lambda *args, **kwargs: [])
+
+    report = comparison.compare_detectors(image)
+    assert "pr6_multi_refinement_shadow" in report
+    assert "pr6_physical_refinement_validation_shadow" in report
+    context = report["pr6_physical_refinement_validation_shadow"]
+    assert context["physical_boundary_verified"] is False
+    assert context["auto_select"] is None and context["auto_crop_allowed"] is False
+    assert report["v3_review_gate"]["auto_crop_allowed"] is False
+    assert report["pr6_candidate_decision_shadow"]["auto_crop_allowed"] is False
