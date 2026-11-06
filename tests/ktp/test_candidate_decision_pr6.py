@@ -34,7 +34,11 @@ def _fixture(names=("stable",), *, groups=None, relations=None, gate="preview_re
             "candidate_interpretations": [_interpretation(name) for name in names]},
         "pr6_spatial_relationship_shadow": {"status": "offline_diagnostic_only",
                                                  "relationships": relations},
-        "pr6_comparative_evidence_shadow": {"status": "offline_diagnostic_only"},
+        "pr6_comparative_evidence_shadow": {"status": "offline_diagnostic_only",
+            "pairwise_comparisons": [
+                {"candidate_a": row["candidate_a"], "candidate_b": row["candidate_b"],
+                 "evidence_balance": "equal_side_evidence"} for row in relations]},
+        "v3_review_gate": {"status": "preview_review", "reasons": []},
         "pr6_review_gate_shadow": {"status": gate, "reasons": []},
     }
 
@@ -140,3 +144,19 @@ def test_annotation_and_score_changes_do_not_change_decisions():
     data["expected"] = [[1, 2], [3, 4], [5, 6], [7, 8]]
     modified = decide_candidate_review(data)
     assert original == modified
+
+
+def test_baseline_manual_gate_cannot_be_upgraded():
+    data = _fixture()
+    data["v3_review_gate"]["status"] = "manual_review"
+    result = decide_candidate_review(data)
+    assert result["status"] == "manual_review"
+    assert "baseline_review_gate_requires_manual" in result["reasons"]
+
+
+def test_malformed_shadow_section_fails_closed():
+    data = _fixture()
+    data["pr6_spatial_relationship_shadow"] = ["invalid"]
+    result = decide_candidate_review(data)
+    assert result["status"] == "manual_review"
+    assert result["auto_crop_allowed"] is False
