@@ -25,6 +25,7 @@ from autodocscanner.core.spatial_risk_pr6 import assess_spatial_risk
 from autodocscanner.core.comparative_evidence_pr6 import compare_candidate_evidence
 from autodocscanner.core.evidence_consensus_pr6 import interpret_candidate_consensus
 from autodocscanner.core.candidate_decision_pr6 import decide_candidate_review
+from autodocscanner.core.multi_refinement_pr6 import evaluate_multi_candidate_refinement
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -137,6 +138,42 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
         }
     else:
         report["v3_refinement_shadow"] = {"accepted": False, "reason": "no_candidate"}
+    # Independent PR6 refinement experiment: measure each distinct proposal,
+    # not only the top-ranked candidate. Does not update gates, ranking or warp.
+    report["pr6_multi_refinement_shadow"] = evaluate_multi_candidate_refinement(
+        image, report, adaptive
+    )
+    if expected is not None:
+        # Annotation may be used to evaluate accuracy only AFTER all shadow
+        # decisions have been made. It never enters any acceptance condition.
+        truth = adaptive.order_points(np.asarray(expected, dtype=np.float32))
+        diagonal = max(float(np.hypot(image.shape[1], image.shape[0])), 1.)
+
+        def _evaluation_error(corners):
+            if corners is None:
+                return None
+            try:
+                points = np.asarray(corners, dtype=np.float32)
+                if points.shape != (4, 2) or not np.isfinite(points).all():
+                    return None
+                ordered = adaptive.order_points(points)
+                return round(float(np.linalg.norm(ordered - truth, axis=1).mean()) / diagonal, 5)
+            except (TypeError, ValueError):
+                return None
+
+        report["pr6_multi_refinement_ground_truth_evaluation"] = {
+            "candidates": [
+                {
+                    "source": row["source"],
+                    "before_normalized_corner_error": _evaluation_error(row["before_corners"]),
+                    "attempted_normalized_corner_error": _evaluation_error(row["attempted_corners"]),
+                    "after_normalized_corner_error": _evaluation_error(row["after_corners"]),
+                    "accepted_for_shadow": row["accepted_for_shadow"],
+                }
+                for row in report["pr6_multi_refinement_shadow"]["candidates"]
+            ],
+            "status": "evaluation_only_not_for_runtime_decisions",
+        }
     # Deliberately no automatic winner: the experiment requires ground truth.
     return report
 
