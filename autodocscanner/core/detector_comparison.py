@@ -27,6 +27,7 @@ from autodocscanner.core.evidence_consensus_pr6 import interpret_candidate_conse
 from autodocscanner.core.candidate_decision_pr6 import decide_candidate_review
 from autodocscanner.core.multi_refinement_pr6 import evaluate_multi_candidate_refinement
 from autodocscanner.core.physical_refinement_validation_pr6 import validate_physical_refinement_context
+from autodocscanner.core.review_gate_consolidation_pr6 import consolidate_review_gate
 from autodocscanner.core.perspective_engine import AutoPerspectiveEngine
 from autodocscanner.core.perspective_engine_baseline import (
     AutoPerspectiveEngine as StableBaselinePerspectiveEngine,
@@ -149,6 +150,9 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
     report["pr6_physical_refinement_validation_shadow"] = (
         validate_physical_refinement_context(report, image)
     )
+    # Final read-only PR6 review advice; pre-existing gates and handoff remain
+    # unchanged, and annotations never participate in the routing decision.
+    report["pr6_review_consolidation_shadow"] = consolidate_review_gate(report)
     if expected is not None:
         # Annotation may be used to evaluate accuracy only AFTER all shadow
         # decisions have been made. It never enters any acceptance condition.
