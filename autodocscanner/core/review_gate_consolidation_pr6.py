@@ -26,6 +26,15 @@ def _source(value):
     return value if isinstance(value, str) and value else None
 
 
+def _finite_coordinate(value):
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
 def consolidate_review_gate(report):
     """Suggest only confirmed *review* of original corners, or manual corners.
 
@@ -214,8 +223,7 @@ def consolidate_review_gate(report):
     points_ready = (
         isinstance(corners, list) and len(corners) == 4 and
         all(isinstance(point, (list, tuple)) and len(point) == 2 and
-            all(isinstance(coord, (int, float)) and not isinstance(coord, bool)
-                and math.isfinite(coord) for coord in point)
+            all(_finite_coordinate(coord) for coord in point)
             for point in corners)
     )
     if (handoff.get("action") != "preview_suggested_corners" or
