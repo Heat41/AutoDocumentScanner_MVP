@@ -289,3 +289,11 @@ def test_detector_comparison_adds_consolidated_shadow_without_changing_old_gates
     assert result["v3_manual_handoff"] == previous_handoff(result, image.shape)
     assert result["v3_review_gate"]["auto_crop_allowed"] is False
     assert result["pr6_review_gate_shadow"]["auto_crop_allowed"] is False
+
+
+def test_extreme_unrepresentable_corner_coordinate_fails_closed():
+    data = report()
+    data["v3_manual_handoff"]["suggested_corners"][0][0] = 10 ** 1000
+    result = consolidate_review_gate(data)
+    assert result["status"] == "manual_review"
+    assert "manual_handoff:preview_not_ready" in result["reason_codes"]
