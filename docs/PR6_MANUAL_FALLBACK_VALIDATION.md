@@ -25,17 +25,20 @@ crop, mutate a source photo, or change JPG/PDF/SnipSheet workflows.
 
 ## Confirmed existing Auto KTP UI gap — not fixed by this step
 
-The current `autodocscanner/ui/final.py` disables the manual correction button
-when `_active_file_has_corners()` is false, and `open_manual_correction`
-returns early when the selected file has no detector corners. Thus **the Auto
-KTP UI cannot currently enter its four-corner editor directly after a total
-detection failure**. The standalone Manual Document page is a separate path.
+By default, `autodocscanner/ui/final.py` still disables manual
+correction when detector corners are absent. **Stage 3 adds an opt-in
+experimental exception:** when `AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE=1` is
+set, the existing editor can open the original photo with editable starting
+corners even after a total detection failure. The standalone Manual Document
+page remains independent. See
+`docs/PR6_EXPERIMENTAL_MANUAL_UI_BRIDGE.md` for activation and safety checks.
 
-Also, the current Auto KTP manual dialog initializes from detected corners;
-its **Batal** button closes the dialog, and **Terapkan Koreksi** calls
-`scan_with_corners`, writing the result. The new PR6 decision has not been
-connected to that dialog, so a legacy V3 preview might still appear in the UI
-until integration is expressly approved and tested.
+With the opt-in bridge, a missing detector quad uses a generic editable
+starting frame, whereas existing detector corners retain their legacy starting
+position. **Batal** simply closes the dialog; **Terapkan Koreksi** checks user
+coordinates before calling the existing `scan_with_corners` pipeline. The
+consolidated PR6 shadow decision remains **unconnected to the live UI**, so
+V3 preview behavior is not replaced by PR6 decision logic.
 
 The shadow report exposes `ui_gap_codes` and
 `ui_integration_status = not_connected_shadow_only` rather than claiming
