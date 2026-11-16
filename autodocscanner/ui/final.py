@@ -11,6 +11,12 @@ except ImportError:
     windnd = None
 
 from autodocscanner.ui.safe import SafeScannerUI
+from autodocscanner.ui.manual_fallback_bridge_pr6 import (
+    experimental_manual_bridge_enabled,
+    manual_editor_available,
+    fallback_starting_corners,
+    validate_user_confirmed_corners,
+)
 
 
 class FinalScannerUI(SafeScannerUI):
@@ -582,7 +588,19 @@ class FinalScannerUI(SafeScannerUI):
         )
         return corners is not None
 
+    def _manual_correction_available(self):
+        """Legacy behavior unless the experimental bridge is explicitly enabled."""
+        index = self._active_file_index()
+        return manual_editor_available(
+            has_source=index is not None and 0 <= index < len(self.files),
+            has_detected_corners=self._active_file_has_corners(),
+            processing_active=bool(getattr(self, "_processing_active", False)),
+            experimental_enabled=experimental_manual_bridge_enabled(),
+        )
+
     def open_manual_correction(self):
+        if getattr(self, "_processing_active", False):
+            return
         index = self._active_file_index()
 
         if index is None or not (
@@ -598,7 +616,8 @@ class FinalScannerUI(SafeScannerUI):
             key
         )
 
-        if corners is None:
+        bridge_enabled = experimental_manual_bridge_enabled()
+        if corners is None and not bridge_enabled:
             self.status_text.set(
                 "Jalankan Proses Otomatis terlebih dahulu sebelum koreksi manual."
             )
@@ -613,6 +632,21 @@ class FinalScannerUI(SafeScannerUI):
                 f"Gagal membuka gambar: {exc}"
             )
             return
+
+        # Experimental, opt-in only: use an EDITABLE seed from the original
+        # image if the detector returned no corners. Do not cache this seed as
+        # a successful detection or create any output until user confirmation.
+        fallback_without_detection = corners is None
+        if fallback_without_detection:
+            try:
+                corners = fallback_starting_corners(source.size)
+            except ValueError as exc:
+                self.status_text.set(f"Foto tidak dapat dikoreksi: {exc}")
+                return
+            self.status_text.set(
+                "Deteksi belum tersedia. Sesuaikan empat titik pada foto asli, "
+                "lalu klik Terapkan Koreksi."
+            )
 
         try:
             from autodocscanner.ui.theme import get_theme
@@ -1097,6 +1131,21 @@ class FinalScannerUI(SafeScannerUI):
             ] = None
 
         def apply_manual():
+            # Clicking Apply is the only way to reach the scanner. The bridge
+            # validates original-image coordinates without silently clamping,
+            # reordering, cropping or writing an image on error/cancel.
+            confirmed_corners = working_corners
+            if bridge_enabled:
+                confirmed_corners = validate_user_confirmed_corners(
+                    working_corners, source.size
+                )
+                if confirmed_corners is None:
+                    self.status_text.set(
+                        "Empat sudut tidak valid. Periksa urutan TL/TR/BR/BL "
+                        "dan pastikan semua titik berada di dalam foto."
+                    )
+                    return
+
             output_path = self._output_by_file.get(
                 key
             )
@@ -1110,7 +1159,7 @@ class FinalScannerUI(SafeScannerUI):
             try:
                 _, manual_corners = self.scanner.scan_with_corners(
                     path,
-                    working_corners,
+                    confirmed_corners,
                     output_path,
                     mode="ktp",
                     output_mode=(
@@ -1187,7 +1236,7 @@ class FinalScannerUI(SafeScannerUI):
 
         ttk.Button(
             button_row,
-            text="Reset Otomatis",
+            text="Reset Titik" if fallback_without_detection else "Reset Otomatis",
             style="Quiet.TButton",
             command=reset_to_auto,
         ).pack(
@@ -1834,8 +1883,7 @@ class FinalScannerUI(SafeScannerUI):
                 state=(
                     "normal"
                     if (
-                        not self._processing_active
-                        and self._active_file_has_corners()
+                        self._manual_correction_available()
                     )
                     else "disabled"
                 )
