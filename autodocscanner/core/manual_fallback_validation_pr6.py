@@ -54,6 +54,16 @@ def _quad(corners, shape, *, strictly_inside=False):
     return points.tolist()
 
 
+def validate_manual_ui_corners_pr6(corners, image_shape):
+    """Pure four-corner validation for a real user-initiated UI confirmation.
+
+    Returns original-image points or None; this is NOT permission to crop
+    or save automatically. Human confirmation must happen in the dialog.
+    """
+    shape = _shape(image_shape)
+    return _quad(corners, shape, strictly_inside=True) if shape is not None else None
+
+
 def prepare_manual_fallback_pr6(report, image_shape):
     """Produce a review plan. Never send an unapproved quad to the scanner.
 
