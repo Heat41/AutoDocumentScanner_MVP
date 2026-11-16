@@ -264,3 +264,19 @@ def test_gui_apply_during_processing_cannot_write(tmp_path, monkeypatch):
     assert not calls
     assert not widgets[0].closed
     assert "Proses otomatis" in status.value
+
+
+def test_gui_failed_auto_ignores_stale_cached_detector_points(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    # Even if a failed automatic attempt left previous corners in the cache,
+    # the user must start from a neutral editable seed, not stale geometry.
+    fake._corners_by_file[str(path)] = np.asarray(
+        [[0, 0], [399, 0], [399, 299], [0, 299]], dtype=np.float32)
+    FinalScannerUI.open_manual_correction(fake)
+    buttons["Terapkan Koreksi"].command()
+    assert len(calls) == 1
+    assert calls[0][1] == fallback_starting_corners((400, 300))
+    assert widgets[0].closed
