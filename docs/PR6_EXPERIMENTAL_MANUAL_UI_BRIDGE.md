@@ -37,9 +37,11 @@ preserve the legacy UI (manual button remains disabled without detector corners)
    even if Auto KTP detected no corners or was never run.
 2. The editor opens the **original source image**. In experiment mode the
    preview is EXIF-transposed so coordinates match OpenCV's `imread`.
-3. With no detector geometry, the four editable points start inset from the
-   image edges using the general manual-document corner seed. They **are not
-   evidence of detected KTP boundaries**; the user must position them.
+3. With no detector geometry (or after an automatic attempt marked
+   failed), the four editable points start inset from the image edges using
+   the general manual-document corner seed. Previously cached detector
+   corners are ignored after a failed run. The seed **is not evidence of
+   detected KTP boundaries**; the user must position the points.
 4. **Batal** only closes the dialog; it never invokes the scanner, mutates
    existing results or writes a file.
 5. **Terapkan Koreksi** checks that processing is idle, decoder dimensions
