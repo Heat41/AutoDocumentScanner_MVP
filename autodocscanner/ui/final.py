@@ -3,7 +3,8 @@ import queue
 import tkinter as tk
 from tkinter import ttk
 
-from PIL import Image, ImageDraw, ImageTk
+import cv2
+from PIL import Image, ImageDraw, ImageOps, ImageTk
 
 try:
     import windnd
@@ -624,9 +625,14 @@ class FinalScannerUI(SafeScannerUI):
             return
 
         try:
-            source = Image.open(
-                path
-            ).convert("RGB")
+            with Image.open(path) as raw_source:
+                # OpenCV normally applies EXIF orientation on imread. Match
+                # the existing scanner's source coordinates when opted in.
+                oriented_source = (
+                    ImageOps.exif_transpose(raw_source)
+                    if bridge_enabled else raw_source
+                )
+                source = oriented_source.convert("RGB")
         except Exception as exc:
             self.status_text.set(
                 f"Gagal membuka gambar: {exc}"
@@ -1131,11 +1137,25 @@ class FinalScannerUI(SafeScannerUI):
             ] = None
 
         def apply_manual():
+            if getattr(self, "_processing_active", False):
+                self.status_text.set(
+                    "Proses otomatis masih berjalan. Selesaikan sebelum koreksi manual."
+                )
+                return
             # Clicking Apply is the only way to reach the scanner. The bridge
             # validates original-image coordinates without silently clamping,
             # reordering, cropping or writing an image on error/cancel.
             confirmed_corners = working_corners
             if bridge_enabled:
+                # Do not apply points to an image whose decoder orientation
+                # differs from the displayed editor canvas (EXIF included).
+                current_image = cv2.imread(str(path))
+                if (current_image is None or
+                        current_image.shape[:2] != (source_height, source_width)):
+                    self.status_text.set(
+                        "Orientasi atau ukuran foto berubah. Muat ulang foto sebelum koreksi."
+                    )
+                    return
                 confirmed_corners = validate_user_confirmed_corners(
                     working_corners, source.size
                 )
