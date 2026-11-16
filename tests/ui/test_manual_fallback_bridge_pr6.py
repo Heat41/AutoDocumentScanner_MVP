@@ -216,3 +216,51 @@ def test_gui_feature_flag_off_keeps_old_no_corners_guard(tmp_path, monkeypatch):
     FinalScannerUI.open_manual_correction(fake)
     assert "Jalankan Proses Otomatis" in status.value
     assert not calls
+
+
+def test_exif_rotated_photo_uses_same_corners_as_opencv(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    import cv2
+
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    photo = Image.new("RGB", (400, 300), (90, 90, 90))
+    exif = photo.getexif()
+    exif[274] = 6  # clockwise 90 degrees
+    photo.save(path, exif=exif)
+    decoded = cv2.imread(str(path))
+    assert decoded.shape[:2] == (400, 300)
+
+    FinalScannerUI.open_manual_correction(fake)
+    buttons["Terapkan Koreksi"].command()
+    assert len(calls) == 1
+    assert calls[0][1] == fallback_starting_corners((300, 400))
+    assert widgets[0].closed
+
+
+def test_gui_decoder_dimension_disagreement_fails_closed(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    monkeypatch.setattr("autodocscanner.ui.final.cv2.imread",
+                        lambda _path: np.zeros((55, 99, 3), dtype=np.uint8))
+    FinalScannerUI.open_manual_correction(fake)
+    buttons["Terapkan Koreksi"].command()
+    assert not calls
+    assert not widgets[0].closed
+    assert "Orientasi" in status.value
+
+
+def test_gui_apply_during_processing_cannot_write(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    FinalScannerUI.open_manual_correction(fake)
+    fake._processing_active = True
+    buttons["Terapkan Koreksi"].command()
+    assert not calls
+    assert not widgets[0].closed
+    assert "Proses otomatis" in status.value
