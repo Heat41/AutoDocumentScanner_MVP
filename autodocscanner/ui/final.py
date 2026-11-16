@@ -618,6 +618,11 @@ class FinalScannerUI(SafeScannerUI):
         )
 
         bridge_enabled = experimental_manual_bridge_enabled()
+        # A failed automatic attempt may have left stale detector points in
+        # the UI cache (including points from an earlier attempt). In the
+        # opt-in mode, never treat those points as a trusted starting quad.
+        if bridge_enabled and key in self._failure_by_file:
+            corners = None
         if corners is None and not bridge_enabled:
             self.status_text.set(
                 "Jalankan Proses Otomatis terlebih dahulu sebelum koreksi manual."
