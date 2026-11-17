@@ -144,7 +144,7 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
         # Source-pixel corners and evidence only; no image bytes are stored
         # and none of these diagnostics can authorize a crop or selection.
         "visual_debug": build_pr6_visual_diagnostics(
-            report, image.shape,
+            report, image.shape, image=image,
         ),
     }
 
