@@ -254,7 +254,7 @@ def test_cli_pr6_flag_runs_review_instead_of_batch_crop(tmp_path, monkeypatch, c
 
     source = tmp_path / "synthetic.png"
     source.write_bytes(b"fake")
-    monkeypatch.setattr(sys, "argv", ["app.py"])
+    monkeypatch.setattr(sys, "argv", ["app.py", "--pr6-review"])
     monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
     monkeypatch.setattr(app, "get_input_images", lambda folder: [source])
     monkeypatch.setattr(runtime, "evaluate_pr6_runtime_file",
@@ -266,3 +266,49 @@ def test_cli_pr6_flag_runs_review_instead_of_batch_crop(tmp_path, monkeypatch, c
     assert "TANPA CROP" in stdout
     assert "manual_review" in stdout
     assert "Tidak ada gambar hasil yang disimpan." in stdout
+
+
+
+def test_cli_default_still_runs_legacy_batch_when_pr6_flag_on(
+        tmp_path, monkeypatch, capsys):
+    import sys
+    import app
+
+    source = tmp_path / "synthetic.png"
+    source.write_bytes(b"fake")
+    monkeypatch.setattr(sys, "argv", ["app.py"])
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    monkeypatch.setattr(app, "get_input_images", lambda folder: [source])
+    monkeypatch.setattr(app, "OUTPUT_DIR", tmp_path / "out")
+    runner_calls = []
+    class FakeBatchRunner:
+        def __init__(self, scanner):
+            runner_calls.append("created")
+        def run_many(self, images, output_dir, output_mode, mode):
+            runner_calls.append((list(images), mode))
+            return {
+                "total_count": 1,
+                "success_count": 0,
+                "failed_count": 1,
+                "results": [{
+                    "input_path": source, "success": False,
+                    "error": "synthetic detector declined",
+                }],
+            }
+    monkeypatch.setattr(app, "BatchScanRunner", FakeBatchRunner)
+    app.main()
+    output = capsys.readouterr().out
+    assert runner_calls == ["created", ([source], "ktp")]
+    assert "AUTO DOCUMENT SCANNER" in output
+    assert "PR6 REVIEW EKSPERIMEN" not in output
+
+
+def test_cli_explicit_pr6_review_requires_opt_in(monkeypatch):
+    import sys
+    import app
+
+    monkeypatch.setattr(sys, "argv", ["app.py", "--pr6-review"])
+    monkeypatch.delenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        app.main()
+    assert exc.value.code == 2
