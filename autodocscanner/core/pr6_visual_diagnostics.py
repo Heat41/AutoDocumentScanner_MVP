@@ -85,6 +85,12 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
     ranked = _dict(report.get("v3_ranking"))
     v2 = _list(report.get("v2"))
     origins = _list(report.get("pr6_v2_proposal_origins"))
+    outer = _dict(report.get("pr6_outer_region_recovery_shadow"))
+    outer_checks = {
+        row["source"]: row
+        for raw in _list(outer.get("candidate_checks"))
+        if (row := _dict(raw)) and isinstance(row.get("source"), str)
+    }
 
     groups = {}
     for group in _list(selection.get("groups")):
@@ -120,7 +126,8 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         origin = origins[index] if index < len(origins) else "contour"
         family = (
             "Four-Line" if origin == "four_line" else
-            "Chroma" if origin == "chroma" else "Kontur V2"
+            "Chroma" if origin == "chroma" else
+            "Outer Region" if origin == "outer_region" else "Kontur V2"
         )
         sources.append((f"v2_{index}", family, _dict(item)))
 
@@ -198,6 +205,23 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 visualization_remeasured or representative == name
             ),
             "measurements_visual_only": bool(visualization_remeasured),
+            "outer_recovery_check": {
+                "perspective_feasible": (
+                    _dict(outer_checks.get(name)).get("perspective_feasible")
+                ),
+                "all_sides_measurable": (
+                    _dict(outer_checks.get(name)).get("all_sides_measurable")
+                ),
+                "nested_in_larger_quad": (
+                    _dict(outer_checks.get(name)).get("nested_in_larger_quad")
+                ),
+                "chromatic_step_by_side": _list(
+                    _dict(outer_checks.get(name)).get("chromatic_step_by_side")
+                )[:4],
+                "reason_codes": _codes(
+                    _dict(outer_checks.get(name)).get("reason_codes")
+                ),
+            } if name in outer_checks else None,
         })
 
     family_counts = {
@@ -206,6 +230,7 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "Kontur V2": sum(1 for row in rows if row["family"] == "Kontur V2"),
         "Four-Line": sum(1 for row in rows if row["family"] == "Four-Line"),
         "Chroma": sum(1 for row in rows if row["family"] == "Chroma"),
+        "Outer Region": sum(1 for row in rows if row["family"] == "Outer Region"),
     }
     return {
         "status": "offline_visual_diagnostic_only",
@@ -217,6 +242,9 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         ),
         "generated_chroma_count": int(
             report.get("pr6_chroma_proposal_count") or 0
+        ),
+        "generated_outer_region_count": int(
+            report.get("pr6_region_proposal_count") or 0
         ),
         "rejected_after_geometry": int(
             report.get("v2_rejected_post_order") or 0
