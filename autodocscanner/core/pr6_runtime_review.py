@@ -57,7 +57,14 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
             or image.dtype != np.uint8):
         raise ValueError("Gambar sumber tidak dapat dianalisis.")
 
-    report = analyzer(image, expected=None)
+    # Existing injected analyzers keep their historical signature in tests.
+    # Only the real PR6 runtime analyzer requests the new independent long-
+    # edge proposals; no legacy or default offline detector is changed.
+    report = (
+        analyzer(image, expected=None, include_line_candidates=True)
+        if analyzer is compare_detectors else
+        analyzer(image, expected=None)
+    )
     if not isinstance(report, dict):
         raise ValueError("Laporan pemeriksaan PR6 tidak valid.")
     gate = report.get("pr6_review_consolidation_shadow")
