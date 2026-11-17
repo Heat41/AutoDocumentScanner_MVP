@@ -334,6 +334,15 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "generated_side_recovery_count": min(
             len(side_recovery_rows), 12
         ),
+        "side_recovery_parents_examined": int(
+            side_recovery.get("parents_examined") or 0
+        ),
+        "side_recovery_hypotheses_before_dedup": int(
+            side_recovery.get("hypotheses_before_dedup") or 0
+        ),
+        "side_recovery_reason_codes": _codes(
+            side_recovery.get("reason_codes")
+        ),
         "rejected_after_geometry": int(
             report.get("v2_rejected_post_order") or 0
         ),
