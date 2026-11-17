@@ -376,3 +376,20 @@ def test_gui_magnifier_does_not_change_legacy_editor_without_flag(tmp_path, monk
     assert not any(tags == ("manual-magnifier",) for _, tags in canvas.created)
     buttons["Batal"].command()
     assert not calls
+
+
+
+def test_gui_magnifier_not_shown_when_clicking_background(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    FinalScannerUI.open_manual_correction(fake)
+    dialog = widgets[0]
+    canvas = next(w for w in widgets if "<Button-1>" in w.bindings)
+    dialog.idle()
+    canvas.bindings["<Button-1>"](SimpleNamespace(x=350, y=245))
+    assert not any(tags == ("manual-magnifier",) for _, tags in canvas.created)
+    canvas.bindings["<ButtonRelease-1>"](SimpleNamespace())
+    assert not calls
+    buttons["Batal"].command()
