@@ -37,7 +37,10 @@ def magnifier_image(source, point, *, size=160, zoom=4):
     x = min(max(x, 0.0), source.width - 1.0)
     y = min(max(y, 0.0), source.height - 1.0)
     radius = size / (2.0 * zoom)
-    patch = source.convert("RGB").transform(
+    # The Auto KTP editor already holds an RGB source. Avoid copying an
+    # entire high-resolution photo on every mouse-motion event.
+    rgb = source if source.mode == "RGB" else source.convert("RGB")
+    patch = rgb.transform(
         (size, size),
         Image.Transform.EXTENT,
         (x - radius, y - radius, x + radius, y + radius),
