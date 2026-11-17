@@ -84,7 +84,9 @@ def line_quad_candidates(image, *, max_candidates=6, max_longest=1150):
         return []
 
     segments = []
-    for x1, y1, x2, y2 in lines[:, 0, :]:
+    # OpenCV bindings may expose HoughLinesP as (N,1,4) or (N,4).
+    # Never rely on the optional singleton axis.
+    for x1, y1, x2, y2 in np.asarray(lines).reshape(-1, 4):
         a = np.array((float(x1), float(y1)))
         b = np.array((float(x2), float(y2)))
         vector = b - a
