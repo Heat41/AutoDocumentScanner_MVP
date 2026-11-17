@@ -112,6 +112,8 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
     side_recovery_rows = _list(side_recovery.get("candidates"))
     paired_alignment = _dict(report.get("pr6_paired_alignment_shadow"))
     paired_rows = _list(paired_alignment.get("candidates"))
+    independent = _dict(report.get("pr6_independent_sides_shadow"))
+    independent_rows = _list(independent.get("candidates"))
     outer_checks = {
         row["source"]: row
         for raw in _list(outer.get("candidate_checks"))
@@ -171,6 +173,12 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             f"paired_alignment_{index}", "Paired Alignment",
             {"corners": paired.get("corners"), "geometry_valid": True},
         ))
+    for index, raw in enumerate(independent_rows[:12]):
+        proposal = _dict(raw)
+        sources.append((
+            f"independent_sides_{index}", "Independent Sides",
+            {"corners": proposal.get("corners"), "geometry_valid": True},
+        ))
 
     display_sources = _balanced_sources(sources, MAX_DISPLAY_CANDIDATES)
     rows = []
@@ -226,6 +234,10 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             _dict(paired_rows[int(name.split("_")[-1])])
             if name.startswith("paired_alignment_") else None
         )
+        independent_item = (
+            _dict(independent_rows[int(name.split("_")[-1])])
+            if name.startswith("independent_sides_") else None
+        )
         rows.append({
             "source": name,
             "family": family,
@@ -251,6 +263,16 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 visualization_remeasured or representative == name
             ),
             "measurements_visual_only": bool(visualization_remeasured),
+            "independent_sides_details": {
+                "parent_source": independent_item.get("parent_source"),
+                "outer_region_source": independent_item.get("outer_region_source"),
+                "paired_side_indices": independent_item.get("paired_side_indices"),
+                "independent_offset_fractions": independent_item.get(
+                    "independent_offset_fractions"
+                ),
+                "side_scores_before": independent_item.get("side_scores_before"),
+                "side_scores_after": independent_item.get("side_scores_after"),
+            } if independent_item is not None else None,
             "paired_alignment_details": {
                 "parent_source": paired_item.get("parent_source"),
                 "outer_region_source": paired_item.get("outer_region_source"),
@@ -338,6 +360,7 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "Outer Region": sum(1 for row in rows if row["family"] == "Outer Region"),
         "Side Recovery": sum(1 for row in rows if row["family"] == "Side Recovery"),
         "Paired Alignment": sum(1 for row in rows if row["family"] == "Paired Alignment"),
+        "Independent Sides": sum(1 for row in rows if row["family"] == "Independent Sides"),
     }
     return {
         "status": "offline_visual_diagnostic_only",
@@ -377,6 +400,40 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "paired_alignment_reason_codes": _codes(
             paired_alignment.get("reason_codes")
         ),
+        "independent_sides_count": min(len(independent_rows), 12),
+        "independent_sides_parents_examined": int(
+            independent.get("parents_examined") or 0
+        ),
+        "independent_sides_reason_codes": _codes(
+            independent.get("reason_codes")
+        ),
+        "independent_sides_parent_checks": [
+            {
+                "source": item.get("source"),
+                "outer_region_source": item.get("outer_region_source"),
+                "status": item.get("status"),
+                "failure_reason": item.get("failure_reason"),
+                "side_checks": [
+                    {
+                        "side_index": check.get("side_index"),
+                        "score_before": _number(check.get("score_before")),
+                        "required_score": _number(check.get("required_score")),
+                        "strongest_score": _number(check.get("strongest_score")),
+                        "strongest_offset_fraction": _number(
+                            check.get("strongest_offset_fraction")
+                        ),
+                        "has_supported_alternative": (
+                            check.get("has_supported_alternative") is True
+                        ),
+                    }
+                    for raw_check in _list(item.get("side_checks"))[:2]
+                    if (check := _dict(raw_check))
+                ],
+                "pairs_evaluated": item.get("pairs_evaluated", 0),
+            }
+            for raw in _list(independent.get("parent_checks"))[:12]
+            if (item := _dict(raw))
+        ],
         "paired_alignment_parent_checks": [
             {
                 "source": item.get("source"),
