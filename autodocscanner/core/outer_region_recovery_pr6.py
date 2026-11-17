@@ -125,7 +125,15 @@ def region_outer_quad_candidates(image, *, max_candidates=12, max_longest=940):
                     count = cv2.countNonZero(mask)
                     if not .012 * h * w <= count <= .87 * h * w:
                         continue
-                    digest = (count // 250, int(np.mean(mask[::16, ::16])))
+                    # Two disjoint regions can have equal pixel counts and
+                    # mean values; do not discard a card because a background
+                    # mask happened to share those aggregate statistics.
+                    digest = (
+                        count,
+                        cv2.resize(
+                            mask, (40, 40), interpolation=cv2.INTER_NEAREST
+                        ).tobytes(),
+                    )
                     if digest in seen_masks:
                         continue
                     seen_masks.add(digest)
