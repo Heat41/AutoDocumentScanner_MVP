@@ -222,6 +222,10 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             })
         ranking = _dict(rank_by_source.get(name))
         assessment = _dict(assessed.get(representative))
+        paired_item = (
+            _dict(paired_rows[int(name.split("_")[-1])])
+            if name.startswith("paired_alignment_") else None
+        )
         rows.append({
             "source": name,
             "family": family,
@@ -248,30 +252,18 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             ),
             "measurements_visual_only": bool(visualization_remeasured),
             "paired_alignment_details": {
-                "parent_source": _dict(paired_rows[int(name.split("_")[-1)]).get(
-                    "parent_source"
-                ),
-                "outer_region_source": _dict(
-                    paired_rows[int(name.split("_")[-1)]
-                ).get("outer_region_source"),
-                "paired_side_indices": _dict(
-                    paired_rows[int(name.split("_")[-1)]
-                ).get("paired_side_indices"),
+                "parent_source": paired_item.get("parent_source"),
+                "outer_region_source": paired_item.get("outer_region_source"),
+                "paired_side_indices": paired_item.get("paired_side_indices"),
                 "shift_fraction_of_pair_gap": _number(
-                    _dict(paired_rows[int(name.split("_")[-1)]).get(
-                        "shift_fraction_of_pair_gap"
-                    )
+                    paired_item.get("shift_fraction_of_pair_gap")
                 ),
-                "translation_original_xy": _dict(
-                    paired_rows[int(name.split("_")[-1)]
-                ).get("translation_original_xy"),
-                "side_scores_before": _dict(
-                    paired_rows[int(name.split("_")[-1)]
-                ).get("side_scores_before"),
-                "side_scores_after": _dict(
-                    paired_rows[int(name.split("_")[-1)]
-                ).get("side_scores_after"),
-            } if name.startswith("paired_alignment_") else None,
+                "translation_original_xy": paired_item.get(
+                    "translation_original_xy"
+                ),
+                "side_scores_before": paired_item.get("side_scores_before"),
+                "side_scores_after": paired_item.get("side_scores_after"),
+            } if paired_item is not None else None,
             "side_recovery_details": {
                 "parent_source": (
                     _dict(side_recovery_rows[int(name.split("_")[-1])])
