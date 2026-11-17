@@ -312,3 +312,56 @@ def test_cli_explicit_pr6_review_requires_opt_in(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         app.main()
     assert exc.value.code == 2
+
+
+
+def test_final_ui_main_auto_action_clears_pending_pr6_request():
+    from autodocscanner.ui.final import FinalScannerUI
+
+    recorded = []
+    fake = SimpleNamespace(
+        files=[Path("synthetic.png")],
+        _processing_active=False,
+        _pr6_review_requested=True,
+        _choose_ktp_processing_mode=lambda: {"accepted": True, "mode": "color"},
+        output_mode=SimpleNamespace(set=lambda mode: recorded.append(mode)),
+        status_text=SimpleNamespace(set=lambda msg: recorded.append(msg)),
+        _ktp_mode_label=lambda mode: "Warna",
+        _start_ktp_processing=lambda: "legacy_started",
+    )
+    assert FinalScannerUI.process_files(fake) == "legacy_started"
+    assert fake._pr6_review_requested is False
+    assert recorded[0] == "color"
+
+
+def test_final_ui_refresh_keeps_pr6_button_independent_from_auto_button(monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    from autodocscanner.ui import final
+
+    states = {"legacy": [], "pr6": []}
+    fake = SimpleNamespace(
+        files=[Path("synthetic.png")],
+        _processing_active=False,
+        _processed_image_paths=lambda: [],
+        process_button=SimpleNamespace(
+            configure=lambda **kwargs: states["legacy"].append(kwargs["state"])
+        ),
+        pr6_review_button=SimpleNamespace(
+            configure=lambda **kwargs: states["pr6"].append(kwargs["state"])
+        ),
+    )
+    monkeypatch.setattr(final, "experimental_pr6_runtime_enabled", lambda: True)
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert states["legacy"][-1] == "normal"
+    assert states["pr6"][-1] == "normal"
+
+    fake._processing_active = True
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert states["legacy"][-1] == "disabled"
+    assert states["pr6"][-1] == "disabled"
+
+    fake._processing_active = False
+    monkeypatch.setattr(final, "experimental_pr6_runtime_enabled", lambda: False)
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert states["legacy"][-1] == "normal"
+    assert states["pr6"][-1] == "disabled"
