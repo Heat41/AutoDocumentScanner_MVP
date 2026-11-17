@@ -466,6 +466,23 @@ class FinalScannerUI(SafeScannerUI):
         )
         self.process_button.pack(side="left", padx=(8, 0))
 
+        # Review is not automatic crop. Expose it as a separate, clearly
+        # named action on the experimental branch only. The main auto button
+        # retains its original processing workflow even with this flag set.
+        self.pr6_review_button = None
+        if experimental_pr6_runtime_enabled():
+            self.pr6_review_button = ttk.Button(
+                self._action_panel,
+                text="Review PR6",
+                style="Secondary.TButton",
+                command=self.run_pr6_review,
+                state="disabled",
+                width=11,
+            )
+            self.pr6_review_button.pack(
+                side="left", padx=(8, 0)
+            )
+
     def _preview_card(self, parent, title):
         frame = ttk.Frame(
             parent,
@@ -1971,6 +1988,18 @@ class FinalScannerUI(SafeScannerUI):
                 )
             )
 
+        pr6_review_button = getattr(self, "pr6_review_button", None)
+        if pr6_review_button is not None:
+            pr6_review_button.configure(
+                state=(
+                    "normal" if (
+                        experimental_pr6_runtime_enabled()
+                        and has_files
+                        and not self._processing_active
+                    ) else "disabled"
+                )
+            )
+
         save_button = getattr(self, "save_button", None)
         if save_button is not None:
             save_button.configure(
@@ -2022,6 +2051,10 @@ class FinalScannerUI(SafeScannerUI):
         self._refresh_ktp_action_state()
 
     def process_files(self):
+        # Always preserve the existing automatic scanner path. PR6 review
+        # has its own button and never masquerades as an auto-cropped result.
+        if getattr(self, "_processing_active", False):
+            return
         if not self.files:
             return super().process_files()
 
@@ -2035,7 +2068,22 @@ class FinalScannerUI(SafeScannerUI):
             "Mode hasil: "
             f"{self._ktp_mode_label(selected_mode)}"
         )
+        self._pr6_review_requested = False
+        return self._start_ktp_processing()
 
+    def run_pr6_review(self):
+        """Explicit PR6 evidence review: never crop without confirmation."""
+        if (not experimental_pr6_runtime_enabled()
+                or not self.files
+                or getattr(self, "_processing_active", False)):
+            return
+        self._pr6_review_requested = True
+        self.status_text.set(
+            "Meninjau batas fisik KTP dengan PR6 — tanpa crop otomatis."
+        )
+        return self._start_ktp_processing()
+
+    def _start_ktp_processing(self):
         self._processing_active = True
         self._refresh_ktp_action_state()
         self._show_loading_popup()
@@ -2043,6 +2091,7 @@ class FinalScannerUI(SafeScannerUI):
         try:
             result = super().process_files()
         except Exception:
+            self._pr6_review_requested = False
             self._processing_active = False
             self._refresh_ktp_action_state()
             self._hide_loading_popup()
