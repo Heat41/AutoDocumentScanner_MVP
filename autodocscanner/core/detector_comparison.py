@@ -18,6 +18,9 @@ from autodocscanner.core.region_context_pr6 import inspect_region_context
 from autodocscanner.core.side_boundary_recovery_pr6 import (
     recover_one_side_hypotheses, prepare_side_recovery_lab,
 )
+from autodocscanner.core.paired_boundary_alignment_pr6 import (
+    propose_paired_alignment,
+)
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -354,6 +357,52 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
                 ["all_recovered_hypotheses_overlap_previous_candidates"]
                 if hypotheses_before_dedup else
                 ["no_side_shift_passed_visual_evidence_and_geometry"]
+            ),
+        }
+
+        # A parent may have both opposite edges translated in the SAME
+        # direction (rather than just one misplaced side). Require evidence
+        # gain on both, and evaluate after all PR6 gates like one-side review.
+        paired = []
+        paired_hypotheses_before_dedup = 0
+        for recovered_index, parent in enumerate(recovered[:12]):
+            for variant in propose_paired_alignment(
+                image, parent["corners"],
+                pair_side_index=parent["changed_side_index"] % 2,
+                prepared=side_recovery_prepared, max_results=1,
+            ):
+                paired_hypotheses_before_dedup += 1
+                quad = np.asarray(variant["corners"], dtype=np.float32)
+                if any(
+                    float(np.linalg.norm(quad - prior, axis=1).mean())
+                    / diagonal < .018
+                    for prior in seen_corners
+                ):
+                    continue
+                seen_corners.append(quad)
+                paired.append({
+                    **variant,
+                    "parent_source": f"side_recovery_{recovered_index}",
+                    "outer_region_source": parent["parent_source"],
+                })
+                if len(paired) >= 12:
+                    break
+            if len(paired) >= 12:
+                break
+        report["pr6_paired_alignment_shadow"] = {
+            "status": "offline_visual_hypotheses_only",
+            "auto_select": None,
+            "auto_crop_allowed": False,
+            "parents_examined": len(recovered[:12]),
+            "hypotheses_before_dedup": paired_hypotheses_before_dedup,
+            "candidates": paired,
+            "candidate_count": len(paired),
+            "reason_codes": (
+                [] if paired else
+                ["no_single_side_parent"] if not recovered else
+                ["all_paired_hypotheses_overlap_previous_candidates"]
+                if paired_hypotheses_before_dedup else
+                ["no_opposite_sides_both_improved"]
             ),
         }
     if expected is not None:
