@@ -25,3 +25,10 @@ jobs:
       - name: PR6 runtime and UI synthetic regression
         run: |
           python -m pytest tests/ktp/test_pr6_runtime_review.py tests/ui/test_pr6_runtime_review_flow.py tests/ui/test_manual_fallback_bridge_pr6.py tests/ktp/test_review_gate_consolidation_pr6.py -q
+      - name: Install virtual display for real Tk geometry regression
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb python3-tk
+      - name: Test action buttons at compact and narrow window sizes
+        run: |
+          xvfb-run -a python -m pytest tests/ui/test_pr6_responsive_action_layout.py -v
