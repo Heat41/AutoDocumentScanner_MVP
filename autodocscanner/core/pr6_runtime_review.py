@@ -67,6 +67,7 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
         analyzer(
             image, expected=None, include_line_candidates=True,
             include_chroma_candidates=True,
+            include_region_candidates=True,
         )
         if analyzer is compare_detectors else
         analyzer(image, expected=None)
