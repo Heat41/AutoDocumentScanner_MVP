@@ -228,3 +228,93 @@ def test_visual_snapshot_keeps_recovered_side_in_separate_family():
     assert recovered["outer_recovery_check"] is None
     assert debug["auto_select"] is None
     assert debug["auto_crop_allowed"] is False
+
+
+
+@pytest.mark.parametrize("rotation", [0, 19, 48, 92, 134, 159])
+def test_skewed_candidate_side_recovery_with_perspective_and_texture(rotation):
+    image, true = _scene(rotation, textured=True)
+    wrong = _wrong_one_side(true, shift=110)
+    # Make the wrong side nonparallel to the physical card edge. Pure
+    # translations previously could not fit the real boundary.
+    a, b = true[0].astype(float), true[1].astype(float)
+    direction = b - a
+    inward = np.array([-direction[1], direction[0]])
+    inward /= np.linalg.norm(inward)
+    if np.dot(inward, true.mean(axis=0) - (a + b)/2) < 0:
+        inward = -inward
+    wrong[0] += inward * 18
+    wrong[1] -= inward * 18
+    before = image.copy()
+    candidates = recover_one_side_hypotheses(image, wrong, max_results=4)
+    assert candidates
+    assert min(
+        _matching_corner_error(candidate["corners"], true)
+        for candidate in candidates
+    ) < 14
+    assert any(
+        abs(item["side_tilt_fraction_of_parent_gap"]) > 0
+        for item in candidates
+    )
+    assert np.array_equal(image, before)
+
+
+def test_oversized_background_quadrilateral_can_shrink_below_old_area_gate():
+    image, true = _scene(rotation=18, textured=True)
+    # Padding keeps a severely displaced side within the source frame.
+    padded = cv2.copyMakeBorder(
+        image, 160, 160, 160, 160,
+        cv2.BORDER_CONSTANT, value=(155, 169, 175),
+    )
+    true = true + 160
+    oversized = _wrong_one_side(true, shift=225)
+    original_error = _matching_corner_error(oversized, true)
+    assert original_error > 100
+    candidates = recover_one_side_hypotheses(
+        padded, oversized, max_results=4
+    )
+    assert candidates
+    assert min(
+        _matching_corner_error(item["corners"], true)
+        for item in candidates
+    ) < 15
+
+
+def test_prepared_scaled_lab_is_reusable_without_changing_original_image():
+    from autodocscanner.core.side_boundary_recovery_pr6 import (
+        prepare_side_recovery_lab,
+    )
+
+    image, true = _scene(20)
+    enlarged = cv2.resize(image, (1660, 1240))
+    wrong = _wrong_one_side(true) * 2
+    prepared = prepare_side_recovery_lab(enlarged, max_longest=950)
+    assert prepared is not None
+    lab, scale = prepared
+    assert lab.dtype == np.float32 and 0 < scale < 1
+    assert max(lab.shape[:2]) <= 950
+    before = enlarged.copy()
+    candidates = recover_one_side_hypotheses(
+        enlarged, wrong, prepared=prepared, max_results=4,
+    )
+    assert candidates
+    assert min(
+        _matching_corner_error(item["corners"], true * 2)
+        for item in candidates
+    ) < 25
+    assert np.array_equal(enlarged, before)
+
+
+def test_no_unverified_photo_pixels_or_personal_fields_in_recovery_report():
+    image, true = _scene(22)
+    proposals = recover_one_side_hypotheses(
+        image, _wrong_one_side(true),
+    )
+    assert proposals
+    for proposal in proposals:
+        assert proposal["auto_select"] is None
+        assert proposal["auto_crop_allowed"] is False
+        assert "image" not in proposal
+        assert "identity" not in proposal
+        assert "expected" not in proposal
+        assert "ground_truth" not in proposal
