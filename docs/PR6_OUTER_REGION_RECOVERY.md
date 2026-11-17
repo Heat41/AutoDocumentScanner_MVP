@@ -101,3 +101,57 @@ fresh unseen holdout data.
 
 The next decision is based on real photo evaluation, not visual similarity
 to an individual debugging screenshot.
+
+
+## Follow-up: Outer Region selects a separate background object
+
+A field screenshot showed the first Outer Region overlay on an **object
+outside the card**. The previous generator sorted most region hypotheses by
+compactness and area. Those two measures are not KTP identification, and a
+clean external rectangle can look better than the card.
+
+The experimental follow-up adds:
+
+1. `region_context_pr6.py` with **interior spatial edge coverage**,
+   repeated straight interior strokes, intersections with candidate
+   geometries from other methods, and nested smaller regions.
+2. Optional **contextual ranking** of Outer Region proposals using those
+   observations. This is used by explicit `Review PR6` only; the old
+   automatic processing flow is not redirected. The original shape-based
+   generator remains available when contextual ranking is disabled.
+3. Visual warnings for `sparse_internal_structure` and
+   `no_independent_geometric_corroboration`, with precise values for the
+   inspected candidate. Other methods can share the same underlying image
+   features, so their agreement is **not independent proof**.
+4. **Balanced visual display slots** across Stable, Adaptive, Contour V2,
+   Four-Line, Chroma and Outer Region. Many earlier contours can no longer
+   occupy all 40 visible slots and hide an outer-region alternative.
+5. A synthetic distractor case where a separate colored rectangle is
+   present elsewhere in the frame. A *different* case where the distractor
+   actually occludes the physical card border remains ambiguous and must
+   not be interpreted as reliable automatic recovery.
+
+**Important:** these additions help inspect and prioritize *candidate
+hypotheses*, not definitively label KTP versus other objects. Backgrounds
+with texture or documents with little internal print can confuse the cues.
+A case where the actual card boundary is absent from the generated
+candidates cannot be corrected by ranking. Do not declare real-photo
+accuracy improved without original-image annotations and fresh unseen
+holdout results.
+
+## Windows debugging loop
+
+```powershell
+$env:AUTODOCSCANNER_PR6_RUNTIME_REVIEW = "1"
+python app.py --ui
+```
+
+Choose a photo, click **Review PR6**, select **Outer Region** candidates
+in **Lihat Kandidat**, and inspect region-context warnings in the
+right-hand detail pane. Do not mistake the initially displayed candidate
+for a selected or verified crop. None of these candidates are automatically
+applied to the scanner or saved.
+
+To make objective progress, compare normalized physical-card corner errors
+and severe false-crop rates on a local set of independently annotated, new
+photos. Keep real KTP images and JSON outside the repository.
