@@ -163,6 +163,11 @@ def format_pr6_candidate_details(candidate, diagnostics):
             "Perpindahan relatif: "
             + _num(relocated.get("shift_fraction_of_parent_gap"))
         )
+        if relocated.get("side_tilt_fraction_of_parent_gap") is not None:
+            info.append(
+                "Perubahan kemiringan relatif: "
+                + _num(relocated.get("side_tilt_fraction_of_parent_gap"))
+            )
         info.append(
             "Bukti perubahan warna sepanjang sisi: "
             + _num(relocated.get("side_score_before"))
