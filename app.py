@@ -120,7 +120,15 @@ def main():
         help="Buka antarmuka desktop final.",
     )
 
+    parser.add_argument(
+        "--pr6-review",
+        action="store_true",
+        help="Analisis PR6 tanpa crop (mode eksperimen).",
+    )
+
     args = parser.parse_args()
+    if args.ui and args.pr6_review:
+        parser.error("Gunakan --ui atau --pr6-review, bukan keduanya.")
 
     if args.ui:
         from autodocscanner.ui.stage2 import main as run_ui
@@ -128,7 +136,13 @@ def main():
         run_ui()
         return
 
-    if os.environ.get("AUTODOCSCANNER_PR6_RUNTIME_REVIEW") == "1":
+    if args.pr6_review:
+        # Environment opt-in exposes review actions, but does not silently
+        # replace the ordinary command-line automatic batch scanner.
+        if os.environ.get("AUTODOCSCANNER_PR6_RUNTIME_REVIEW") != "1":
+            parser.error(
+                "--pr6-review membutuhkan AUTODOCSCANNER_PR6_RUNTIME_REVIEW=1."
+            )
         # Lazy import keeps the legacy CLI startup and dependencies unchanged
         # when the experimental flag is absent.
         from autodocscanner.core.pr6_runtime_review import (
