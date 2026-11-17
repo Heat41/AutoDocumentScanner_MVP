@@ -191,3 +191,40 @@ def test_candidate_snapshot_is_limited_even_with_many_v2_candidates():
     report["v2"] = [deepcopy(report["v2"][0]) for _ in range(100)]
     snapshot = build_pr6_visual_diagnostics(report, (240, 360))
     assert snapshot["candidate_count"] <= 40
+
+
+
+def test_chroma_family_and_source_counts_visible_without_auto_crop():
+    report = _report()
+    report["pr6_v2_proposal_origins"] = ["chroma", "four_line"]
+    report["pr6_chroma_proposal_count"] = 1
+    report["pr6_line_proposal_count"] = 1
+    report["v2_rejected_post_order"] = 3
+    result = build_pr6_visual_diagnostics(report, (240, 360, 3))
+    assert result["family_counts"] == {
+        "Stable": 1, "Adaptive": 0, "Kontur V2": 0,
+        "Four-Line": 1, "Chroma": 1,
+    }
+    assert result["generated_chroma_count"] == 1
+    assert result["generated_four_line_count"] == 1
+    assert result["rejected_after_geometry"] == 3
+    assert result["auto_crop_allowed"] is False
+
+
+def test_per_candidate_visual_measurements_do_not_change_selection_gate():
+    image = np.full((240, 360, 3), 130, dtype=np.uint8)
+    report = _report()
+    before = deepcopy(report)
+    visual = build_pr6_visual_diagnostics(
+        report, image.shape, image=image,
+    )
+    stable, contour, equivalent = visual["candidates"]
+    assert all(c["measurements_visual_only"] for c in visual["candidates"])
+    assert stable["physical_measurements_for_this_quad"] is True
+    assert equivalent["physical_measurements_for_this_quad"] is True
+    assert contour["physical_measurements_for_this_quad"] is True
+    assert equivalent["side_evidence"][0]["local_coverage"] is not None
+    assert contour["side_evidence"][0]["local_coverage"] is not None
+    assert visual["review_decision"] == "manual_review"
+    assert visual["auto_crop_allowed"] is False
+    assert report == before
