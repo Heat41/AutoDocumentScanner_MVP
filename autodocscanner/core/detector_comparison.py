@@ -10,6 +10,7 @@ import numpy as np
 
 from autodocscanner.core.experimental_candidates import contour_candidates
 from autodocscanner.core.line_quad_proposals_pr6 import line_quad_candidates
+from autodocscanner.core.chroma_quad_proposals_pr6 import chroma_quad_candidates
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -71,7 +72,8 @@ def _filter_valid_candidates(evaluated):
 
 
 def compare_detectors(image, *, expected=None, max_proposals=24,
-                      include_line_candidates=False):
+                      include_line_candidates=False,
+                      include_chroma_candidates=False):
     """Side-by-side diagnostics. Scores are NOT proof of correct KTP bounds."""
     stable = StableBaselinePerspectiveEngine()
     adaptive = AutoPerspectiveEngine()
@@ -105,6 +107,25 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             proposals.append(points)
             proposal_origins.append("four_line")
             line_added += 1
+    chroma_added = 0
+    if include_chroma_candidates:
+        # Lab a/b channels can reveal card/background discontinuity when
+        # grayscale contrast is weak. These hypotheses do NOT outrank or
+        # bypass the existing physical-boundary and conflict review gates.
+        for proposed in chroma_quad_candidates(image, max_candidates=8):
+            points = np.asarray(proposed, dtype=np.float32)
+            if points.shape != (4, 2) or not np.isfinite(points).all():
+                continue
+            if any(
+                float(np.linalg.norm(
+                    points - np.asarray(old, dtype=np.float32), axis=1,
+                ).mean()) / max(float(np.hypot(*image.shape[:2])), 1.) < .018
+                for old in proposals
+            ):
+                continue
+            proposals.append(points)
+            proposal_origins.append("chroma")
+            chroma_added += 1
     evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
     # Match origin labels to post-validation v2 indices; rejected candidates
     # must not shift the display labels. These labels carry no authority.
@@ -113,6 +134,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
         if item.get("geometry_valid") is True
     ]
     report["pr6_line_proposal_count"] = line_added
+    report["pr6_chroma_proposal_count"] = chroma_added
     # Filter using the actual ordered corners that are reported and warped.
     report["v2"], report["v2_rejected_post_order"] = _filter_valid_candidates(evaluated)
     report["v2_proposal_count"] = len(report["v2"])
@@ -243,6 +265,10 @@ def main():
         "--include-line-proposals", action="store_true",
         help="Include experimental four-line KTP boundary candidates for evaluation only",
     )
+    parser.add_argument(
+        "--include-chroma-proposals", action="store_true",
+        help="Include experimental Lab chromatic-edge quadrilaterals for evaluation only",
+    )
     args = parser.parse_args()
     annotations = _load_expected(args.annotations)
     results = {}
@@ -256,6 +282,7 @@ def main():
         results[file.name] = compare_detectors(
             image, expected=annotations.get(file.name),
             include_line_candidates=args.include_line_proposals,
+            include_chroma_candidates=args.include_chroma_proposals,
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
