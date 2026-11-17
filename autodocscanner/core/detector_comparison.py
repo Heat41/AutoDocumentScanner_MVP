@@ -364,13 +364,22 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
         # direction (rather than just one misplaced side). Require evidence
         # gain on both, and evaluate after all PR6 gates like one-side review.
         paired = []
+        paired_checks = []
         paired_hypotheses_before_dedup = 0
         for recovered_index, parent in enumerate(recovered[:12]):
-            for variant in propose_paired_alignment(
+            details = {}
+            variants = propose_paired_alignment(
                 image, parent["corners"],
                 pair_side_index=parent["changed_side_index"] % 2,
                 prepared=side_recovery_prepared, max_results=1,
-            ):
+                diagnostics=details,
+            )
+            paired_checks.append({
+                "source": f"side_recovery_{recovered_index}",
+                "outer_region_source": parent["parent_source"],
+                **details,
+            })
+            for variant in variants:
                 paired_hypotheses_before_dedup += 1
                 quad = np.asarray(variant["corners"], dtype=np.float32)
                 if any(
@@ -397,6 +406,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             "hypotheses_before_dedup": paired_hypotheses_before_dedup,
             "candidates": paired,
             "candidate_count": len(paired),
+            "parent_checks": paired_checks,
             "reason_codes": (
                 [] if paired else
                 ["no_single_side_parent"] if not recovered else
