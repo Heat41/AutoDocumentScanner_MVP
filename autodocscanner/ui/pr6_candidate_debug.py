@@ -142,6 +142,51 @@ def format_pr6_candidate_details(candidate, diagnostics):
             "Metrik sisi dihitung ulang khusus untuk tampilan; bukan "
             "dasar pemilihan otomatis."
         )
+    paired = candidate.get("paired_alignment_details")
+    if isinstance(paired, dict):
+        info.append("")
+        info.append("PENYESUAIAN DUA SISI — HANYA PREVIEW")
+        info.append(
+            "Kandidat asal: " + str(paired.get("parent_source") or "?")
+            + " (dari " + str(paired.get("outer_region_source") or "?") + ")"
+        )
+        indices = paired.get("paired_side_indices")
+        if isinstance(indices, list) and len(indices) == 2:
+            info.append(
+                "Dua sisi berhadapan: "
+                + " dan ".join(str(i + 1) for i in indices if isinstance(i, int))
+                + " dari 4 (urutan poligon)."
+            )
+        info.append(
+            "Pergeseran relatif: "
+            + _num(paired.get("shift_fraction_of_pair_gap"))
+        )
+        displacement = paired.get("translation_original_xy")
+        if isinstance(displacement, list) and len(displacement) == 2:
+            info.append(
+                "Perpindahan foto asli (x,y): "
+                + ", ".join(_num(value) for value in displacement)
+                + " piksel"
+            )
+        before = paired.get("side_scores_before")
+        after = paired.get("side_scores_after")
+        if (isinstance(before, list) and len(before) == 2
+                and isinstance(after, list) and len(after) == 2):
+            info.append(
+                "Bukti kedua tepi: "
+                + " | ".join(
+                    f"{_num(b)} → {_num(a)}"
+                    for b, a in zip(before, after)
+                )
+            )
+        info.append(
+            "KEDUA sisi harus menunjukkan peningkatan. Skor bukan "
+            "probabilitas benar, dan persegi panjang pada latar "
+            "juga bisa menghasilkan perubahan warna kuat."
+        )
+        info.append(
+            "Hasil ini TIDAK ikut ranking, Review Gate, atau auto-crop."
+        )
     relocated = candidate.get("side_recovery_details")
     if isinstance(relocated, dict):
         info.append("")
@@ -354,7 +399,8 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         f"Four-Line {counts.get('Four-Line', 0)} • "
         f"Chroma {counts.get('Chroma', 0)} • "
         f"Outer Region {counts.get('Outer Region', 0)} • "
-        f"Side Recovery {counts.get('Side Recovery', 0)}"
+        f"Side Recovery {counts.get('Side Recovery', 0)} • "
+        f"Paired Alignment {counts.get('Paired Alignment', 0)}"
     )
     ttk.Label(root, text=summary, wraplength=880).pack(
         anchor="w", pady=(0, 6)
@@ -379,6 +425,29 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
                 f"Side Recovery: {tested} kandidat asal diperiksa; "
                 "belum ditemukan perpindahan satu sisi yang memenuhi "
                 "syarat bukti tepi dan geometri."
+            )
+        ttk.Label(
+            root, text=explanation, wraplength=880,
+        ).pack(anchor="w", pady=(0, 6))
+
+    if (diagnostics.get("generated_paired_alignment_count", 0) == 0
+            and diagnostics.get("paired_alignment_reason_codes")):
+        examined = diagnostics.get("paired_alignment_parents_examined") or 0
+        paired_reasons = diagnostics["paired_alignment_reason_codes"]
+        if "no_single_side_parent" in paired_reasons:
+            explanation = (
+                "Paired Alignment: tidak ada kandidat Side Recovery "
+                "yang bisa dijadikan titik awal."
+            )
+        elif "all_paired_hypotheses_overlap_previous_candidates" in paired_reasons:
+            explanation = (
+                f"Paired Alignment: {examined} kandidat diperiksa; "
+                "hasilnya sudah ada dalam daftar sebelumnya."
+            )
+        else:
+            explanation = (
+                f"Paired Alignment: {examined} kandidat diperiksa; "
+                "belum ada pergeseran yang memperkuat dua sisi berhadapan."
             )
         ttk.Label(
             root, text=explanation, wraplength=880,
