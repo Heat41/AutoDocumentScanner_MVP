@@ -203,7 +203,7 @@ def test_chroma_family_and_source_counts_visible_without_auto_crop():
     result = build_pr6_visual_diagnostics(report, (240, 360, 3))
     assert result["family_counts"] == {
         "Stable": 1, "Adaptive": 0, "Kontur V2": 0,
-        "Four-Line": 1, "Chroma": 1,
+        "Four-Line": 1, "Chroma": 1, "Outer Region": 0,
     }
     assert result["generated_chroma_count"] == 1
     assert result["generated_four_line_count"] == 1
@@ -228,3 +228,34 @@ def test_per_candidate_visual_measurements_do_not_change_selection_gate():
     assert visual["review_decision"] == "manual_review"
     assert visual["auto_crop_allowed"] is False
     assert report == before
+
+
+
+def test_outer_region_family_and_perspective_risk_visible_without_auto_crop():
+    report = _report()
+    report["pr6_v2_proposal_origins"] = ["outer_region", "four_line"]
+    report["pr6_region_proposal_count"] = 1
+    report["pr6_outer_region_recovery_shadow"] = {
+        "status": "offline_diagnostic_only", "auto_select": None,
+        "auto_crop_allowed": False,
+        "candidate_checks": [
+            {
+                "source": "v2_0", "status": "manual_review_only",
+                "perspective_feasible": True,
+                "all_sides_measurable": True,
+                "nested_in_larger_quad": True,
+                "chromatic_step_by_side": [
+                    {"coverage": 1.0, "median_lab_step": 10} for _ in range(4)
+                ],
+                "reason_codes": ["possible_internal_rectangle"],
+            },
+        ],
+    }
+    visual = build_pr6_visual_diagnostics(report, (240, 360))
+    assert visual["family_counts"]["Outer Region"] == 1
+    assert visual["generated_outer_region_count"] == 1
+    row = next(r for r in visual["candidates"] if r["family"] == "Outer Region")
+    assert row["outer_recovery_check"]["nested_in_larger_quad"] is True
+    assert "possible_internal_rectangle" in row["outer_recovery_check"]["reason_codes"]
+    assert visual["auto_select"] is None
+    assert visual["auto_crop_allowed"] is False
