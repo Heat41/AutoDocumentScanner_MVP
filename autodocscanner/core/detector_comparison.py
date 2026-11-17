@@ -14,6 +14,7 @@ from autodocscanner.core.chroma_quad_proposals_pr6 import chroma_quad_candidates
 from autodocscanner.core.outer_region_recovery_pr6 import (
     region_outer_quad_candidates, inspect_outer_perspective_hypothesis,
 )
+from autodocscanner.core.region_context_pr6 import inspect_region_context
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -165,10 +166,18 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
     # Stage 3 geometric/color-border plausibility, *read-only*. Not inserted
     # into any existing PR6 approval logic; nested rectangles remain suspect.
     if include_region_candidates:
+        contextual_candidates = [
+            {"family": name, "corners": report[name]["corners"]}
+            for name in ("stable", "adaptive")
+            if report[name].get("geometry_valid")
+        ]
+        contextual_candidates.extend({
+            "family": origin, "corners": item["corners"]
+        } for item, origin in zip(
+            report["v2"], report["pr6_v2_proposal_origins"]
+        ) if item.get("geometry_valid"))
         other_quads = [
-            row["corners"] for row in
-            [report["stable"], report["adaptive"]] + report["v2"]
-            if row.get("geometry_valid") and row.get("corners") is not None
+            row["corners"] for row in contextual_candidates
         ]
         report["pr6_outer_region_recovery_shadow"] = {
             "status": "offline_diagnostic_only",
@@ -185,6 +194,17 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
                                 item["corners"], other,
                                 atol=1e-2, rtol=0,
                             )
+                        ],
+                    ),
+                    "region_context": inspect_region_context(
+                        image, item["corners"],
+                        other_candidates=[
+                            other for other in contextual_candidates
+                            if not np.allclose(
+                                item["corners"], other["corners"],
+                                atol=1e-2, rtol=0,
+                            )
+                            and other["family"] != "outer_region"
                         ],
                     ),
                 }
