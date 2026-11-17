@@ -1,0 +1,191 @@
+"""Bounded, read-only PR6 candidate diagnostics for a local visual overlay.
+
+Contains only original-image quad coordinates and image-derived numerical
+evidence. No image bytes, personal text, filenames, annotations, paths or
+ground-truth errors. It is deliberately NOT a crop, ranking, or acceptance API.
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+
+MAX_DISPLAY_CANDIDATES = 40
+
+
+def _dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _number(value):
+    try:
+        if isinstance(value, bool) or value is None:
+            return None
+        v = float(value)
+        return round(v, 4) if math.isfinite(v) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _points(value, image_shape):
+    try:
+        arr = np.asarray(value, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if arr.shape != (4, 2) or not np.isfinite(arr).all():
+        return None
+    h, w = image_shape
+    if ((arr[:, 0] < -.04 * w).any() or (arr[:, 0] > 1.04 * w).any()
+            or (arr[:, 1] < -.04 * h).any() or
+            (arr[:, 1] > 1.04 * h).any()):
+        return None
+    return [[round(float(x), 3), round(float(y), 3)] for x, y in arr]
+
+
+def _codes(value):
+    return [x for x in _list(value) if isinstance(x, str) and len(x) <= 120][:24]
+
+
+def build_pr6_visual_diagnostics(report, image_shape):
+    """Make a small immutable-by-convention display snapshot from PR6 report.
+
+    Supports stable/adaptive and all post-validation V2 candidate indices,
+    including provenance of optional four-independent-line proposals.
+    Every source can be selected regardless of the final manual/preview route.
+    """
+    report = _dict(report)
+    try:
+        h, w = [int(x) for x in image_shape[:2]]
+    except (TypeError, ValueError, IndexError, OverflowError):
+        h = w = 0
+    if not 16 <= h <= 100000 or not 16 <= w <= 100000:
+        return {
+            "status": "invalid_image", "image_shape": None,
+            "candidates": [], "auto_select": None, "auto_crop_allowed": False,
+        }
+
+    selection = _dict(report.get("pr6_selection_shadow"))
+    combined = _dict(report.get("pr6_combined_candidate_shadow"))
+    localization = _dict(report.get("pr6_boundary_localization_shadow"))
+    physical = _dict(report.get("pr6_physical_boundary_shadow"))
+    decision = _dict(report.get("pr6_candidate_decision_shadow"))
+    gate = _dict(report.get("pr6_review_consolidation_shadow"))
+    ranked = _dict(report.get("v3_ranking"))
+    v2 = _list(report.get("v2"))
+    origins = _list(report.get("pr6_v2_proposal_origins"))
+
+    groups = {}
+    for group in _list(selection.get("groups")):
+        group = _dict(group)
+        rep = group.get("representative")
+        if not isinstance(rep, str):
+            continue
+        for name in _list(group.get("sources")):
+            if isinstance(name, str):
+                groups[name] = rep
+
+    combined_by_source = {
+        row["source"]: row
+        for raw in _list(combined.get("candidates"))
+        if (row := _dict(raw)) and isinstance(row.get("source"), str)
+    }
+    assessed = {
+        row["source"]: row
+        for raw in _list(decision.get("candidate_assessments"))
+        if (row := _dict(raw)) and isinstance(row.get("source"), str)
+    }
+    rank_by_source = {
+        row["source"]: row
+        for raw in _list(ranked.get("ranking"))
+        if (row := _dict(raw)) and isinstance(row.get("source"), str)
+    }
+
+    sources = [
+        ("stable", "Stable", _dict(report.get("stable"))),
+        ("adaptive", "Adaptive", _dict(report.get("adaptive"))),
+    ]
+    for index, item in enumerate(v2):
+        origin = origins[index] if index < len(origins) else "contour"
+        family = "Four-Line" if origin == "four_line" else "Kontur V2"
+        sources.append((f"v2_{index}", family, _dict(item)))
+
+    rows = []
+    for name, family, source in sources[:MAX_DISPLAY_CANDIDATES]:
+        points = _points(source.get("corners"), (h, w))
+        if points is None:
+            continue
+
+        representative = groups.get(name)
+        combined_info = _dict(combined_by_source.get(representative))
+        localization_info = (
+            _dict(localization.get(name)) if representative == name else {}
+        )
+        physical_info = (
+            _dict(physical.get(name)) if representative == name else {}
+        )
+        outer_sides = _dict(source.get("boundary_evidence")).get("side_support")
+        local_sides = _list(localization_info.get("side_localization"))
+        physical_sides = _list(physical_info.get("side_measurements"))
+        sides = []
+        for index in range(4):
+            loc = _dict(local_sides[index]) if index < len(local_sides) else {}
+            phys = _dict(physical_sides[index]) if index < len(physical_sides) else {}
+            sides.append({
+                "external_support": _number(
+                    outer_sides[index]
+                    if isinstance(outer_sides, list) and index < len(outer_sides)
+                    else None
+                ),
+                "local_coverage": _number(loc.get("coverage")),
+                "median_offset_fraction": _number(loc.get("median_offset_fraction")),
+                "offset_spread": _number(loc.get("offset_spread")),
+                "inner_outer_contrast": _number(phys.get("contrast")),
+                "contrast_coverage": _number(phys.get("coverage")),
+            })
+        ranking = _dict(rank_by_source.get(name))
+        assessment = _dict(assessed.get(representative))
+        rows.append({
+            "source": name,
+            "family": family,
+            "corners": points,
+            "selection_representative": representative,
+            "ranking_score": _number(ranking.get("score")),
+            "geometry_valid": source.get("geometry_valid") is True,
+            "area_ratio": _number(source.get("area_ratio")),
+            "side_evidence": sides,
+            "side_checks": {
+                key: combined_info.get("side_checks", {}).get(key)
+                for key in ("supported_external", "localized_aligned",
+                            "measurable_contrast")
+            } if isinstance(combined_info.get("side_checks"), dict) else {},
+            "candidate_warnings": _codes(combined_info.get("warnings")),
+            "ranking_warnings": _codes(ranking.get("review_reasons")),
+            "evidence_state": (
+                assessment.get("evidence_state")
+                if isinstance(assessment.get("evidence_state"), str) else None
+            ),
+            "assessment_reasons": _codes(assessment.get("reasons")),
+            "physical_measurements_for_this_quad": representative == name,
+        })
+
+    return {
+        "status": "offline_visual_diagnostic_only",
+        "image_shape": [h, w],
+        "candidate_count": len(rows),
+        "candidates": rows,
+        "review_decision": (
+            gate.get("status") if gate.get("status") in (
+                "manual_review", "preview_review") else "manual_review"
+        ),
+        "decision_reason_codes": _codes(gate.get("reason_codes")),
+        "selection_warnings": _codes(selection.get("warnings")),
+        "auto_select": None,
+        "auto_crop_allowed": False,
+        "physical_boundary_verified": False,
+        "requires_explicit_confirmation": True,
+    }
