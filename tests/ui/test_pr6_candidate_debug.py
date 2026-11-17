@@ -229,3 +229,54 @@ def test_zero_side_recovery_message_is_visible_in_real_tk(tmp_path):
         popup.destroy()
     finally:
         root.destroy()
+
+
+
+def test_paired_alignment_details_identify_both_sides_without_auto_crop():
+    diagnostic = _diag()
+    candidate = dict(diagnostic["candidates"][0])
+    candidate["family"] = "Paired Alignment"
+    candidate["source"] = "paired_alignment_0"
+    candidate["ranking_score"] = None
+    candidate["paired_alignment_details"] = {
+        "parent_source": "side_recovery_3",
+        "outer_region_source": "v2_7",
+        "paired_side_indices": [0, 2],
+        "shift_fraction_of_pair_gap": -.13,
+        "translation_original_xy": [0, -26],
+        "side_scores_before": [1.5, 2.1],
+        "side_scores_after": [27.2, 30.8],
+    }
+    rendered = format_pr6_candidate_details(candidate, diagnostic)
+    assert "PENYESUAIAN DUA SISI" in rendered
+    assert "side_recovery_3" in rendered
+    assert "v2_7" in rendered
+    assert "1 dan 3 dari 4" in rendered
+    assert "Bukti kedua tepi" in rendered
+    assert "KEDUA sisi harus menunjukkan peningkatan" in rendered
+    assert "TIDAK ikut ranking, Review Gate, atau auto-crop" in rendered
+
+
+def test_real_tk_no_paired_alignment_explains_two_side_evidence(tmp_path):
+    path = tmp_path / "anonymous_synthetic.png"
+    Image.new("RGB", (360, 240), "#B7C6D8").save(path)
+    report = _diag()
+    report.update({
+        "generated_paired_alignment_count": 0,
+        "paired_alignment_parents_examined": 4,
+        "paired_alignment_reason_codes": ["no_opposite_sides_both_improved"],
+    })
+    root = _tk_root()
+    root.withdraw()
+    try:
+        popup = open_pr6_candidate_debug_dialog(root, path, report)
+        popup.update()
+        labels = [str(w.cget("text")) for w in _children(popup, ttk.Label)]
+        assert any(
+            "4 kandidat diperiksa" in text
+            and "memperkuat dua sisi berhadapan" in text
+            for text in labels
+        )
+        popup.destroy()
+    finally:
+        root.destroy()
