@@ -27,7 +27,8 @@ python app.py --ui
    opens for the currently selected photo when a report is available.
 4. Choose **Stable**, **Adaptive**, **Kontur V2**, or **Four-Line** in the
    candidate selector to compare different original-image four-corner
-   hypotheses. Individual candidate availability depends on the input.
+   hypotheses, or **Outer Region** for region-first recovered outer
+   corners. Individual candidate availability depends on the input.
 5. Read per-side external support, edge localization, inside/outside
    contrast, candidate warnings, and **reason codes** that blocked preview.
 6. Close the debug window. Use **Koreksi Manual** with magnifier if needed.
@@ -44,6 +45,12 @@ The overlay does not override PR6's `manual_review` decision.
   **not** proof that it is the outer physical KTP boundary.
 - **Orange:** measurements exist but are weak or poorly aligned.
 - **Gray:** evidence on that precise candidate side is missing or incomplete.
+
+The **Outer Region** family additionally shows numerical perspective
+feasibility, chromatic inside/outside side changes, and a possible-internal-
+rectangle warning if the candidate is nested in a larger proposed shape.
+These are review-only diagnostics, **not** a verified card identity or
+permission to crop.
 
 The metrics for a selection-group representative **are not silently copied**
 to a different source geometry in the same group. Missing evidence remains
