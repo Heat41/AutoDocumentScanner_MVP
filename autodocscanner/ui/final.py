@@ -23,6 +23,9 @@ from autodocscanner.ui.manual_fallback_bridge_pr6 import (
     fallback_starting_corners,
     validate_user_confirmed_corners,
 )
+from autodocscanner.ui.pr6_candidate_debug import (
+    open_pr6_candidate_debug_dialog,
+)
 
 
 class FinalScannerUI(SafeScannerUI):
@@ -372,6 +375,22 @@ class FinalScannerUI(SafeScannerUI):
             # Full-width second row: the sidebar becomes 190/160px in
             # compact/narrow mode, so two horizontal buttons would clip.
             self.pr6_review_button.pack(
+                side="top", fill="x", pady=(6, 0)
+            )
+
+        # Available after Review PR6 completes; read-only and never runs
+        # scanning/crop. Full width avoids clipping in narrow sidebars.
+        self.pr6_candidates_button = None
+        if experimental_pr6_runtime_enabled():
+            self.pr6_candidates_button = ttk.Button(
+                file_actions,
+                text="Lihat Kandidat",
+                style="Quiet.TButton",
+                command=self.open_pr6_candidate_debug,
+                state="disabled",
+                width=13,
+            )
+            self.pr6_candidates_button.pack(
                 side="top", fill="x", pady=(6, 0)
             )
 
@@ -2033,6 +2052,34 @@ class FinalScannerUI(SafeScannerUI):
                 )
             )
 
+        debug_button = getattr(self, "pr6_candidates_button", None)
+        if debug_button is not None:
+            index = self._active_file_index()
+            key = (
+                str(self.files[index])
+                if index is not None and 0 <= index < len(self.files)
+                else None
+            )
+            reviews = getattr(self, "_pr6_runtime_review_by_file", {})
+            review = (
+                reviews.get(key)
+                if key is not None and isinstance(reviews, dict) else None
+            )
+            diagnostics = (
+                review.get("visual_debug") if isinstance(review, dict) else None
+            )
+            debug_button.configure(
+                state=(
+                    "normal"
+                    if experimental_pr6_runtime_enabled()
+                    and not self._processing_active
+                    and isinstance(diagnostics, dict)
+                    and diagnostics.get("status") ==
+                    "offline_visual_diagnostic_only"
+                    else "disabled"
+                )
+            )
+
         save_button = getattr(self, "save_button", None)
         if save_button is not None:
             save_button.configure(
@@ -2103,6 +2150,38 @@ class FinalScannerUI(SafeScannerUI):
         )
         self._pr6_review_requested = False
         return self._start_ktp_processing()
+
+    def open_pr6_candidate_debug(self):
+        """Show the selected source's original-image PR6 hypotheses only."""
+        if (not experimental_pr6_runtime_enabled()
+                or getattr(self, "_processing_active", False)):
+            return None
+        index = self._active_file_index()
+        if index is None or not 0 <= index < len(self.files):
+            return None
+        photo_path = self.files[index]
+        reviews = getattr(self, "_pr6_runtime_review_by_file", {})
+        review = (
+            reviews.get(str(photo_path)) if isinstance(reviews, dict) else None
+        )
+        diagnostics = (
+            review.get("visual_debug") if isinstance(review, dict) else None
+        )
+        if not isinstance(diagnostics, dict):
+            self.status_text.set(
+                "Klik Review PR6 untuk menganalisis kandidat pada foto terpilih."
+            )
+            return None
+        try:
+            return open_pr6_candidate_debug_dialog(
+                self, photo_path, diagnostics,
+            )
+        except (OSError, ValueError, tk.TclError):
+            self.status_text.set(
+                "Visual kandidat tidak dapat dibuka. Periksa foto asli "
+                "dan ulangi Review PR6."
+            )
+            return None
 
     def run_pr6_review(self):
         """Explicit PR6 evidence review: never crop without confirmation."""
