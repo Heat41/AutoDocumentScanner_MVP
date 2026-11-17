@@ -82,7 +82,7 @@ def test_proses_otomatis_pr6_never_calls_old_crop_or_writes_file(
     assert not any(fake.output_dir.iterdir())
     assert not fake._processing_active
     assert observed["selected"] == [0]
-    assert any("menunggu review" in msg for msg in observed["status"])
+    assert any("Lihat Kandidat" in msg for msg in observed["status"])
 
 
 def test_manual_review_drops_old_candidate_and_old_output_reference(tmp_path, monkeypatch):
