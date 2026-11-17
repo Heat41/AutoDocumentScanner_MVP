@@ -205,3 +205,40 @@ To inspect locally, enable `AUTODOCSCANNER_PR6_RUNTIME_REVIEW=1`, click
 **Review PR6**, then select **Side Recovery** in Visual Candidate Debugging.
 Compare it to its originating **Outer Region** geometry; do not save the
 recovered quadrilateral automatically.
+
+
+## Follow-up: slanted-side recovery and zero-result explanation
+
+The previous single-side method searched **parallel translations only** and
+accepted at most a 52% quadrilateral area reduction. This is too restrictive
+when an image-relative background rectangle has an incorrect slope or
+includes a large amount of surrounding material. `Side Recovery 0` in
+Visual Debugging previously did not distinguish this from no input proposal.
+
+The experimental follow-up now:
+
+- Checks **offset AND limited endpoint tilt** in each side's image-relative
+  normal direction; no canonical KTP color, face position or sample-specific
+  photo coordinates are used.
+- Allows a larger inwards line move and reduces the strict minimum area
+  preservation for read-only hypotheses only, while retaining convexity,
+  original-image bounds, strong line-transition requirements and a bounded
+  shape check. A false positive is still possible; no acceptance is implied.
+- Prepares one **downsampled Lab image in memory** per PR6 review to avoid
+  repeated full-resolution processing for every Outer Region parent.
+- Exposes a separate **Side Recovery** family, its parent, side index,
+  relative shift/tilt and before/after image evidence in the visual viewer.
+- When there are **zero proposals**, reports how many region parents were
+  examined, and distinguishes missing parents, no supported side shift, and
+  recovered alternatives that overlap existing geometries.
+
+All output stays read-only **after** PR6 decision and manual fallback.
+`Proses Otomatis`, the released detector and the manual four-corner editor
+are unchanged. The feature can return zero on a difficult real image
+without that being an error, because the algorithm must not invent a card
+when image evidence is absent.
+
+Synthetic tests cover different rotations, a skewed wrong edge, a very
+oversized parent, grayscale/colored document regions, large-image scaling,
+images without a document, and preservation of PR6 review decisions.
+**These tests are not accuracy measurements on unseen real KTP photos.**
