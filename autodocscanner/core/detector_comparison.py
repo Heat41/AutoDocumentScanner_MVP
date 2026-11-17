@@ -135,7 +135,19 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
     if include_region_candidates:
         # Region-first geometry is another *hypothesis* source, never an
         # approved document crop. Preserve provenance through post-validation.
-        for candidate in region_outer_quad_candidates(image, max_candidates=12):
+        context_seeds = [
+            {"family": name, "corners": report[name]["corners"]}
+            for name in ("stable", "adaptive")
+            if report[name].get("geometry_valid")
+        ]
+        context_seeds.extend({
+            "family": origin, "corners": np.asarray(candidate, dtype=np.float32)
+        } for origin, candidate in zip(proposal_origins, proposals))
+        for candidate in region_outer_quad_candidates(
+            image, max_candidates=12,
+            context_candidates=context_seeds,
+            contextual_ranking=True,
+        ):
             points = np.asarray(candidate, dtype=np.float32)
             if points.shape != (4, 2) or not np.isfinite(points).all():
                 continue
