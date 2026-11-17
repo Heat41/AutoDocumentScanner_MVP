@@ -108,6 +108,8 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
     v2 = _list(report.get("v2"))
     origins = _list(report.get("pr6_v2_proposal_origins"))
     outer = _dict(report.get("pr6_outer_region_recovery_shadow"))
+    side_recovery = _dict(report.get("pr6_side_recovery_shadow"))
+    side_recovery_rows = _list(side_recovery.get("candidates"))
     outer_checks = {
         row["source"]: row
         for raw in _list(outer.get("candidate_checks"))
@@ -152,6 +154,14 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             "Outer Region" if origin == "outer_region" else "Kontur V2"
         )
         sources.append((f"v2_{index}", family, _dict(item)))
+    for index, item in enumerate(side_recovery_rows[:12]):
+        item = _dict(item)
+        # Read-only side-recovered hypotheses are NOT registered in the V2
+        # candidate list and never influence ranking or approval gates.
+        sources.append((
+            f"side_recovery_{index}", "Side Recovery",
+            {"corners": item.get("corners"), "geometry_valid": True},
+        ))
 
     display_sources = _balanced_sources(sources, MAX_DISPLAY_CANDIDATES)
     rows = []
@@ -228,6 +238,28 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 visualization_remeasured or representative == name
             ),
             "measurements_visual_only": bool(visualization_remeasured),
+            "side_recovery_details": {
+                "parent_source": (
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("parent_source")
+                ),
+                "changed_side_index": (
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("changed_side_index")
+                ),
+                "shift_fraction_of_parent_gap": _number(
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("shift_fraction_of_parent_gap")
+                ),
+                "side_score_before": _number(
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("side_score_before")
+                ),
+                "side_score_after": _number(
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("side_score_after")
+                ),
+            } if name.startswith("side_recovery_") else None,
             "outer_recovery_check": {
                 "perspective_feasible": (
                     _dict(outer_checks.get(name)).get("perspective_feasible")
@@ -274,6 +306,7 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "Four-Line": sum(1 for row in rows if row["family"] == "Four-Line"),
         "Chroma": sum(1 for row in rows if row["family"] == "Chroma"),
         "Outer Region": sum(1 for row in rows if row["family"] == "Outer Region"),
+        "Side Recovery": sum(1 for row in rows if row["family"] == "Side Recovery"),
     }
     return {
         "status": "offline_visual_diagnostic_only",
@@ -293,6 +326,9 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         ),
         "generated_outer_region_count": int(
             report.get("pr6_region_proposal_count") or 0
+        ),
+        "generated_side_recovery_count": min(
+            len(side_recovery_rows), 12
         ),
         "rejected_after_geometry": int(
             report.get("v2_rejected_post_order") or 0
