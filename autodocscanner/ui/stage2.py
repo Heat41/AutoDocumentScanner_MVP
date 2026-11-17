@@ -4,7 +4,12 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import cv2
+import numpy as np
 
+from autodocscanner.core.pr6_runtime_review import (
+    evaluate_pr6_runtime_file,
+    experimental_pr6_runtime_enabled,
+)
 from autodocscanner.output.manager import (
     build_output_path,
     save_ktp_sheet_pdf,
@@ -410,6 +415,9 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         return super().process_files()
 
     def _set_files(self, paths):
+        # New batches must not inherit a previously reviewed candidate.
+        if hasattr(self, "_pr6_runtime_review_by_file"):
+            self._pr6_runtime_review_by_file.clear()
         super()._set_files(paths)
 
     def _processed_image_paths(self):
@@ -533,8 +541,10 @@ class Stage2ScannerUI(ResponsiveScannerUI):
     def _process_worker(self, output_mode):
         success = 0
         failed = 0
+        review_count = 0
         errors = []
         output_format = "image"
+        pr6_runtime = experimental_pr6_runtime_enabled()
 
         self.output_dir.mkdir(
             parents=True,
@@ -565,6 +575,47 @@ class Stage2ScannerUI(ResponsiveScannerUI):
             )
 
             try:
+                if pr6_runtime:
+                    # Opt-in PR6 actually runs for the Proses Otomatis button.
+                    # It never produces a scan here: even a strong proposal
+                    # must be reviewed and explicitly applied by the user.
+                    reviewed = evaluate_pr6_runtime_file(input_path)
+                    proposals = getattr(self, "_pr6_runtime_review_by_file", None)
+                    if not isinstance(proposals, dict):
+                        proposals = {}
+                        self._pr6_runtime_review_by_file = proposals
+                    proposals[key] = reviewed
+
+                    # Prevent the previous auto-scan result/corners from
+                    # masquerading as a successful result of this review.
+                    self._output_by_file.pop(key, None)
+                    self._corners_by_file.pop(key, None)
+                    if reviewed["status"] == "preview_review":
+                        self._corners_by_file[key] = np.asarray(
+                            reviewed["suggested_corners"], dtype=np.float32,
+                        ).copy()
+
+                    detail = (
+                        "PR6 menemukan kandidat untuk diperiksa. "
+                        "Klik Koreksi Manual untuk konfirmasi empat sudut."
+                        if reviewed["status"] == "preview_review" else
+                        "PR6 belum dapat memastikan batas fisik KTP. "
+                        "Klik Koreksi Manual untuk menentukan empat sudut."
+                    )
+                    review_state = {
+                        "status": reviewed["status"],
+                        "candidate_source": reviewed["candidate_source"],
+                        "reason_codes": list(reviewed["reason_codes"]),
+                        "auto_crop_allowed": False,
+                    }
+                    metadata = {"pr6_runtime_review": review_state}
+                    self._metadata_by_file[key] = metadata
+                    self._failure_by_file[key] = {
+                        "message": detail, "metadata": metadata,
+                    }
+                    review_count += 1
+                    continue
+
                 processed = process_ktp_output(
                     self.scanner,
                     input_path,
@@ -573,6 +624,8 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     output_format=output_format,
                 )
 
+                if hasattr(self, "_pr6_runtime_review_by_file"):
+                    self._pr6_runtime_review_by_file.pop(key, None)
                 output_path = (
                     processed["output_path"]
                 )
@@ -596,6 +649,21 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
             except Exception as exc:
                 failed += 1
+                if pr6_runtime:
+                    self._output_by_file.pop(key, None)
+                    self._corners_by_file.pop(key, None)
+                    if hasattr(self, "_pr6_runtime_review_by_file"):
+                        self._pr6_runtime_review_by_file.pop(key, None)
+                    detail = (
+                        "Pemeriksaan PR6 gagal; hasil otomatis tidak disimpan. "
+                        "Gunakan Koreksi Manual dari gambar asli."
+                    )
+                    self._metadata_by_file[key] = {}
+                    self._failure_by_file[key] = {
+                        "message": detail, "metadata": {},
+                    }
+                    errors.append(f"{input_path.name}: {detail}")
+                    continue
 
                 metadata = dict(
                     self.scanner.last_detection
@@ -679,7 +747,13 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                     len(self.files) - 1
                 )
 
-            if failed == 0:
+            if review_count:
+                self.status_text.set(
+                    f"PR6: {review_count} foto menunggu review empat sudut. "
+                    "Pilih foto lalu klik Koreksi Manual."
+                    + (f" Gagal dianalisis: {failed}." if failed else "")
+                )
+            elif failed == 0:
                 if success == 1:
                     self.status_text.set(
                         "Selesai — 1 KTP berhasil diproses."
