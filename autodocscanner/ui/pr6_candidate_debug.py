@@ -226,6 +226,75 @@ def format_pr6_candidate_details(candidate, diagnostics):
         info.append(
             "Kandidat ini tidak ikut ranking, Review Gate, atau auto-crop."
         )
+        checks = diagnostics.get("paired_alignment_parent_checks")
+        check = next(
+            (
+                row for row in checks
+                if isinstance(row, dict) and row.get("source") == source
+            ),
+            None,
+        ) if isinstance(checks, list) else None
+        if isinstance(check, dict):
+            info.append("")
+            info.append("ALASAN PAIRED ALIGNMENT")
+            if check.get("status") == "proposed":
+                info.append(
+                    "Ada usulan dua-sisi dari kandidat ini, "
+                    "tetapi belum terverifikasi sebagai batas KTP."
+                )
+            elif check.get("failure_reason") == (
+                    "no_opposite_sides_both_improved"):
+                info.append(
+                    "Belum ada perpindahan yang meningkatkan bukti "
+                    "KEDUA sisi berhadapan secara bersamaan."
+                )
+            elif check.get("failure_reason") == "geometry_rejected":
+                info.append(
+                    "Dua sisi menunjukkan perbaikan, tetapi hasilnya "
+                    "tidak lolos validasi geometri."
+                )
+            else:
+                info.append(
+                    "Belum dapat dibentuk: "
+                    + str(check.get("failure_reason") or "tidak tersedia")
+                )
+            info.append(
+                f"Jumlah perpindahan diperiksa: "
+                f"{check.get('attempts_evaluated', 0)}"
+            )
+            best = check.get("best_attempt")
+            if isinstance(best, dict):
+                info.append(
+                    "Percobaan terdekat terhadap syarat bukti (BUKAN "
+                    "kandidat crop):"
+                )
+                indices = check.get("paired_side_indices") or []
+                before = best.get("side_scores_before") or []
+                after = best.get("side_scores_after") or []
+                required = best.get("required_side_scores") or []
+                if (isinstance(indices, list) and len(indices) == 2
+                        and all(isinstance(row, list) and len(row) == 2
+                                for row in (before, after, required))):
+                    for index, b, a, minimum in zip(
+                            indices, before, after, required):
+                        label = (
+                            SIDE_NAMES[index]
+                            if isinstance(index, int) and 0 <= index < 4
+                            else "Tidak diketahui"
+                        )
+                        info.append(
+                            f"  {label}: {_num(b)} → {_num(a)}; "
+                            f"minimum {_num(minimum)}"
+                        )
+                blocking = best.get("blocking_side_index")
+                if isinstance(blocking, int) and 0 <= blocking < 4:
+                    info.append(
+                        "Sisi yang paling menghambat: "
+                        + SIDE_NAMES[blocking]
+                    )
+            info.append(
+                "Semua angka hanya bukti tepi, bukan ketepatan sudut."
+            )
     outer = candidate.get("outer_recovery_check")
     if isinstance(outer, dict):
         info.append("")
