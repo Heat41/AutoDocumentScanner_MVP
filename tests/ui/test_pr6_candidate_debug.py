@@ -201,3 +201,31 @@ def test_side_recovery_details_show_changed_side_and_no_automatic_crop():
     assert "bukan probabilitas" in rendered
     assert "tidak ikut ranking, Review Gate, atau auto-crop" in rendered
     assert "tidak ada crop" in rendered
+
+
+
+def test_zero_side_recovery_message_is_visible_in_real_tk(tmp_path):
+    image_path = tmp_path / "anonymous_synthetic.png"
+    Image.new("RGB", (360, 240), "#B7C6D8").save(image_path)
+    report = _diag()
+    report.update({
+        "generated_side_recovery_count": 0,
+        "side_recovery_parents_examined": 10,
+        "side_recovery_reason_codes": [
+            "no_side_shift_passed_visual_evidence_and_geometry"
+        ],
+    })
+    root = _tk_root()
+    root.withdraw()
+    try:
+        popup = open_pr6_candidate_debug_dialog(root, image_path, report)
+        popup.update()
+        labels = [str(x.cget("text")) for x in _children(popup, ttk.Label)]
+        assert any(
+            "10 kandidat asal diperiksa" in x
+            and "belum ditemukan perpindahan" in x
+            for x in labels
+        )
+        popup.destroy()
+    finally:
+        root.destroy()
