@@ -15,6 +15,7 @@ from autodocscanner.core.outer_region_recovery_pr6 import (
     region_outer_quad_candidates, inspect_outer_perspective_hypothesis,
 )
 from autodocscanner.core.region_context_pr6 import inspect_region_context
+from autodocscanner.core.side_boundary_recovery_pr6 import recover_one_side_hypotheses
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -299,6 +300,43 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
     report["pr6_manual_fallback_shadow"] = prepare_manual_fallback_pr6(
         report, image.shape
     )
+    # New read-only hypotheses are deliberately computed AFTER every PR6
+    # decision and manual-fallback contract. A candidate with one relocated
+    # side can be inspected but never participates in selection or export.
+    if include_region_candidates:
+        recovered = []
+        seen_corners = [
+            np.asarray(item["corners"], dtype=np.float32)
+            for item in [report["stable"], report["adaptive"]] + report["v2"]
+            if item.get("geometry_valid") and item.get("corners") is not None
+        ]
+        diagonal = max(float(np.hypot(*image.shape[:2])), 1.)
+        for index, (item, origin) in enumerate(zip(
+            report["v2"], report["pr6_v2_proposal_origins"]
+        )):
+            if origin != "outer_region" or len(recovered) >= 12:
+                continue
+            for variant in recover_one_side_hypotheses(
+                image, item["corners"], max_results=1
+            ):
+                quad = np.asarray(variant["corners"], dtype=np.float32)
+                if any(
+                    float(np.linalg.norm(quad - prior, axis=1).mean())
+                    / diagonal < .018
+                    for prior in seen_corners
+                ):
+                    continue
+                seen_corners.append(quad)
+                recovered.append({
+                    **variant, "parent_source": f"v2_{index}",
+                })
+        report["pr6_side_recovery_shadow"] = {
+            "status": "offline_visual_hypotheses_only",
+            "auto_select": None,
+            "auto_crop_allowed": False,
+            "candidates": recovered,
+            "candidate_count": len(recovered),
+        }
     if expected is not None:
         # Annotation may be used to evaluate accuracy only AFTER all shadow
         # decisions have been made. It never enters any acceptance condition.
