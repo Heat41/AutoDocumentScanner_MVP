@@ -17,6 +17,28 @@ from autodocscanner.core.physical_boundary_pr6 import verify_physical_boundary
 MAX_DISPLAY_CANDIDATES = 40
 
 
+def _balanced_sources(sources, limit):
+    """Keep each family visible; earlier contour lists must not hide regions.
+
+    A family may have many geometrically valid candidates. Display slots are
+    shared round-robin across methods, preserving source order within each.
+    This is *presentation only*, not a candidate ranking or selection.
+    """
+    families, order = {}, []
+    for item in sources:
+        family = item[1]
+        if family not in families:
+            families[family] = []
+            order.append(family)
+        families[family].append(item)
+    selected = []
+    while len(selected) < limit and any(families.values()):
+        for family in order:
+            if families[family] and len(selected) < limit:
+                selected.append(families[family].pop(0))
+    return selected
+
+
 def _dict(value):
     return value if isinstance(value, dict) else {}
 
@@ -131,8 +153,9 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         )
         sources.append((f"v2_{index}", family, _dict(item)))
 
+    display_sources = _balanced_sources(sources, MAX_DISPLAY_CANDIDATES)
     rows = []
-    for name, family, source in sources[:MAX_DISPLAY_CANDIDATES]:
+    for name, family, source in display_sources:
         points = _points(source.get("corners"), (h, w))
         if points is None:
             continue
@@ -256,6 +279,11 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "status": "offline_visual_diagnostic_only",
         "image_shape": [h, w],
         "candidate_count": len(rows),
+        "candidate_slots": MAX_DISPLAY_CANDIDATES,
+        "source_hypotheses_total": len(sources),
+        "source_hypotheses_hidden": max(
+            0, len(sources) - len(display_sources)
+        ),
         "family_counts": family_counts,
         "generated_four_line_count": int(
             report.get("pr6_line_proposal_count") or 0
