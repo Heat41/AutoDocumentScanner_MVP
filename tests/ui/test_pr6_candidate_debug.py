@@ -178,3 +178,26 @@ def test_real_tk_refuses_orientation_mismatch(tmp_path):
             open_pr6_candidate_debug_dialog(root, path, _diag())
     finally:
         root.destroy()
+
+
+
+def test_side_recovery_details_show_changed_side_and_no_automatic_crop():
+    diagnostic = _diag()
+    candidate = dict(diagnostic["candidates"][0])
+    candidate["source"] = "side_recovery_0"
+    candidate["family"] = "Side Recovery"
+    candidate["ranking_score"] = None
+    candidate["side_recovery_details"] = {
+        "parent_source": "v2_6",
+        "changed_side_index": 0,
+        "shift_fraction_of_parent_gap": .36,
+        "side_score_before": 3.4,
+        "side_score_after": 29.2,
+    }
+    rendered = format_pr6_candidate_details(candidate, diagnostic)
+    assert "Side Recovery" in rendered
+    assert "Kandidat asal: v2_6" in rendered
+    assert "Sisi yang dicari ulang: 1 dari 4" in rendered
+    assert "bukan probabilitas" in rendered
+    assert "tidak ikut ranking, Review Gate, atau auto-crop" in rendered
+    assert "tidak ada crop" in rendered
