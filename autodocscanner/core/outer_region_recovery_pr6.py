@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 from autodocscanner.core.quad_validation import validate_quad
+from autodocscanner.core.region_context_pr6 import inspect_region_context
 
 
 def _order(points):
@@ -62,13 +63,18 @@ def _valid_cardlike(points, image_shape):
                 and .015 <= metrics.get("area_ratio", 0) <= .82)
 
 
-def region_outer_quad_candidates(image, *, max_candidates=12, max_longest=940):
+def region_outer_quad_candidates(image, *, max_candidates=12, max_longest=940,
+                                 context_candidates=(), contextual_ranking=False):
     """Return a bounded set of region-based outer-quad proposals.
 
     Uses Lab L/a/b and HSV saturation, Otsu and quantile splits, two
     resolution-relative smoothing scales, closing and external components.
     All thresholds are image-derived or resolution-relative; no card color,
     portrait/text location, filename or identity assumptions.
+
+    Optional contextual_ranking is review-only prioritization by independent
+    geometric agreement and internal structure. It is not recognition or
+    authorization, and must retain unsupported alternatives for inspection.
 
     Does NOT treat a region, rectangle or good contrast as a verified card.
     """
@@ -185,6 +191,35 @@ def region_outer_quad_candidates(image, *, max_candidates=12, max_longest=940):
         ):
             continue
         bands[bin_index].append(quad)
+    if contextual_ranking:
+        # False positives from plain/colorful rectangles can achieve perfect
+        # region fill. Inspect non-border content and other method geometry
+        # before ranking the *review-only* region hypotheses. Keep all
+        # unranked alternatives and area bands to preserve recall.
+        for band in bands:
+            scored = []
+            limit = min(len(band), max(16, max_candidates * 4))
+            for index, quad in enumerate(band[:limit]):
+                context = inspect_region_context(
+                    image, quad, other_candidates=context_candidates
+                )
+                sources = len(context["corroborating_families"])
+                nested = context["nested_inner_candidates"]
+                coverage = context["interior_spatial_coverage"] or 0.
+                lines = context["interior_axis_line_bands"]
+                # Advisory diversity order, NOT a calibrated confidence.
+                priority = (
+                    min(sources, 2) * 1.2
+                    + min(nested, 2) * .55
+                    + float(coverage)
+                    + min(lines, 5) * .10
+                )
+                scored.append((-priority, index, quad))
+            scored.sort(key=lambda item: (item[0], item[1]))
+            band[:] = [
+                quad for _, _, quad in scored
+            ] + band[limit:]
+
     out = []
     while len(out) < max_candidates and any(bands):
         for band in bands:
