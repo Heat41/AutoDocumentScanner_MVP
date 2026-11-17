@@ -21,13 +21,30 @@ from autodocscanner.core.side_boundary_recovery_pr6 import (
 
 def propose_paired_alignment(
     image, corners, *, pair_side_index=0, prepared=None, max_results=1,
+    diagnostics=None,
 ):
     """Return bounded original-image four-corner translation hypotheses.
 
     pair_side_index: 0 means sides 0/2, 1 means sides 1/3 in cyclic order.
     The shared move leaves widths, slopes and perspective unchanged, so it
     cannot by itself repair an incorrectly sized or shaped parent.
+
+    Optional diagnostics receives bounded numeric reasons for *rejected*
+    proposals; it never contains pixels, card text, or a fallback crop.
     """
+    details = diagnostics if isinstance(diagnostics, dict) else None
+    if details is not None:
+        details.clear()
+        details.update({
+            "status": "not_evaluated",
+            "failure_reason": "invalid_input_or_geometry",
+            "paired_side_indices": (
+                [pair_side_index, pair_side_index + 2]
+                if pair_side_index in (0, 1) else []
+            ),
+            "attempts_evaluated": 0,
+            "best_attempt": None,
+        })
     if (not isinstance(image, np.ndarray) or image.ndim != 3
             or image.shape[2] != 3 or image.dtype != np.uint8
             or type(pair_side_index) is not int
@@ -77,9 +94,15 @@ def propose_paired_alignment(
         primary[2],
     )))
     if separation < 25.:
+        if details is not None:
+            details["failure_reason"] = "insufficient_pair_separation"
         return []
 
     candidates = []
+    best_trial = None
+    best_margin = float("-inf")
+    attempts = 0
+    evidence_passing = 0
     # The scan is relative to the current box size, not a fixed pixel
     # distance or the known location of any example card.
     for fraction in np.linspace(-.30, .30, 61):
@@ -93,14 +116,35 @@ def propose_paired_alignment(
             for a, b, inward, _ in observed
         ]
         before = [item[3] for item in observed]
+        required = [
+            max(11., initial * 1.25, initial + 7.)
+            for initial in before
+        ]
+        margins = [
+            (after - minimum) / max(minimum, 1.)
+            for after, minimum in zip(scores, required)
+        ]
+        attempts += 1
+        if min(margins) > best_margin:
+            best_margin = min(margins)
+            blocking = int(np.argmin(margins))
+            best_trial = {
+                "shift_fraction_of_pair_gap": round(float(fraction), 4),
+                "side_scores_before": [round(x, 3) for x in before],
+                "side_scores_after": [round(float(x), 3) for x in scores],
+                "required_side_scores": [round(float(x), 3) for x in required],
+                "blocking_side_index": int(
+                    (pair_side_index, opposite_index)[blocking]
+                ),
+                "both_pass": bool(all(margin >= 0 for margin in margins)),
+            }
         # Moving the whole box can fix two aligned edges but can equally
         # create a false rectangle on patterned backgrounds. Require BOTH
         # opposite edges to independently gain coherent line support.
-        if not all(
-            after >= max(11., initial * 1.25, initial + 7.)
-            for initial, after in zip(before, scores)
-        ):
+        if not all(after >= minimum
+                   for after, minimum in zip(scores, required)):
             continue
+        evidence_passing += 1
 
         shifted = (points + movement) / scale
         accepted, _, _ = validate_quad(shifted, image.shape)
@@ -136,4 +180,15 @@ def propose_paired_alignment(
         })
         if len(output) >= max_results:
             break
+    if details is not None:
+        details.update({
+            "status": "proposed" if output else "rejected",
+            "failure_reason": (
+                None if output else
+                "geometry_rejected" if evidence_passing else
+                "no_opposite_sides_both_improved"
+            ),
+            "attempts_evaluated": attempts,
+            "best_attempt": best_trial,
+        })
     return output
