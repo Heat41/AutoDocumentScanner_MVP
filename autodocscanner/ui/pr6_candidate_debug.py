@@ -142,6 +142,40 @@ def format_pr6_candidate_details(candidate, diagnostics):
             "Metrik sisi dihitung ulang khusus untuk tampilan; bukan "
             "dasar pemilihan otomatis."
         )
+    relocated = candidate.get("side_recovery_details")
+    if isinstance(relocated, dict):
+        info.append("")
+        info.append("PEMULIHAN SATU SISI — HANYA PREVIEW")
+        info.append(
+            f"Kandidat asal: {relocated.get('parent_source', '?')}"
+        )
+        side_index = relocated.get("changed_side_index")
+        info.append(
+            "Sisi yang dicari ulang: "
+            + (
+                str(side_index + 1)
+                if isinstance(side_index, int) and 0 <= side_index < 4
+                else "tidak diketahui"
+            )
+            + " dari 4 (urutan poligon)."
+        )
+        info.append(
+            "Perpindahan relatif: "
+            + _num(relocated.get("shift_fraction_of_parent_gap"))
+        )
+        info.append(
+            "Bukti perubahan warna sepanjang sisi: "
+            + _num(relocated.get("side_score_before"))
+            + " → "
+            + _num(relocated.get("side_score_after"))
+        )
+        info.append(
+            "Skor ini bukan probabilitas benar. Tiga sisi lainnya "
+            "dipertahankan, dan hasil belum diperiksa sebagai KTP."
+        )
+        info.append(
+            "Kandidat ini tidak ikut ranking, Review Gate, atau auto-crop."
+        )
     outer = candidate.get("outer_recovery_check")
     if isinstance(outer, dict):
         info.append("")
@@ -314,7 +348,8 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         f"Kontur V2 {counts.get('Kontur V2', 0)} • "
         f"Four-Line {counts.get('Four-Line', 0)} • "
         f"Chroma {counts.get('Chroma', 0)} • "
-        f"Outer Region {counts.get('Outer Region', 0)}"
+        f"Outer Region {counts.get('Outer Region', 0)} • "
+        f"Side Recovery {counts.get('Side Recovery', 0)}"
     )
     ttk.Label(root, text=summary, wraplength=880).pack(
         anchor="w", pady=(0, 6)
