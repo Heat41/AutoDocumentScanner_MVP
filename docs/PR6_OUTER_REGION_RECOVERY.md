@@ -242,3 +242,50 @@ Synthetic tests cover different rotations, a skewed wrong edge, a very
 oversized parent, grayscale/colored document regions, large-image scaling,
 images without a document, and preservation of PR6 review decisions.
 **These tests are not accuracy measurements on unseen real KTP photos.**
+
+
+## Experimental Paired Alignment — two opposing edges displaced together
+
+A visual-review example had one **Side Recovery** proposal whose left/right
+edges were near the card but whose **top and bottom boundaries were both
+displaced downward**. Adjusting one side cannot correct that coherent shift.
+This is a *new diagnostic failure mode*, not proof of automatic detection.
+
+`autodocscanner/core/paired_boundary_alignment_pr6.py` now proposes a
+bounded common translation of all four corners from a Side Recovery parent.
+The search direction is one of the candidate's two opposite-edge normal
+axes, independent of orientation, color or image placement.
+
+- Require **both opposite sides** to gain coherent Lab edge-transition
+  support. If one boundary is already strong, moving the whole quadrilateral
+  must not be rewarded merely because the other border improves.
+- Preserve card shape and perspective exactly under translation; this
+  technique cannot by itself fix wrong widths, lengths, or corner slant.
+- Restrict displacement to a size-relative search radius, preserve source
+  bounds and geometric validity, and deduplicate against existing candidates.
+- Append results **after all PR6 ranking and Review Gate decisions** as a
+  separate family, **Paired Alignment**.
+- Display the original Side Recovery source, originating Outer Region source,
+  affected side indices, original-image x/y translation and each edge's
+  before/after evidence.
+- If no candidate survives, show whether the input Side Recovery parents
+  are missing, both edges cannot be improved, or a proposed geometry already
+  exists.
+- The method **never selects, warps, crops or saves** a KTP; review-only
+  examples cannot be promoted to production without fresh unseen accuracy
+  and severe-failure evaluation.
+
+Synthetic testing includes multiple rotations, chromatic and grayscale
+cards, textured backgrounds, both horizontal/vertical shift directions,
+already-correct cards, and one-edge-only errors. One ambiguous synthetic
+subgroup demonstrates that a spurious strong background/internal line can
+prevent otherwise helpful two-side translation. These *failed* cases
+remain explicitly measured; relaxing the requirement to favor those
+images would risk wrong automatic crops.
+
+### How to inspect
+
+Run the opt-in Windows UI, click **Review PR6**, and compare
+**Side Recovery** with **Paired Alignment** (if available). Inspect
+both edge scores and ensure all four corners match the actual
+physical card. This method is not evidence of card identity.
