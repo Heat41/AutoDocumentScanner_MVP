@@ -173,13 +173,15 @@ def test_safe_ui_distinguishes_pr6_review_from_ordinary_rejection():
 def test_cli_pr6_flag_runs_review_instead_of_batch_crop(tmp_path, monkeypatch, capsys):
     import sys
     import app
+    from autodocscanner.core import pr6_runtime_review as runtime
 
     source = tmp_path / "synthetic.png"
     source.write_bytes(b"fake")
     monkeypatch.setattr(sys, "argv", ["app.py"])
-    monkeypatch.setattr(app, "experimental_pr6_runtime_enabled", lambda: True)
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
     monkeypatch.setattr(app, "get_input_images", lambda folder: [source])
-    monkeypatch.setattr(app, "evaluate_pr6_runtime_file", lambda path: _review("manual_review"))
+    monkeypatch.setattr(runtime, "evaluate_pr6_runtime_file",
+                        lambda path: _review("manual_review"))
     monkeypatch.setattr(app, "BatchScanRunner", lambda *_a, **_k:
                         (_ for _ in ()).throw(AssertionError("must not call old crop")))
     app.main()
