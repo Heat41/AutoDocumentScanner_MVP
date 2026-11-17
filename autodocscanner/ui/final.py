@@ -356,6 +356,21 @@ class FinalScannerUI(SafeScannerUI):
         )
         self.clear_button.pack(side="left")
 
+        # The PR6 experiment is review-only, not an automatic crop. Put its
+        # optional action beside file controls instead of crowding the
+        # responsive footer's production processing/export buttons.
+        self.pr6_review_button = None
+        if experimental_pr6_runtime_enabled():
+            self.pr6_review_button = ttk.Button(
+                file_actions,
+                text="Review PR6",
+                style="Secondary.TButton",
+                command=self.run_pr6_review,
+                state="disabled",
+                width=11,
+            )
+            self.pr6_review_button.pack(side="right", padx=(6, 0))
+
         workspace = ttk.Frame(body)
         workspace.pack(
             side="left",
@@ -465,23 +480,6 @@ class FinalScannerUI(SafeScannerUI):
             width=16,
         )
         self.process_button.pack(side="left", padx=(8, 0))
-
-        # Review is not automatic crop. Expose it as a separate, clearly
-        # named action on the experimental branch only. The main auto button
-        # retains its original processing workflow even with this flag set.
-        self.pr6_review_button = None
-        if experimental_pr6_runtime_enabled():
-            self.pr6_review_button = ttk.Button(
-                self._action_panel,
-                text="Review PR6",
-                style="Secondary.TButton",
-                command=self.run_pr6_review,
-                state="disabled",
-                width=11,
-            )
-            self.pr6_review_button.pack(
-                side="left", padx=(8, 0)
-            )
 
     def _preview_card(self, parent, title):
         frame = ttk.Frame(
