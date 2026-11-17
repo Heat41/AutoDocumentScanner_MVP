@@ -225,6 +225,10 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         textvariable=selection,
     )
     picker.pack(side="left", fill="x", expand=False)
+    if labels:
+        # Setting a StringVar does not reliably establish Combobox.current()
+        # on every Tk/Windows theme. Select the first candidate explicitly.
+        picker.current(0)
     ttk.Label(
         picker_bar, text=f"{len(candidates)} kandidat (bukan jumlah kartu)",
     ).pack(side="left", padx=(10, 0))
@@ -281,7 +285,7 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
             "end", format_pr6_candidate_details(row, diagnostics)
             if row is not None else
             "Tidak ada kandidat empat sudut untuk ditampilkan.\n"
-            "PR6 membutuhkan koreksi manual.\n\n"
+            "Gunakan Koreksi Manual pada foto asli.\n\n"
             + "\n".join(diagnostics.get("decision_reason_codes") or []),
         )
         details.configure(state="disabled")
