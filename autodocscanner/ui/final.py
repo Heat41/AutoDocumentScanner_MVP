@@ -354,7 +354,7 @@ class FinalScannerUI(SafeScannerUI):
             command=self.clear_files,
             state="disabled",
         )
-        self.clear_button.pack(side="left")
+        self.clear_button.pack(side="top", anchor="w")
 
         # The PR6 experiment is review-only, not an automatic crop. Put its
         # optional action beside file controls instead of crowding the
@@ -369,7 +369,11 @@ class FinalScannerUI(SafeScannerUI):
                 state="disabled",
                 width=11,
             )
-            self.pr6_review_button.pack(side="right", padx=(6, 0))
+            # Full-width second row: the sidebar becomes 190/160px in
+            # compact/narrow mode, so two horizontal buttons would clip.
+            self.pr6_review_button.pack(
+                side="top", fill="x", pady=(6, 0)
+            )
 
         workspace = ttk.Frame(body)
         workspace.pack(
@@ -407,11 +411,13 @@ class FinalScannerUI(SafeScannerUI):
             "Hasil Koreksi",
         )
 
+        # The long PR6/manual-review status must never compete horizontally
+        # with primary actions. Give the status its own row above the
+        # Save / Manual / PDF / Auto buttons at every window size.
         info = ttk.Frame(footer)
         info.pack(
-            side="left",
+            side="top",
             fill="x",
-            expand=True,
         )
 
         status_row = ttk.Frame(info)
@@ -423,11 +429,16 @@ class FinalScannerUI(SafeScannerUI):
             style="Badge.TLabel",
         ).pack(side="left")
 
-        ttk.Label(
+        self._status_detail_label = ttk.Label(
             status_row,
             textvariable=self.status_text,
             style="Subheader.TLabel",
-        ).pack(side="left", padx=(8, 0))
+            wraplength=540,
+            justify="left",
+        )
+        self._status_detail_label.pack(
+            side="left", padx=(8, 0)
+        )
 
         quality_row = ttk.Frame(info)
         quality_row.pack(
@@ -442,14 +453,25 @@ class FinalScannerUI(SafeScannerUI):
             style="Quality.TLabel",
         ).pack(side="left")
 
-        ttk.Label(
+        self._quality_detail_label = ttk.Label(
             quality_row,
             textvariable=self.quality_detail_text,
             style="Subheader.TLabel",
-        ).pack(side="left", padx=(10, 0))
+            wraplength=480,
+            justify="left",
+        )
+        self._quality_detail_label.pack(
+            side="left", padx=(10, 0)
+        )
 
         self._action_panel = ttk.Frame(footer)
-        self._action_panel.pack(side="right", padx=(16, 0))
+        self._action_panel.pack(
+            side="top", anchor="e", pady=(8, 0)
+        )
+        # Fit long status text to the actual footer width (including
+        # Windows DPI/scaling) instead of allowing it to force actions
+        # outside the visible client area.
+        footer.bind("<Configure>", self._resize_ktp_footer_text)
 
         self.save_button = ttk.Button(
             self._action_panel,
@@ -480,6 +502,19 @@ class FinalScannerUI(SafeScannerUI):
             width=16,
         )
         self.process_button.pack(side="left", padx=(8, 0))
+
+    def _resize_ktp_footer_text(self, event):
+        """Keep PR6/scan status readable without clipping action buttons."""
+        try:
+            width = max(int(event.width), 1)
+            status_label = getattr(self, "_status_detail_label", None)
+            quality_label = getattr(self, "_quality_detail_label", None)
+            if status_label is not None:
+                status_label.configure(wraplength=max(160, width - 130))
+            if quality_label is not None:
+                quality_label.configure(wraplength=max(160, width - 250))
+        except (TypeError, ValueError, tk.TclError):
+            pass
 
     def _preview_card(self, parent, title):
         frame = ttk.Frame(
