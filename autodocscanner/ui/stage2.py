@@ -583,9 +583,9 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
             try:
                 if pr6_runtime:
-                    # Opt-in PR6 actually runs for the Proses Otomatis button.
-                    # It never produces a scan here: even a strong proposal
-                    # must be reviewed and explicitly applied by the user.
+                    # Opt-in Review PR6 (separate from Proses Otomatis)
+                    # never produces a scan: proposals must be examined
+                    # before a user can manually confirm corners.
                     reviewed = evaluate_pr6_runtime_file(input_path)
                     proposals = getattr(self, "_pr6_runtime_review_by_file", None)
                     if not isinstance(proposals, dict):
@@ -756,8 +756,8 @@ class Stage2ScannerUI(ResponsiveScannerUI):
 
             if review_count:
                 self.status_text.set(
-                    f"PR6: {review_count} foto menunggu review empat sudut. "
-                    "Pilih foto lalu klik Koreksi Manual."
+                    f"PR6: {review_count} foto diperiksa tanpa auto-crop. "
+                    "Lihat Kandidat untuk overlay tepi, atau Koreksi Manual."
                     + (f" Gagal dianalisis: {failed}." if failed else "")
                 )
             elif failed == 0:
@@ -790,6 +790,17 @@ class Stage2ScannerUI(ResponsiveScannerUI):
                 self.process_button.configure(
                     text="Proses Otomatis"
                 )
+
+            if review_count:
+                # The worker must not create Tk windows. The existing finish
+                # callback runs on the main thread: close the loading modal
+                # before opening the read-only candidate inspection window.
+                hide = getattr(self, "_hide_loading_popup", None)
+                if callable(hide):
+                    hide()
+                show = getattr(self, "open_pr6_candidate_debug", None)
+                if callable(show):
+                    self.after(0, show)
 
             if failed:
                 detail = "\n".join(
