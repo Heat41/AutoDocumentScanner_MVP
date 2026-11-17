@@ -64,7 +64,10 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
     # Only the real PR6 runtime analyzer requests the new independent long-
     # edge proposals; no legacy or default offline detector is changed.
     report = (
-        analyzer(image, expected=None, include_line_candidates=True)
+        analyzer(
+            image, expected=None, include_line_candidates=True,
+            include_chroma_candidates=True,
+        )
         if analyzer is compare_detectors else
         analyzer(image, expected=None)
     )
