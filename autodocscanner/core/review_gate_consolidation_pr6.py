@@ -122,8 +122,13 @@ def consolidate_review_gate(report):
 
     target = matched[0][0] if len(matched) == 1 else None
     allowed_sources = matched[0][1] if len(matched) == 1 else set()
-    if _source(decision.get("suggested_for_review")) != target:
-        blockers.add("candidate_decision:source_mismatch")
+    # An explicit manual decision intentionally has no suggested candidate.
+    # Do not mislabel that absence as a source mismatch; other manual
+    # blockers still make the route fail closed.
+    suggested = _source(decision.get("suggested_for_review"))
+    if (decision.get("status") == "preview_review" or suggested is not None):
+        if suggested != target:
+            blockers.add("candidate_decision:source_mismatch")
     assessments = decision.get("candidate_assessments")
     if not isinstance(assessments, list):
         blockers.add("candidate_decision:invalid_assessments")
