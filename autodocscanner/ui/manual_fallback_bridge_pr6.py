@@ -21,7 +21,11 @@ FLAG = "AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE"
 def experimental_manual_bridge_enabled(environ=None):
     """Require an explicit, exact opt-in; never enable silently."""
     values = os.environ if environ is None else environ
-    return values.get(FLAG) == "1"
+    # Enabling PR6 runtime review also enables its required confirmation
+    # editor. Neither workflow is enabled when both flags are absent.
+    return values.get(FLAG) == "1" or values.get(
+        "AUTODOCSCANNER_PR6_RUNTIME_REVIEW"
+    ) == "1"
 
 
 def manual_editor_available(*, has_source, has_detected_corners,
