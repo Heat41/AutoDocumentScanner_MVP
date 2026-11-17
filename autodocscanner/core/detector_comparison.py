@@ -21,6 +21,9 @@ from autodocscanner.core.side_boundary_recovery_pr6 import (
 from autodocscanner.core.paired_boundary_alignment_pr6 import (
     propose_paired_alignment,
 )
+from autodocscanner.core.independent_side_alignment_pr6 import (
+    propose_independent_opposite_sides,
+)
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -413,6 +416,62 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
                 ["all_paired_hypotheses_overlap_previous_candidates"]
                 if paired_hypotheses_before_dedup else
                 ["no_opposite_sides_both_improved"]
+            ),
+        }
+
+        # Unlike paired translation, each opposite side may move by a
+        # distinct distance. Compute AFTER all PR6 decision/gate paths:
+        # these are visual-only proposals, never automatic crop candidates.
+        independent = []
+        independent_checks = []
+        independent_before_dedup = 0
+        for recovered_index, parent in enumerate(recovered[:12]):
+            context = {}
+            alternatives = propose_independent_opposite_sides(
+                image, parent["corners"],
+                pair_side_index=parent["changed_side_index"] % 2,
+                prepared=side_recovery_prepared, max_results=2,
+                diagnostics=context,
+            )
+            independent_checks.append({
+                "source": f"side_recovery_{recovered_index}",
+                "outer_region_source": parent["parent_source"],
+                **context,
+            })
+            for alternative in alternatives:
+                independent_before_dedup += 1
+                quad = np.asarray(alternative["corners"], dtype=np.float32)
+                if any(
+                    float(np.linalg.norm(
+                        quad - prior, axis=1,
+                    ).mean()) / diagonal < .018
+                    for prior in seen_corners
+                ):
+                    continue
+                seen_corners.append(quad)
+                independent.append({
+                    **alternative,
+                    "parent_source": f"side_recovery_{recovered_index}",
+                    "outer_region_source": parent["parent_source"],
+                })
+                if len(independent) >= 12:
+                    break
+            if len(independent) >= 12:
+                break
+        report["pr6_independent_sides_shadow"] = {
+            "status": "offline_visual_hypotheses_only",
+            "auto_select": None, "auto_crop_allowed": False,
+            "parents_examined": len(independent_checks),
+            "hypotheses_before_dedup": independent_before_dedup,
+            "candidates": independent,
+            "candidate_count": len(independent),
+            "parent_checks": independent_checks,
+            "reason_codes": (
+                [] if independent else
+                ["no_single_side_parent"] if not recovered else
+                ["all_independent_hypotheses_overlap_previous_candidates"]
+                if independent_before_dedup else
+                ["no_independent_two_side_hypothesis_passed"]
             ),
         }
     if expected is not None:
