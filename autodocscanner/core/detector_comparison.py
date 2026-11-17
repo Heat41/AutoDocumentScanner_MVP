@@ -307,6 +307,8 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
     # side can be inspected but never participates in selection or export.
     if include_region_candidates:
         recovered = []
+        parents_examined = 0
+        hypotheses_before_dedup = 0
         seen_corners = [
             np.asarray(item["corners"], dtype=np.float32)
             for item in [report["stable"], report["adaptive"]] + report["v2"]
@@ -321,10 +323,12 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
         )):
             if origin != "outer_region" or len(recovered) >= 12:
                 continue
+            parents_examined += 1
             for variant in recover_one_side_hypotheses(
                 image, item["corners"], max_results=1,
                 prepared=side_recovery_prepared,
             ):
+                hypotheses_before_dedup += 1
                 quad = np.asarray(variant["corners"], dtype=np.float32)
                 if any(
                     float(np.linalg.norm(quad - prior, axis=1).mean())
@@ -342,6 +346,15 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             "auto_crop_allowed": False,
             "candidates": recovered,
             "candidate_count": len(recovered),
+            "parents_examined": parents_examined,
+            "hypotheses_before_dedup": hypotheses_before_dedup,
+            "reason_codes": (
+                [] if recovered else
+                ["no_outer_region_parent"] if not parents_examined else
+                ["all_recovered_hypotheses_overlap_previous_candidates"]
+                if hypotheses_before_dedup else
+                ["no_side_shift_passed_visual_evidence_and_geometry"]
+            ),
         }
     if expected is not None:
         # Annotation may be used to evaluate accuracy only AFTER all shadow
