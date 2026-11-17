@@ -1,0 +1,177 @@
+"""Synthetic PR6 visual snapshot tests; no private document images or names."""
+from copy import deepcopy
+
+import numpy as np
+
+from autodocscanner.core.pr6_visual_diagnostics import (
+    build_pr6_visual_diagnostics,
+)
+
+
+CORNERS = [[22, 27], [310, 22], [315, 191], [20, 188]]
+OTHERS = [[32, 32], [305, 30], [312, 183], [30, 185]]
+
+
+def _report():
+    return {
+        "stable": {
+            "corners": deepcopy(CORNERS), "geometry_valid": True,
+            "area_ratio": .35,
+            "boundary_evidence": {"side_support": [.88, .62, .31, .25]},
+        },
+        "adaptive": {"found": False},
+        "v2": [
+            {
+                "corners": deepcopy(OTHERS), "geometry_valid": True,
+                "area_ratio": .31,
+                "boundary_evidence": {"side_support": [.18, .9, .6, .7]},
+            },
+            {
+                "corners": deepcopy(CORNERS), "geometry_valid": True,
+                "area_ratio": .35,
+                "boundary_evidence": {"side_support": [.8, .2, .5, .1]},
+            },
+        ],
+        "pr6_v2_proposal_origins": ["contour", "four_line"],
+        "pr6_selection_shadow": {"groups": [
+            {"representative": "stable", "sources": ["stable", "v2_1"]},
+            {"representative": "v2_0", "sources": ["v2_0"]},
+        ], "warnings": ["competing_geometries"]},
+        "pr6_combined_candidate_shadow": {"candidates": [
+            {
+                "source": "stable", "warnings": ["weak_inner_outer_separation"],
+                "side_checks": {
+                    "supported_external": 4, "localized_aligned": 3,
+                    "measurable_contrast": 2,
+                },
+            },
+            {"source": "v2_0", "warnings": ["poor_edge_alignment"]},
+        ]},
+        "pr6_boundary_localization_shadow": {
+            "stable": {"side_localization": [
+                {"coverage": .9, "median_offset_fraction": .1, "offset_spread": .1}
+                for _ in range(4)
+            ]}
+        },
+        "pr6_physical_boundary_shadow": {
+            "stable": {"side_measurements": [
+                {"contrast": 9, "coverage": .9} for _ in range(4)
+            ]}
+        },
+        "pr6_candidate_decision_shadow": {"candidate_assessments": [
+            {"source": "stable", "evidence_state": "requires_manual_review",
+             "reasons": ["alignment_missing"]},
+        ]},
+        "v3_ranking": {"ranking": [
+            {"source": "stable", "score": .79, "review_reasons": []},
+            {"source": "v2_0", "score": .62, "review_reasons": ["weak_side"]},
+        ]},
+        "pr6_review_consolidation_shadow": {
+            "status": "manual_review",
+            "reason_codes": ["pr6_candidate_decision_shadow:requires_manual_review"],
+        },
+    }
+
+
+def test_all_source_families_and_proposal_origins_visible():
+    input_report = _report()
+    before = deepcopy(input_report)
+    diagnostics = build_pr6_visual_diagnostics(input_report, (240, 360, 3))
+    assert diagnostics["status"] == "offline_visual_diagnostic_only"
+    assert diagnostics["candidate_count"] == 3
+    assert [(c["source"], c["family"]) for c in diagnostics["candidates"]] == [
+        ("stable", "Stable"), ("v2_0", "Kontur V2"),
+        ("v2_1", "Four-Line"),
+    ]
+    assert diagnostics["auto_select"] is None
+    assert diagnostics["auto_crop_allowed"] is False
+    assert diagnostics["physical_boundary_verified"] is False
+    assert input_report == before
+
+
+def test_measurements_represent_the_exact_selected_quad_only():
+    diagnostics = build_pr6_visual_diagnostics(_report(), (240, 360))
+    stable, contour, equivalent = diagnostics["candidates"]
+    assert stable["side_evidence"][0]["local_coverage"] == .9
+    assert stable["side_evidence"][0]["inner_outer_contrast"] == 9
+    assert stable["physical_measurements_for_this_quad"] is True
+    assert equivalent["selection_representative"] == "stable"
+    assert equivalent["physical_measurements_for_this_quad"] is False
+    assert equivalent["side_evidence"][0]["inner_outer_contrast"] is None
+    assert contour["candidate_warnings"] == ["poor_edge_alignment"]
+
+
+def test_diagnostic_code_and_manual_decision_visible_not_upgraded_to_preview():
+    result = build_pr6_visual_diagnostics(_report(), (240, 360))
+    assert result["review_decision"] == "manual_review"
+    assert "pr6_candidate_decision_shadow:requires_manual_review" in result[
+        "decision_reason_codes"
+    ]
+    assert result["candidates"][0]["assessment_reasons"] == [
+        "alignment_missing"
+    ]
+
+
+def test_ground_truth_and_private_metadata_never_exported_to_debug_snapshot():
+    report = _report()
+    first = build_pr6_visual_diagnostics(report, (240, 360))
+    report["expected"] = [[1, 2]] * 4
+    report["normalized_corner_error"] = 0.
+    report["subject_name"] = "REDACTED"
+    report["private_file_path"] = "REDACTED"
+    report["pr6_multi_refinement_ground_truth_evaluation"] = {"error": 0}
+    assert build_pr6_visual_diagnostics(report, (240, 360)) == first
+    assert "REDACTED" not in str(first)
+
+
+def test_missing_broken_candidates_fail_closed():
+    report = _report()
+    report["stable"]["corners"] = [[1, 1]] * 3
+    report["v2"][0]["corners"] = [
+        [float("nan"), 3], [12, 4], [13, 8], [2, 8],
+    ]
+    report["v2"][1]["corners"] = [
+        [-9000, 0], [100, 0], [100, 100], [0, 100],
+    ]
+    out = build_pr6_visual_diagnostics(report, (240, 360))
+    assert out["candidate_count"] == 0
+    assert out["review_decision"] == "manual_review"
+    assert out["auto_crop_allowed"] is False
+
+
+def test_no_candidates_and_bad_report():
+    for report in ({}, [], None, {"v2": "wrong"}):
+        result = build_pr6_visual_diagnostics(report, (200, 310))
+        assert result["candidate_count"] == 0
+        assert result["auto_select"] is None
+
+
+def test_wrong_shape_prevents_trusting_overlay_coordinates():
+    for shape in ((0, 10), (10,), None, (-100, 200)):
+        result = build_pr6_visual_diagnostics(_report(), shape)
+        assert result["status"] == "invalid_image"
+        assert result["image_shape"] is None
+
+
+def test_runtime_review_populates_visual_diagnostics_but_never_crop():
+    from autodocscanner.core.pr6_runtime_review import evaluate_pr6_runtime_image
+
+    image = np.full((240, 360, 3), 110, np.uint8)
+    report = _report()
+    received = []
+    def analyzer(image, *, expected=None):
+        received.append(expected)
+        return report
+    result = evaluate_pr6_runtime_image(image, analyzer=analyzer)
+    assert received == [None]
+    assert result["status"] == "manual_review"
+    assert result["file_write_performed"] is False
+    assert result["visual_debug"]["candidate_count"] == 3
+    assert not result["visual_debug"]["auto_crop_allowed"]
+
+
+def test_candidate_snapshot_is_limited_even_with_many_v2_candidates():
+    report = _report()
+    report["v2"] = [deepcopy(report["v2"][0]) for _ in range(100)]
+    snapshot = build_pr6_visual_diagnostics(report, (240, 360))
+    assert snapshot["candidate_count"] <= 40
