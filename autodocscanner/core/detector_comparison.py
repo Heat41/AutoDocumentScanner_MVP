@@ -15,7 +15,9 @@ from autodocscanner.core.outer_region_recovery_pr6 import (
     region_outer_quad_candidates, inspect_outer_perspective_hypothesis,
 )
 from autodocscanner.core.region_context_pr6 import inspect_region_context
-from autodocscanner.core.side_boundary_recovery_pr6 import recover_one_side_hypotheses
+from autodocscanner.core.side_boundary_recovery_pr6 import (
+    recover_one_side_hypotheses, prepare_side_recovery_lab,
+)
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -311,13 +313,17 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             if item.get("geometry_valid") and item.get("corners") is not None
         ]
         diagonal = max(float(np.hypot(*image.shape[:2])), 1.)
+        # One local, downscaled Lab image for all candidate hypotheses.
+        # Do not serialize or persist any pixels into the report.
+        side_recovery_prepared = prepare_side_recovery_lab(image)
         for index, (item, origin) in enumerate(zip(
             report["v2"], report["pr6_v2_proposal_origins"]
         )):
             if origin != "outer_region" or len(recovered) >= 12:
                 continue
             for variant in recover_one_side_hypotheses(
-                image, item["corners"], max_results=1
+                image, item["corners"], max_results=1,
+                prepared=side_recovery_prepared,
             ):
                 quad = np.asarray(variant["corners"], dtype=np.float32)
                 if any(
