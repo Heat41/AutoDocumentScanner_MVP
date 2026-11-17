@@ -289,3 +289,53 @@ Run the opt-in Windows UI, click **Review PR6**, and compare
 **Side Recovery** with **Paired Alignment** (if available). Inspect
 both edge scores and ensure all four corners match the actual
 physical card. This method is not evidence of card identity.
+
+
+## Independent opposite-side refinement (diagnostic follow-up)
+
+A field diagnostic showed that a uniform translation of a Side Recovery
+candidate did **not** improve both opposite edges:
+
+- First border: 11.84 before, 2.12 after, required 18.84
+- Opposite border: 0.00 before, 3.14 after, required 11.00
+
+Those numbers describe the **single best-compromise translation** in the
+earlier Paired Alignment search; they do not show each edge's independent
+best location. Simply relaxing its acceptance thresholds would promote
+unsupported crops, not find a physical document boundary.
+
+An additional opt-in `Independent Sides` family now searches both opposing
+edges at **different offsets** along their own inward normals. Each side must
+have stronger coherent Lab transitions. Original adjacent edge lines
+intersect the two shifted lines to recover all four corners. Geometry,
+area-ratio, source-image bounds and remeasured post-intersection evidence
+are checked again.
+
+- This is a new post-gate visualization only; prior `Paired Alignment`,
+  PR6 selection, manual review fallback and the production engine do not
+  change.
+- All coordinate offsets are normalized to the parent quad's dimensions.
+  No sample-image coordinates, identity fields, OCR, machine learning or
+  specific card colors are used.
+- Independent Sides may still return **zero** proposals when actual
+  physical card edges are not measurable.
+- If no candidate is generated, select the originating **Side Recovery**
+  result and inspect `PEMERIKSAAN INDEPENDENT SIDES`: each side's
+  evidence *before*, best observed evidence, required threshold and
+  separately measured displacement. Those maximum scores are still only
+  diagnostic observations, not automatic crop permission.
+- A successful hypothesis appears under **Independent Sides** alongside
+  the existing Stable/Adaptive/V2/Outer Region/Side Recovery proposals.
+  Check all four corners manually; internal photo frames and textured
+  backgrounds can produce attractive but false rectangles.
+
+Synthetic tests include different rotations and both opposite-side axes,
+unequal displacement amounts, correctly aligned cards, featureless
+backgrounds, scaled source images, immutable input pixels and unchanged
+PR6 review/auto-crop safeguards.
+
+Passing synthetic tests does **not** establish reliable general-purpose KTP
+detection. Before replacing `Proses Otomatis`, collect a new unseen local
+holdout with independently marked physical four-corner annotations and
+compare normalized corner errors and severe wrong-crop rates with Stable.
+Never commit those KTP photographs, annotation files or personal JSON.
