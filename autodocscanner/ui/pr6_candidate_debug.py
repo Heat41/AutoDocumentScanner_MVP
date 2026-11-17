@@ -142,6 +142,39 @@ def format_pr6_candidate_details(candidate, diagnostics):
             "Metrik sisi dihitung ulang khusus untuk tampilan; bukan "
             "dasar pemilihan otomatis."
         )
+    outer = candidate.get("outer_recovery_check")
+    if isinstance(outer, dict):
+        info.append("")
+        info.append("PEMULIHAN SUDUT LUAR — DIAGNOSTIK SAJA")
+        info.append(
+            "Homography valid secara numerik: "
+            + ("ya" if outer.get("perspective_feasible") is True else "belum")
+        )
+        info.append(
+            "Keempat sisi terukur: "
+            + ("ya" if outer.get("all_sides_measurable") is True else "tidak")
+        )
+        info.append(
+            "Risiko persegi panjang internal: "
+            + ("ada" if outer.get("nested_in_larger_quad") is True else "tidak teramati")
+        )
+        steps = outer.get("chromatic_step_by_side")
+        if isinstance(steps, list):
+            info.append(
+                "Perubahan warna Lab per sisi: "
+                + ", ".join(
+                    _num(row.get("median_lab_step"))
+                    for row in steps[:4] if isinstance(row, dict)
+                )
+            )
+        codes = outer.get("reason_codes")
+        if isinstance(codes, list) and codes:
+            info.extend(
+                f"  • {code}" for code in codes[:12] if isinstance(code, str)
+            )
+        info.append(
+            "Kejelasan garis atau homography tidak membuktikan objek ini KTP."
+        )
     info.append("")
     info.append("BUKTI EMPAT SISI")
     for index, side in enumerate(candidate.get("side_evidence") or []):
@@ -251,7 +284,8 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         f"Adaptive {counts.get('Adaptive', 0)} • "
         f"Kontur V2 {counts.get('Kontur V2', 0)} • "
         f"Four-Line {counts.get('Four-Line', 0)} • "
-        f"Chroma {counts.get('Chroma', 0)}"
+        f"Chroma {counts.get('Chroma', 0)} • "
+        f"Outer Region {counts.get('Outer Region', 0)}"
     )
     ttk.Label(root, text=summary, wraplength=880).pack(
         anchor="w", pady=(0, 6)
