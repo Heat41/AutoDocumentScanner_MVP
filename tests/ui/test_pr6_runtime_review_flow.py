@@ -63,6 +63,7 @@ def test_proses_otomatis_pr6_never_calls_old_crop_or_writes_file(
 
     fake, source, observed = _fake_ui(tmp_path)
     monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    fake._pr6_review_requested = True
     monkeypatch.setattr(stage2, "evaluate_pr6_runtime_file", lambda path: _review(status))
     def forbidden(*_args, **_kwargs):
         raise AssertionError("legacy auto crop must not run")
@@ -95,6 +96,7 @@ def test_manual_review_drops_old_candidate_and_old_output_reference(tmp_path, mo
     fake._corners_by_file[key] = np.asarray(SUGGESTED, dtype=np.float32)
     fake._output_by_file[key] = old_file
     monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    fake._pr6_review_requested = True
     monkeypatch.setattr(stage2, "evaluate_pr6_runtime_file",
                         lambda path: _review("manual_review"))
     monkeypatch.setattr(stage2, "process_ktp_output",
@@ -114,6 +116,7 @@ def test_analyzer_exception_fails_closed_without_legacy_fallback(
 
     fake, source, observed = _fake_ui(tmp_path)
     monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    fake._pr6_review_requested = True
     def broken(_path):
         raise ValueError("invalid synthetic input")
     monkeypatch.setattr(stage2, "evaluate_pr6_runtime_file", broken)
@@ -151,6 +154,80 @@ def test_default_legacy_worker_unchanged_when_flag_disabled(
     assert fake._output_by_file[str(source)].name == "synthetic_scanned.jpg"
     assert str(source) not in fake._failure_by_file
     assert not fake._pr6_runtime_review_by_file
+
+
+def test_legacy_auto_runs_even_with_pr6_feature_flag_on_when_not_requested(
+        tmp_path, monkeypatch):
+    from autodocscanner.ui import stage2
+
+    fake, source, observed = _fake_ui(tmp_path)
+    fake._pr6_review_requested = False
+    monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    monkeypatch.setattr(
+        stage2, "evaluate_pr6_runtime_file",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError("Review PR6 must be a separate button")
+        ),
+    )
+    calls = []
+    def legacy(scanner, path, output_dir, **kwargs):
+        calls.append(path)
+        return {
+            "output_path": output_dir / "synthetic_scanned.jpg",
+            "corners": np.asarray(SUGGESTED, dtype=np.float32),
+        }
+    monkeypatch.setattr(stage2, "process_ktp_output", legacy)
+    stage2.Stage2ScannerUI._process_worker(fake, "color")
+
+    assert calls == [source]
+    assert fake._output_by_file[str(source)].name == "synthetic_scanned.jpg"
+    assert str(source) not in fake._failure_by_file
+    assert fake._pr6_review_requested is False
+    assert not fake._pr6_runtime_review_by_file
+
+
+def test_pr6_run_request_is_one_shot(tmp_path, monkeypatch):
+    from autodocscanner.ui import stage2
+
+    fake, source, observed = _fake_ui(tmp_path)
+    fake._pr6_review_requested = True
+    monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    monkeypatch.setattr(
+        stage2, "evaluate_pr6_runtime_file",
+        lambda path: _review("manual_review"),
+    )
+    monkeypatch.setattr(
+        stage2, "process_ktp_output",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("PR6 review should not crop")
+        ),
+    )
+    stage2.Stage2ScannerUI._process_worker(fake, "color")
+    assert fake._pr6_review_requested is False
+    assert str(source) in fake._pr6_runtime_review_by_file
+
+
+def test_final_ui_review_action_requires_explicit_flag_and_idle():
+    from autodocscanner.ui.final import FinalScannerUI
+    fake = SimpleNamespace(
+        files=[Path("synthetic.png")],
+        _processing_active=False,
+        _pr6_review_requested=False,
+        status_text=SimpleNamespace(set=lambda *_a: None),
+        _start_ktp_processing=lambda: "started",
+    )
+    import autodocscanner.ui.final as final
+    from unittest.mock import patch
+    with patch.object(final, "experimental_pr6_runtime_enabled", return_value=False):
+        assert FinalScannerUI.run_pr6_review(fake) is None
+        assert fake._pr6_review_requested is False
+    with patch.object(final, "experimental_pr6_runtime_enabled", return_value=True):
+        assert FinalScannerUI.run_pr6_review(fake) == "started"
+        assert fake._pr6_review_requested is True
+        fake._processing_active = True
+        fake._pr6_review_requested = False
+        assert FinalScannerUI.run_pr6_review(fake) is None
+        assert fake._pr6_review_requested is False
 
 
 def test_safe_ui_distinguishes_pr6_review_from_ordinary_rejection():
