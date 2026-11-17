@@ -221,6 +221,26 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 "reason_codes": _codes(
                     _dict(outer_checks.get(name)).get("reason_codes")
                 ),
+                "region_context": {
+                    "interior_edge_density": _number(_dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("interior_edge_density")),
+                    "interior_spatial_coverage": _number(_dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("interior_spatial_coverage")),
+                    "interior_axis_line_bands": _dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("interior_axis_line_bands"),
+                    "corroborating_families": _codes(_dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("corroborating_families")),
+                    "nested_inner_candidates": _dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("nested_inner_candidates"),
+                    "reason_codes": _codes(_dict(
+                        _dict(outer_checks.get(name)).get("region_context")
+                    ).get("reason_codes")),
+                },
             } if name in outer_checks else None,
         })
 
