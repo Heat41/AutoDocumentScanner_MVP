@@ -214,3 +214,46 @@ def test_no_personal_annotations_in_perspective_inspection():
     assert "source_image" not in out
     assert "ground_truth" not in out
     assert "file_path" not in out
+
+
+
+def test_contextual_region_ranking_preserves_card_hypotheses_amid_distractors():
+    image, outer = _scene(rotation=18, seed=7)
+    # A large, clean, saturated external object can outrank the actual
+    # document under area/fill heuristics. Synthetic distractor only.
+    cv2.rectangle(image, (25, 25), (235, 145), (200, 65, 60), -1)
+    center = np.asarray(outer, float).mean(axis=0)
+    inner = center + (np.asarray(outer, float) - center) * .3
+    context = [{
+        "family": "contour", "corners": inner.tolist(),
+    }]
+    plain = region_outer_quad_candidates(image, max_candidates=12)
+    ranked = region_outer_quad_candidates(
+        image, max_candidates=12, context_candidates=context,
+        contextual_ranking=True,
+    )
+    assert plain and ranked
+    assert min(_corner_error(c, outer) for c in ranked) < 35
+    assert len(ranked) <= 12
+    # Reranking is review only, never confirmation of target identity.
+    assert len(ranked) == len(plain)
+
+
+def test_context_ranking_no_document_and_unknown_support_safe():
+    image = np.full((340, 570, 3), 120, np.uint8)
+    assert region_outer_quad_candidates(
+        image, contextual_ranking=True,
+        context_candidates=[
+            {"family": "contour", "corners": [[0, 0]] * 4},
+        ],
+    ) == []
+
+
+def test_contextual_ranking_does_not_write_or_change_image():
+    image, outer = _scene(rotation=51, seed=11)
+    original = image.copy()
+    result = region_outer_quad_candidates(
+        image, contextual_ranking=True,
+    )
+    assert result
+    assert np.array_equal(image, original)
