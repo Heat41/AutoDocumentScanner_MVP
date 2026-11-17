@@ -256,3 +256,95 @@ def test_visual_debug_carries_parent_and_both_edge_scores():
     assert len(row["paired_alignment_details"]["side_scores_after"]) == 2
     assert snapshot["auto_select"] is None
     assert snapshot["auto_crop_allowed"] is False
+
+
+
+def test_rejected_paired_shift_reports_blocking_side_without_fabricating_quad():
+    image = np.full((420, 640, 3), 127, np.uint8)
+    points = [[90, 85], [440, 85], [440, 320], [90, 320]]
+    evidence = {}
+    result = propose_paired_alignment(
+        image, points, diagnostics=evidence,
+    )
+    assert result == []
+    assert evidence["status"] == "rejected"
+    assert evidence["failure_reason"] == "no_opposite_sides_both_improved"
+    assert evidence["attempts_evaluated"] > 0
+    best = evidence["best_attempt"]
+    assert best["blocking_side_index"] in (0, 2)
+    assert best["both_pass"] is False
+    assert len(best["required_side_scores"]) == 2
+    assert len(best["side_scores_before"]) == 2
+    assert len(best["side_scores_after"]) == 2
+    assert all(x == 0 for x in best["side_scores_after"])
+    assert all(x >= 11 for x in best["required_side_scores"])
+    assert "corners" not in evidence
+    assert "image" not in evidence
+    assert "ground_truth" not in evidence
+
+
+def test_paired_alignment_proposal_carries_per_side_diagnostics_without_acceptance():
+    image, truth = _scene(rotation=22)
+    displaced = truth + _inward_normal(truth, 0) * 30
+    details = {"should_be_cleared": "not a result"}
+    result = propose_paired_alignment(
+        image, displaced, diagnostics=details,
+    )
+    assert result
+    assert "should_be_cleared" not in details
+    assert details["status"] == "proposed"
+    assert details["failure_reason"] is None
+    assert details["best_attempt"]["both_pass"] is True
+    assert all(x["auto_select"] is None and not x["auto_crop_allowed"]
+               for x in result)
+
+
+def test_invalid_input_diagnostics_remain_fail_closed():
+    details = {}
+    assert propose_paired_alignment(
+        None, [[0, 0]] * 4, diagnostics=details,
+    ) == []
+    assert details["status"] == "not_evaluated"
+    assert details["failure_reason"] == "invalid_input_or_geometry"
+    assert details["best_attempt"] is None
+
+
+def test_visual_snapshot_reports_rejected_parent_evidence_without_private_image():
+    from autodocscanner.core.pr6_visual_diagnostics import (
+        build_pr6_visual_diagnostics,
+    )
+    image = np.zeros((200, 320, 3), np.uint8)
+    report = {
+        "stable": {}, "adaptive": {}, "v2": [],
+        "pr6_paired_alignment_shadow": {
+            "status": "offline_visual_hypotheses_only",
+            "auto_crop_allowed": False, "auto_select": None,
+            "parents_examined": 1, "candidates": [],
+            "parent_checks": [{
+                "source": "side_recovery_3",
+                "outer_region_source": "v2_7",
+                "status": "rejected",
+                "failure_reason": "no_opposite_sides_both_improved",
+                "paired_side_indices": [0, 2],
+                "attempts_evaluated": 60,
+                "best_attempt": {
+                    "shift_fraction_of_pair_gap": -.14,
+                    "side_scores_before": [8., 14.],
+                    "side_scores_after": [20., 17.],
+                    "required_side_scores": [15., 21.],
+                    "blocking_side_index": 2,
+                    "both_pass": False,
+                },
+            }],
+        },
+    }
+    snapshot = build_pr6_visual_diagnostics(report, image.shape)
+    checks = snapshot["paired_alignment_parent_checks"]
+    assert len(checks) == 1
+    assert checks[0]["source"] == "side_recovery_3"
+    assert checks[0]["best_attempt"]["blocking_side_index"] == 2
+    assert checks[0]["best_attempt"]["side_scores_after"] == [20., 17.]
+    assert snapshot["auto_crop_allowed"] is False
+    assert snapshot["auto_select"] is None
+    assert "image" not in str(checks)
+    assert "ground_truth" not in str(checks)
