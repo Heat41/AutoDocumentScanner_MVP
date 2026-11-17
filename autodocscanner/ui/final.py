@@ -12,6 +12,7 @@ except ImportError:
     windnd = None
 
 from autodocscanner.ui.safe import SafeScannerUI
+from autodocscanner.core.pr6_runtime_review import experimental_pr6_runtime_enabled
 from autodocscanner.ui.manual_corner_magnifier_pr6 import (
     magnifier_image,
     magnifier_canvas_position,
@@ -622,10 +623,23 @@ class FinalScannerUI(SafeScannerUI):
         )
 
         bridge_enabled = experimental_manual_bridge_enabled()
-        # A failed automatic attempt may have left stale detector points in
-        # the UI cache (including points from an earlier attempt). In the
-        # opt-in mode, never treat those points as a trusted starting quad.
-        if bridge_enabled and key in self._failure_by_file:
+        runtime_proposals = getattr(self, "_pr6_runtime_review_by_file", {})
+        runtime_review = (
+            runtime_proposals.get(key)
+            if isinstance(runtime_proposals, dict) else None
+        )
+        if (bridge_enabled and experimental_pr6_runtime_enabled()
+                and isinstance(runtime_review, dict)):
+            # A PR6 proposal is an uncommitted starting point ONLY.
+            # If the evidence was incomplete, show neutral manual handles
+            # instead of any stale previous detector corners.
+            corners = (
+                runtime_review.get("suggested_corners")
+                if runtime_review.get("status") == "preview_review"
+                else None
+            )
+        elif bridge_enabled and key in self._failure_by_file:
+            # Legacy failed detection can leave cached corners. Fail closed.
             corners = None
         if corners is None and not bridge_enabled:
             self.status_text.set(
@@ -1267,6 +1281,8 @@ class FinalScannerUI(SafeScannerUI):
                 key,
                 None,
             )
+            if hasattr(self, "_pr6_runtime_review_by_file"):
+                self._pr6_runtime_review_by_file.pop(key, None)
             self._corners_by_file[
                 key
             ] = manual_corners.copy()
@@ -1980,6 +1996,8 @@ class FinalScannerUI(SafeScannerUI):
             )
 
     def clear_files(self):
+        if hasattr(self, "_pr6_runtime_review_by_file"):
+            self._pr6_runtime_review_by_file.clear()
         super().clear_files()
         self.batch_text.set("Belum ada file")
         self.selected_text.set("Tidak ada file dipilih")
