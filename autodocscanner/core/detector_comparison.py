@@ -11,6 +11,9 @@ import numpy as np
 from autodocscanner.core.experimental_candidates import contour_candidates
 from autodocscanner.core.line_quad_proposals_pr6 import line_quad_candidates
 from autodocscanner.core.chroma_quad_proposals_pr6 import chroma_quad_candidates
+from autodocscanner.core.outer_region_recovery_pr6 import (
+    region_outer_quad_candidates, inspect_outer_perspective_hypothesis,
+)
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -73,7 +76,8 @@ def _filter_valid_candidates(evaluated):
 
 def compare_detectors(image, *, expected=None, max_proposals=24,
                       include_line_candidates=False,
-                      include_chroma_candidates=False):
+                      include_chroma_candidates=False,
+                      include_region_candidates=False):
     """Side-by-side diagnostics. Scores are NOT proof of correct KTP bounds."""
     stable = StableBaselinePerspectiveEngine()
     adaptive = AutoPerspectiveEngine()
@@ -126,6 +130,24 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             proposals.append(points)
             proposal_origins.append("chroma")
             chroma_added += 1
+    region_added = 0
+    if include_region_candidates:
+        # Region-first geometry is another *hypothesis* source, never an
+        # approved document crop. Preserve provenance through post-validation.
+        for candidate in region_outer_quad_candidates(image, max_candidates=12):
+            points = np.asarray(candidate, dtype=np.float32)
+            if points.shape != (4, 2) or not np.isfinite(points).all():
+                continue
+            if any(
+                float(np.linalg.norm(
+                    points - np.asarray(old, dtype=np.float32), axis=1,
+                ).mean()) / max(float(np.hypot(*image.shape[:2])), 1.) < .018
+                for old in proposals
+            ):
+                continue
+            proposals.append(points)
+            proposal_origins.append("outer_region")
+            region_added += 1
     evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
     # Match origin labels to post-validation v2 indices; rejected candidates
     # must not shift the display labels. These labels carry no authority.
@@ -135,9 +157,42 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
     ]
     report["pr6_line_proposal_count"] = line_added
     report["pr6_chroma_proposal_count"] = chroma_added
+    report["pr6_region_proposal_count"] = region_added
     # Filter using the actual ordered corners that are reported and warped.
     report["v2"], report["v2_rejected_post_order"] = _filter_valid_candidates(evaluated)
     report["v2_proposal_count"] = len(report["v2"])
+    # Stage 1 region identification -> Stage 2 recovered outer corners ->
+    # Stage 3 geometric/color-border plausibility, *read-only*. Not inserted
+    # into any existing PR6 approval logic; nested rectangles remain suspect.
+    if include_region_candidates:
+        other_quads = [
+            row["corners"] for row in
+            [report["stable"], report["adaptive"]] + report["v2"]
+            if row.get("geometry_valid") and row.get("corners") is not None
+        ]
+        report["pr6_outer_region_recovery_shadow"] = {
+            "status": "offline_diagnostic_only",
+            "auto_select": None,
+            "auto_crop_allowed": False,
+            "candidate_checks": [
+                {
+                    "source": f"v2_{index}",
+                    **inspect_outer_perspective_hypothesis(
+                        image, item["corners"],
+                        other_quads=[
+                            other for other in other_quads
+                            if not np.allclose(
+                                item["corners"], other,
+                                atol=1e-2, rtol=0,
+                            )
+                        ],
+                    ),
+                }
+                for index, (item, origin) in enumerate(
+                    zip(report["v2"], report["pr6_v2_proposal_origins"])
+                ) if origin == "outer_region"
+            ],
+        }
     candidates = [(name, report[name]) for name in ("stable", "adaptive")]
     candidates.extend((f"v2_{index}", item) for index, item in enumerate(report["v2"]))
     report["v3_ranking"] = rank_candidates(candidates)
@@ -269,6 +324,10 @@ def main():
         "--include-chroma-proposals", action="store_true",
         help="Include experimental Lab chromatic-edge quadrilaterals for evaluation only",
     )
+    parser.add_argument(
+        "--include-region-proposals", action="store_true",
+        help="Include experimental multiscale region-first outer boundary proposals (review only)",
+    )
     args = parser.parse_args()
     annotations = _load_expected(args.annotations)
     results = {}
@@ -283,6 +342,7 @@ def main():
             image, expected=annotations.get(file.name),
             include_line_candidates=args.include_line_proposals,
             include_chroma_candidates=args.include_chroma_proposals,
+            include_region_candidates=args.include_region_proposals,
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
