@@ -110,6 +110,8 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
     outer = _dict(report.get("pr6_outer_region_recovery_shadow"))
     side_recovery = _dict(report.get("pr6_side_recovery_shadow"))
     side_recovery_rows = _list(side_recovery.get("candidates"))
+    paired_alignment = _dict(report.get("pr6_paired_alignment_shadow"))
+    paired_rows = _list(paired_alignment.get("candidates"))
     outer_checks = {
         row["source"]: row
         for raw in _list(outer.get("candidate_checks"))
@@ -161,6 +163,13 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         sources.append((
             f"side_recovery_{index}", "Side Recovery",
             {"corners": item.get("corners"), "geometry_valid": True},
+        ))
+    for index, raw in enumerate(paired_rows[:12]):
+        paired = _dict(raw)
+        # Post-gate previews only, never injected into PR6 candidate ranking.
+        sources.append((
+            f"paired_alignment_{index}", "Paired Alignment",
+            {"corners": paired.get("corners"), "geometry_valid": True},
         ))
 
     display_sources = _balanced_sources(sources, MAX_DISPLAY_CANDIDATES)
@@ -238,6 +247,31 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 visualization_remeasured or representative == name
             ),
             "measurements_visual_only": bool(visualization_remeasured),
+            "paired_alignment_details": {
+                "parent_source": _dict(paired_rows[int(name.split("_")[-1)]).get(
+                    "parent_source"
+                ),
+                "outer_region_source": _dict(
+                    paired_rows[int(name.split("_")[-1)]
+                ).get("outer_region_source"),
+                "paired_side_indices": _dict(
+                    paired_rows[int(name.split("_")[-1)]
+                ).get("paired_side_indices"),
+                "shift_fraction_of_pair_gap": _number(
+                    _dict(paired_rows[int(name.split("_")[-1)]).get(
+                        "shift_fraction_of_pair_gap"
+                    )
+                ),
+                "translation_original_xy": _dict(
+                    paired_rows[int(name.split("_")[-1)]
+                ).get("translation_original_xy"),
+                "side_scores_before": _dict(
+                    paired_rows[int(name.split("_")[-1)]
+                ).get("side_scores_before"),
+                "side_scores_after": _dict(
+                    paired_rows[int(name.split("_")[-1)]
+                ).get("side_scores_after"),
+            } if name.startswith("paired_alignment_") else None,
             "side_recovery_details": {
                 "parent_source": (
                     _dict(side_recovery_rows[int(name.split("_")[-1])])
@@ -311,6 +345,7 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "Chroma": sum(1 for row in rows if row["family"] == "Chroma"),
         "Outer Region": sum(1 for row in rows if row["family"] == "Outer Region"),
         "Side Recovery": sum(1 for row in rows if row["family"] == "Side Recovery"),
+        "Paired Alignment": sum(1 for row in rows if row["family"] == "Paired Alignment"),
     }
     return {
         "status": "offline_visual_diagnostic_only",
@@ -342,6 +377,13 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         ),
         "side_recovery_reason_codes": _codes(
             side_recovery.get("reason_codes")
+        ),
+        "generated_paired_alignment_count": min(len(paired_rows), 12),
+        "paired_alignment_parents_examined": int(
+            paired_alignment.get("parents_examined") or 0
+        ),
+        "paired_alignment_reason_codes": _codes(
+            paired_alignment.get("reason_codes")
         ),
         "rejected_after_geometry": int(
             report.get("v2_rejected_post_order") or 0
