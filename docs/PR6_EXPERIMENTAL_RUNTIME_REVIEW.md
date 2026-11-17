@@ -2,17 +2,20 @@
 
 ## Scope
 
-This stage connects existing classical CV PR6 diagnostics to the actual
-`Proses Otomatis` UI action **on the experimental branch only**. It is a
-deliberately conservative integration of already-implemented CV evidence:
+This stage exposes existing classical CV PR6 diagnostics as a **separate
+`Review PR6` UI action on the experimental branch only**. The ordinary
+`Proses Otomatis` button retains the legacy scanner path and is never
+silently redirected to no-crop review. It is a deliberately conservative
+integration of already-implemented CV evidence:
 stable vs adaptive vs V2 contour proposals, physical-side localization,
 geometric nesting conflicts, candidate consensus, review gates, and
 refinement context.
 
 **This is not an automatic crop/acceptance feature.** Current PR6 shadow
 results do not establish calibrated confidence or physical-boundary
-correctness. The stage replaces an unsafe automatic write with a **review
-decision and a proposed corner geometry** when safe enough for user review.
+correctness. The `Review PR6` action supplies a **review decision and a proposed
+corner geometry** when safe enough for user review. This is a distinct
+experimental workflow; it does not overwrite the legacy automatic button.
 
 No custom thresholds, filenames, private KTP images, annotations or
 ground-truth evaluation are used to decide a runtime route.
@@ -28,9 +31,15 @@ $env:AUTODOCSCANNER_PR6_RUNTIME_REVIEW = "1"
 python app.py --ui
 ```
 
-This runtime flag also enables the manual four-corner editor and its 4×
-magnifier; the separate `AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE` flag is no
-longer necessary when runtime PR6 review is enabled.
+This runtime flag exposes a **Review PR6** button next to the ordinary
+automatic processing controls and enables the manual four-corner editor
+with its 4× magnifier. The `AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE` flag
+is not needed when runtime PR6 review is enabled.
+
+**Use `Proses Otomatis` to run the existing automatic scanner. Use
+`Review PR6` to analyze the physical KTP boundary without automatically
+writing a crop.** Existing automatic results are not evidence that PR6
+approved the crop; the legacy detector can still be inaccurate.
 
 Disable and return to the original production-like processing behavior:
 
@@ -43,7 +52,7 @@ python app.py --ui
 Do not enable this flag for production or a packaged release without
 approval and successful Windows regression tests.
 
-## What happens when Proses Otomatis is pressed
+## What happens when Review PR6 is pressed
 
 1. Open each ORIGINAL source photo with OpenCV locally.
 2. Call `compare_detectors(image, expected=None)`: do not supply or read
@@ -72,13 +81,18 @@ confirms a replacement. It does not upload or persist PR6 diagnostic JSON.
 
 ## CLI behavior
 
-With `AUTODOCSCANNER_PR6_RUNTIME_REVIEW=1`, plain `python app.py`
-prints PR6 review results for local input images and performs **no crop or
-file writes**. To use the editor and confirm a crop, launch
-`python app.py --ui`.
+Plain `python app.py` always retains the existing batch automatic
+processing workflow, whether the experiment flag is set or not.
 
-Without the flag, the existing CLI and UI auto-processing paths are
-unchanged.
+For a deliberate read-only PR6 diagnostic in the CLI, enable the flag and
+run `python app.py --pr6-review`; this prints decisions but performs
+**no crop or output writes**. To use the review editor, launch
+`python app.py --ui` and click **Review PR6**, followed by **Koreksi Manual**
+for confirmation or adjustment.
+
+With the runtime flag absent, the extra **Review PR6** button is not shown.
+The separate manual magnifier can still be enabled by
+`AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE=1`.
 
 ## Tests
 
@@ -104,6 +118,9 @@ orientation, JPG/PDF export, SnipSheet, manual document, and packaged app.
 - Some apparently good detections are conservatively rejected because
   boundary evidence is incomplete. Future changes should improve
   measurable candidate selection, not relax safety only to produce crops.
+- The PR6 runtime experiment does not yet replace the old automatic
+  detector: it provides separate diagnostics and user review while preserving
+  `Proses Otomatis` for comparison.
 - This is **review integration** rather than automatic crop deployment.
   Automated crop may only be enabled after appropriate fresh holdout
   comparison, failure-rate measurement, regression testing and explicit
