@@ -127,8 +127,21 @@ def format_pr6_candidate_details(candidate, diagnostics):
     info.append(f"Geometri valid: {'ya' if candidate.get('geometry_valid') else 'tidak'}")
     rep = candidate.get("selection_representative")
     if rep and rep != source:
-        info.append(f"Metrik fisik dihitung untuk perwakilan grup: {rep}")
-        info.append("Pengukuran fisik perwakilan tidak diterapkan ke kandidat ini.")
+        info.append(f"Perwakilan grup untuk keputusan PR6: {rep}")
+        if candidate.get("measurements_visual_only"):
+            info.append(
+                "Metrik empat sisi di bawah dihitung khusus kandidat ini "
+                "untuk tampilan saja; tidak mengubah keputusan PR6."
+            )
+        else:
+            info.append(
+                "Metrik fisik perwakilan tidak diterapkan ke kandidat ini."
+            )
+    elif candidate.get("measurements_visual_only"):
+        info.append(
+            "Metrik sisi dihitung ulang khusus untuk tampilan; bukan "
+            "dasar pemilihan otomatis."
+        )
     info.append("")
     info.append("BUKTI EMPAT SISI")
     for index, side in enumerate(candidate.get("side_evidence") or []):
@@ -230,6 +243,19 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
     ttk.Label(
         picker_bar, text=f"{len(candidates)} kandidat (bukan jumlah kartu)",
     ).pack(side="left", padx=(10, 0))
+
+    counts = diagnostics.get("family_counts")
+    counts = counts if isinstance(counts, dict) else {}
+    summary = (
+        f"Per sumber: Stable {counts.get('Stable', 0)} • "
+        f"Adaptive {counts.get('Adaptive', 0)} • "
+        f"Kontur V2 {counts.get('Kontur V2', 0)} • "
+        f"Four-Line {counts.get('Four-Line', 0)} • "
+        f"Chroma {counts.get('Chroma', 0)}"
+    )
+    ttk.Label(root, text=summary, wraplength=880).pack(
+        anchor="w", pady=(0, 6)
+    )
 
     main = ttk.Frame(root)
     main.pack(fill="both", expand=True)
