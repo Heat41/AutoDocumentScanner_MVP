@@ -42,16 +42,22 @@ preserve the legacy UI (manual button remains disabled without detector corners)
    the general manual-document corner seed. Previously cached detector
    corners are ignored after a failed run. The seed **is not evidence of
    detected KTP boundaries**; the user must position the points.
-4. **Batal** only closes the dialog; it never invokes the scanner, mutates
+4. In the opt-in editor, **press and hold** any of the four
+   TL/TR/BR/BL handles to show a **4× magnifier** of the original photo.
+   The magnifier follows the point during dragging, stays away from the
+   selected handle, and disappears on mouse release. It has a central
+   crosshair and neutral padding near the source photo's edges. This is a
+   display-only tool; zoom never changes, crops or saves image data.
+5. **Batal** only closes the dialog; it never invokes the scanner, mutates
    existing results or writes a file.
-5. **Terapkan Koreksi** checks that processing is idle, decoder dimensions
+6. **Terapkan Koreksi** checks that processing is idle, decoder dimensions
    still match the source preview, and all four user coordinates are finite,
    ordered TL/TR/BR/BL, non-crossing and inside the image.
-6. After the explicit click and checks, the existing
+7. After the explicit click and checks, the existing
    `AutoDocumentScanner.scan_with_corners(..., mode="ktp")` pathway performs
    the perspective correction and final validation/output. Errors leave
    the dialog open and do not update the success mappings.
-7. A successful call clears any earlier failure state for that source,
+8. A successful call clears any earlier failure state for that source,
    records the manually confirmed corners and output, and refreshes the UI.
 
 The manual dialog still has no dependency on ground-truth annotations,
@@ -69,6 +75,7 @@ diagnostic corner error or personal names.
 ## Test plan
 
 ```powershell
+python -m pytest tests/ui/test_manual_corner_magnifier_pr6.py -v
 python -m pytest tests/ui/test_manual_fallback_bridge_pr6.py -v
 python -m pytest tests/ktp/test_manual_fallback_validation_pr6.py -v
 python -m pytest -q
@@ -76,8 +83,9 @@ python -m pytest -q
 
 Additional Windows manual QA: use a blank/non-detectable synthetic photo,
 a portrait photo, a landscape photo, and an EXIF-rotated synthetic photo.
-Check button state with flag off/on, no-candidate editor entry, movable
-corners, incorrect/crossed coordinates, Reset Titik, Batal, explicit Apply,
+Check button state with flag off/on, no-candidate editor entry, magnifier
+on press/drag/release for all four handles (including image-edge corners),
+movable corners, incorrect/crossed coordinates, Reset Titik, Batal, explicit Apply,
 failed scan recovery, switching files, light/dark themes, and installed-app
 behavior. Check existing manual document page and SnipSheet remain unchanged.
 Keep real KTP photos and diagnostics local.
@@ -87,3 +95,14 @@ Keep real KTP photos and diagnostics local.
 After Windows UI + regression tests and fresh unseen image testing, review
 whether to integrate a PR6 review decision into a user-visible app. The
 runtime detector and `main` must remain untouched until explicit approval.
+
+## Automatic output still appears tilted
+
+The scanner's KTP flow intentionally does not apply the generic
+`deskew_small_angle` after perspective warp, because text baselines and
+internal printed lines are not reliable evidence of a physical card boundary.
+The new magnifier addresses **manual coordinate precision only**. It does
+not correct automatic candidate selection, original-image perspective or
+residual rotation. Investigate those with the original unwarped source
+photo and independent four-corner annotations; do not tune a runtime angle
+to one processed example, and do not modify the production detector here.
