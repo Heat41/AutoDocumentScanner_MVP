@@ -121,6 +121,11 @@ orientation, JPG/PDF export, SnipSheet, manual document, and packaged app.
 - The PR6 runtime experiment does not yet replace the old automatic
   detector: it provides separate diagnostics and user review while preserving
   `Proses Otomatis` for comparison.
+- The **Review PR6** action now opens a read-only candidate overlay
+  viewer for the active photo, showing Stable/Adaptive/V2/Four-Line geometry,
+  per-side evidence and reason codes. Use **Lihat Kandidat** to reopen it.
+  This viewer never chooses corners or saves output. See
+  `docs/PR6_VISUAL_CANDIDATE_DEBUGGING.md` for details.
 - This is **review integration** rather than automatic crop deployment.
   Automated crop may only be enabled after appropriate fresh holdout
   comparison, failure-rate measurement, regression testing and explicit
