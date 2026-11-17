@@ -259,3 +259,50 @@ def test_outer_region_family_and_perspective_risk_visible_without_auto_crop():
     assert "possible_internal_rectangle" in row["outer_recovery_check"]["reason_codes"]
     assert visual["auto_select"] is None
     assert visual["auto_crop_allowed"] is False
+
+
+
+def test_visual_display_balances_outer_region_even_if_contour_list_is_long():
+    report = _report()
+    report["v2"] = [deepcopy(report["v2"][0]) for _ in range(60)]
+    report["v2"][-1] = deepcopy(report["v2"][1])
+    report["pr6_v2_proposal_origins"] = ["contour"] * 59 + ["outer_region"]
+    display = build_pr6_visual_diagnostics(report, (240, 360))
+    assert display["candidate_count"] <= 40
+    assert display["source_hypotheses_hidden"] > 0
+    assert any(row["family"] == "Outer Region" and row["source"] == "v2_59"
+               for row in display["candidates"])
+    assert display["auto_select"] is None
+    assert display["auto_crop_allowed"] is False
+
+
+def test_region_context_warnings_survive_read_only_visual_projection():
+    report = _report()
+    report["pr6_v2_proposal_origins"] = ["outer_region", "contour"]
+    report["pr6_outer_region_recovery_shadow"] = {
+        "status": "offline_diagnostic_only",
+        "auto_select": None, "auto_crop_allowed": False,
+        "candidate_checks": [{
+            "source": "v2_0",
+            "status": "manual_review_only",
+            "perspective_feasible": True,
+            "reason_codes": [],
+            "region_context": {
+                "interior_edge_density": 0.0,
+                "interior_spatial_coverage": 0.0,
+                "interior_axis_line_bands": 0,
+                "corroborating_families": [],
+                "nested_inner_candidates": 0,
+                "reason_codes": ["sparse_internal_structure",
+                                 "no_independent_geometric_corroboration"],
+                "auto_select": None, "auto_crop_allowed": False,
+            }
+        }],
+    }
+    snapshot = build_pr6_visual_diagnostics(report, (240, 360))
+    row = next(row for row in snapshot["candidates"]
+               if row["family"] == "Outer Region")
+    reasons = row["outer_recovery_check"]["region_context"]["reason_codes"]
+    assert "sparse_internal_structure" in reasons
+    assert "no_independent_geometric_corroboration" in reasons
+    assert snapshot["auto_crop_allowed"] is False
