@@ -204,7 +204,7 @@ def test_chroma_family_and_source_counts_visible_without_auto_crop():
     assert result["family_counts"] == {
         "Stable": 1, "Adaptive": 0, "Kontur V2": 0,
         "Four-Line": 1, "Chroma": 1, "Outer Region": 0,
-        "Side Recovery": 0,
+        "Side Recovery": 0, "Paired Alignment": 0,
     }
     assert result["generated_chroma_count"] == 1
     assert result["generated_four_line_count"] == 1
