@@ -103,13 +103,40 @@ def _fake_editor(monkeypatch):
         def __init__(self, *args, **kwargs):
             self.command = kwargs.get("command")
             self.closed = False
+            self.bindings = {}
+            self.created = []
+            self.deleted = []
+            self.idle = None
             widgets.append(self)
             if "text" in kwargs and self.command:
                 buttons[kwargs["text"]] = self
         def pack(self, *args, **kwargs):
             return self
-        def bind(self, *args, **kwargs):
+        def bind(self, event, callback):
+            self.bindings[event] = callback
+        def winfo_width(self):
+            return 700
+        def winfo_height(self):
+            return 490
+        def update_idletasks(self):
             pass
+        def delete(self, tag):
+            self.deleted.append(tag)
+        def create_image(self, *args, **kwargs):
+            self.created.append(("image", kwargs.get("tags")))
+            return len(self.created)
+        def create_rectangle(self, *args, **kwargs):
+            self.created.append(("rectangle", kwargs.get("tags")))
+            return len(self.created)
+        def create_line(self, *args, **kwargs):
+            self.created.append(("line", kwargs.get("tags")))
+            return len(self.created)
+        def create_oval(self, *args, **kwargs):
+            self.created.append(("oval", kwargs.get("tags")))
+            return len(self.created)
+        def create_text(self, *args, **kwargs):
+            self.created.append(("text", kwargs.get("tags")))
+            return len(self.created)
         def configure(self, *args, **kwargs):
             pass
         def title(self, *args, **kwargs):
@@ -121,14 +148,16 @@ def _fake_editor(monkeypatch):
         def minsize(self, *args, **kwargs):
             pass
         def after_idle(self, fn):
-            # Do not render; callback still exercises the real apply path.
-            pass
+            # Existing apply tests do not run render; magnifier tests opt in
+            # explicitly to invoke the genuine deferred canvas callbacks.
+            self.idle = fn
         def destroy(self):
             self.closed = True
 
     for klass in ("Toplevel", "Frame", "Label", "Canvas"):
         monkeypatch.setattr(final.tk, klass, Widget)
     monkeypatch.setattr(final.ttk, "Button", Widget)
+    monkeypatch.setattr(final.ImageTk, "PhotoImage", lambda *a, **kw: "synthetic-photo")
     return final, widgets, buttons
 
 
@@ -280,3 +309,70 @@ def test_gui_failed_auto_ignores_stale_cached_detector_points(tmp_path, monkeypa
     assert len(calls) == 1
     assert calls[0][1] == fallback_starting_corners((400, 300))
     assert widgets[0].closed
+
+
+
+def test_gui_magnifier_appears_on_press_tracks_drag_and_hides_on_release(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.setenv(FLAG, "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    FinalScannerUI.open_manual_correction(fake)
+
+    dialog = widgets[0]
+    canvas = next(w for w in widgets if "<Button-1>" in w.bindings)
+    assert dialog.idle is not None
+    dialog.idle()  # render source preview in fake canvas
+    assert not any(tags == ("manual-magnifier",) for _, tags in canvas.created)
+
+    # Source 400 x 300, fake canvas 700 x 490. Initial TL is (24, 18).
+    # Scale=min(652/400,442/300), offset=(55.3,24).
+    source_scale = min((700 - 48) / 400, (490 - 48) / 300)
+    left = (700 - 400 * source_scale) / 2
+    top = (490 - 300 * source_scale) / 2
+    click = SimpleNamespace(
+        x=int(round(left + 24 * source_scale)),
+        y=int(round(top + 18 * source_scale)),
+    )
+    canvas.bindings["<Button-1>"](click)
+    assert any(tags == ("manual-magnifier",) for _, tags in canvas.created)
+
+    before = len(canvas.created)
+    canvas.bindings["<B1-Motion>"](
+        SimpleNamespace(x=click.x + 15, y=click.y + 10)
+    )
+    assert len(canvas.created) > before
+    assert len(calls) == 0  # zoom / drag never invokes scanner
+    assert "manual-magnifier" in canvas.deleted
+
+    canvas.bindings["<ButtonRelease-1>"](SimpleNamespace())
+    assert canvas.deleted[-1] == "manual-magnifier"
+    buttons["Batal"].command()
+    assert not calls
+
+
+def test_gui_magnifier_does_not_change_legacy_editor_without_flag(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.delenv(FLAG, raising=False)
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    fake._failure_by_file.clear()
+    fake._corners_by_file[str(path)] = np.asarray(
+        fallback_starting_corners((400, 300)), dtype=np.float32
+    )
+    FinalScannerUI.open_manual_correction(fake)
+    dialog = widgets[0]
+    canvas = next(w for w in widgets if "<Button-1>" in w.bindings)
+    dialog.idle()
+    source_scale = min((700 - 48) / 400, (490 - 48) / 300)
+    left = (700 - 400 * source_scale) / 2
+    top = (490 - 300 * source_scale) / 2
+    canvas.bindings["<Button-1>"](
+        SimpleNamespace(
+            x=int(round(left + 24 * source_scale)),
+            y=int(round(top + 18 * source_scale)),
+        )
+    )
+    assert not any(tags == ("manual-magnifier",) for _, tags in canvas.created)
+    buttons["Batal"].command()
+    assert not calls
