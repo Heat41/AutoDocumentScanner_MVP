@@ -29,13 +29,30 @@ def experimental_pr6_runtime_enabled(environ=None):
     return env.get(RUNTIME_FLAG) == "1"
 
 
+def _original_candidate(report, source):
+    if source in ("stable", "adaptive"):
+        candidate = report.get(source)
+    elif (isinstance(source, str) and source.startswith("v2_")
+            and source[3:].isdigit() and len(source) < 24):
+        choices = report.get("v2")
+        index = int(source[3:])
+        candidate = (
+            choices[index]
+            if isinstance(choices, list) and index < len(choices) else None
+        )
+    else:
+        candidate = None
+    return candidate.get("corners") if isinstance(candidate, dict) else None
+
+
 def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
     """Return a minimal preview/manual route, never a crop authorization.
 
     No disk I/O, no annotations, no raw image contents in returned data.
     The analyzer is injectable for synthetic, deterministic tests.
     """
-    if (not isinstance(image, np.ndarray) or image.ndim not in (2, 3)
+    if (not isinstance(image, np.ndarray) or image.ndim != 3
+            or image.shape[2] != 3
             or image.shape[0] < 16 or image.shape[1] < 16
             or image.dtype != np.uint8):
         raise ValueError("Gambar sumber tidak dapat dianalisis.")
@@ -55,11 +72,13 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
         and gate.get("auto_crop_allowed") is False
         and gate.get("auto_select", "bad") is None
         and gate.get("requires_explicit_confirmation") is True
+        and gate.get("physical_boundary_verified") is False
         and plan.get("status_scope") == "offline_diagnostic_only"
         and plan.get("ui_integration_status") == "not_connected_shadow_only"
         and plan.get("auto_crop_allowed") is False
         and plan.get("auto_select", "bad") is None
         and plan.get("requires_explicit_confirmation") is True
+        and plan.get("file_write_performed") is False
         and plan.get("source_image_policy") == "unmodified_original_image_required"
         and plan.get("source_image_shape") == list(image.shape[:2])
     )
@@ -77,7 +96,15 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
             validated = validate_manual_ui_corners_pr6(
                 plan.get("suggested_corners"), image.shape
             )
-            if validated is not None:
+            original = validate_manual_ui_corners_pr6(
+                _original_candidate(report, name), image.shape
+            )
+            if (validated is not None and original is not None
+                    and np.allclose(
+                        np.asarray(validated, dtype=np.float64),
+                        np.asarray(original, dtype=np.float64),
+                        rtol=0, atol=1e-3,
+                    )):
                 source = name
                 points = validated
 
