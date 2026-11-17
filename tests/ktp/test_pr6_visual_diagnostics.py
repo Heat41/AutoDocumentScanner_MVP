@@ -68,7 +68,23 @@ def _report():
         ]},
         "pr6_review_consolidation_shadow": {
             "status": "manual_review",
+            "action": "manual_corners",
+            "mode": "offline_shadow_review_only",
+            "auto_select": None, "auto_crop_allowed": False,
+            "requires_explicit_confirmation": True,
+            "physical_boundary_verified": False,
             "reason_codes": ["pr6_candidate_decision_shadow:requires_manual_review"],
+        },
+        "pr6_manual_fallback_shadow": {
+            "status": "manual_review",
+            "action": "manual_corners",
+            "status_scope": "offline_diagnostic_only",
+            "ui_integration_status": "not_connected_shadow_only",
+            "auto_select": None, "auto_crop_allowed": False,
+            "requires_explicit_confirmation": True,
+            "file_write_performed": False,
+            "source_image_policy": "unmodified_original_image_required",
+            "source_image_shape": [240, 360],
         },
     }
 
