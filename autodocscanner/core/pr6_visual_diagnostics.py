@@ -251,6 +251,10 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                     _dict(side_recovery_rows[int(name.split("_")[-1])])
                     .get("shift_fraction_of_parent_gap")
                 ),
+                "side_tilt_fraction_of_parent_gap": _number(
+                    _dict(side_recovery_rows[int(name.split("_")[-1])])
+                    .get("side_tilt_fraction_of_parent_gap")
+                ),
                 "side_score_before": _number(
                     _dict(side_recovery_rows[int(name.split("_")[-1])])
                     .get("side_score_before")
