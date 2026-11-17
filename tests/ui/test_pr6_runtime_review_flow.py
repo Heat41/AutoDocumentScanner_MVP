@@ -365,3 +365,114 @@ def test_final_ui_refresh_keeps_pr6_button_independent_from_auto_button(monkeypa
     FinalScannerUI._refresh_ktp_action_state(fake)
     assert states["legacy"][-1] == "normal"
     assert states["pr6"][-1] == "disabled"
+
+
+
+def test_visual_debug_button_available_only_after_selected_photo_review(monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    from autodocscanner.ui import final
+
+    source = Path("synthetic.png")
+    statuses = []
+    fake = SimpleNamespace(
+        files=[source], _processing_active=False,
+        _processed_image_paths=lambda: [],
+        _active_file_index=lambda: 0,
+        _pr6_runtime_review_by_file={},
+        pr6_candidates_button=SimpleNamespace(
+            configure=lambda **kw: statuses.append(kw["state"])
+        ),
+    )
+    monkeypatch.setattr(final, "experimental_pr6_runtime_enabled", lambda: True)
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert statuses[-1] == "disabled"
+
+    fake._pr6_runtime_review_by_file[str(source)] = {
+        "status": "manual_review",
+        "visual_debug": {
+            "status": "offline_visual_diagnostic_only",
+            "auto_select": None, "auto_crop_allowed": False,
+            "candidates": [],
+        },
+    }
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert statuses[-1] == "normal"
+    fake._processing_active = True
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert statuses[-1] == "disabled"
+
+    fake._processing_active = False
+    fake._active_file_index = lambda: None
+    FinalScannerUI._refresh_ktp_action_state(fake)
+    assert statuses[-1] == "disabled"
+
+
+def test_open_pr6_visual_debug_for_active_photo_only_and_no_scan(monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    from autodocscanner.ui import final
+
+    photo = Path("synthetic.png")
+    overlay = {
+        "status": "offline_visual_diagnostic_only",
+        "candidates": [],
+    }
+    calls = []
+    fake = SimpleNamespace(
+        files=[photo],
+        _active_file_index=lambda: 0,
+        _processing_active=False,
+        status_text=SimpleNamespace(set=lambda msg: calls.append(("status", msg))),
+        _pr6_runtime_review_by_file={
+            str(photo): {"visual_debug": overlay}
+        },
+    )
+    monkeypatch.setattr(final, "experimental_pr6_runtime_enabled", lambda: True)
+    monkeypatch.setattr(
+        final, "open_pr6_candidate_debug_dialog",
+        lambda parent, path, diagnostics: calls.append(
+            ("open", path, diagnostics)
+        ) or "read_only_dialog",
+    )
+    assert FinalScannerUI.open_pr6_candidate_debug(fake) == "read_only_dialog"
+    assert calls == [("open", photo, overlay)]
+
+    fake._processing_active = True
+    assert FinalScannerUI.open_pr6_candidate_debug(fake) is None
+    assert len(calls) == 1
+    fake._processing_active = False
+    fake._pr6_runtime_review_by_file.clear()
+    assert FinalScannerUI.open_pr6_candidate_debug(fake) is None
+    assert "Klik Review PR6" in calls[-1][1]
+
+
+def test_review_worker_schedules_visual_dialog_only_after_finishing(tmp_path, monkeypatch):
+    from autodocscanner.ui import stage2
+
+    fake, source, observed = _fake_ui(tmp_path)
+    observed["debug"] = []
+    fake.open_pr6_candidate_debug = lambda: observed["debug"].append("opened")
+    fake._hide_loading_popup = lambda: observed["debug"].append("closed_loading")
+    fake._pr6_review_requested = True
+    monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: True)
+    monkeypatch.setattr(stage2, "evaluate_pr6_runtime_file",
+                        lambda path: _review("manual_review"))
+    stage2.Stage2ScannerUI._process_worker(fake, "color")
+    assert observed["debug"] == ["closed_loading", "opened"]
+    assert str(source) in fake._pr6_runtime_review_by_file
+
+
+def test_legacy_worker_never_opens_pr6_visual_dialog(tmp_path, monkeypatch):
+    from autodocscanner.ui import stage2
+
+    fake, source, observed = _fake_ui(tmp_path)
+    observed["debug"] = []
+    fake.open_pr6_candidate_debug = lambda: observed["debug"].append("opened")
+    fake._pr6_review_requested = False
+    monkeypatch.setattr(stage2, "experimental_pr6_runtime_enabled", lambda: False)
+    monkeypatch.setattr(stage2, "process_ktp_output",
+                        lambda scanner, path, output_dir, **kwargs: {
+                            "output_path": output_dir / "synthetic_scanned.jpg",
+                            "corners": np.asarray(SUGGESTED, np.float32),
+                        })
+    stage2.Stage2ScannerUI._process_worker(fake, "color")
+    assert observed["debug"] == []
