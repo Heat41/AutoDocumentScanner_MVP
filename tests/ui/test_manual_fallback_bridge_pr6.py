@@ -393,3 +393,84 @@ def test_gui_magnifier_not_shown_when_clicking_background(tmp_path, monkeypatch)
     canvas.bindings["<ButtonRelease-1>"](SimpleNamespace())
     assert not calls
     buttons["Batal"].command()
+
+
+
+def test_runtime_pr6_preview_corners_are_only_applied_after_user_click(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.delenv(FLAG, raising=False)
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+
+    review_corners = [
+        [40., 40.], [340., 35.], [345., 250.], [45., 255.]
+    ]
+    fake._pr6_runtime_review_by_file = {str(path): {
+        "status": "preview_review",
+        "suggested_corners": [p[:] for p in review_corners],
+    }}
+    fake._corners_by_file[str(path)] = np.asarray(review_corners, np.float32)
+
+    FinalScannerUI.open_manual_correction(fake)
+    assert not calls
+    assert str(path) in fake._failure_by_file
+    buttons["Terapkan Koreksi"].command()
+    assert len(calls) == 1
+    assert calls[0][1] == review_corners
+    assert str(path) not in fake._failure_by_file
+    assert str(path) not in fake._pr6_runtime_review_by_file
+    assert widgets[0].closed
+
+
+def test_runtime_pr6_manual_does_not_use_cached_old_corners(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.delenv(FLAG, raising=False)
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+
+    fake._pr6_runtime_review_by_file = {str(path): {
+        "status": "manual_review", "suggested_corners": None,
+    }}
+    fake._corners_by_file[str(path)] = np.asarray(
+        [[0, 0], [399, 0], [399, 299], [0, 299]], np.float32
+    )
+    FinalScannerUI.open_manual_correction(fake)
+    assert "Reset Titik" in buttons
+    buttons["Terapkan Koreksi"].command()
+    assert len(calls) == 1
+    assert calls[0][1] == fallback_starting_corners((400, 300))
+    assert widgets[0].closed
+
+
+def test_runtime_pr6_preview_cancel_never_runs_auto_crop(tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    monkeypatch.delenv(FLAG, raising=False)
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    fake._pr6_runtime_review_by_file = {str(path): {
+        "status": "preview_review",
+        "suggested_corners": [p[:] for p in fallback_starting_corners((400, 300))],
+    }}
+    original = path.read_bytes()
+    FinalScannerUI.open_manual_correction(fake)
+    buttons["Batal"].command()
+    assert not calls
+    assert path.read_bytes() == original
+    assert str(path) in fake._pr6_runtime_review_by_file
+    assert widgets[0].closed
+
+
+def test_manual_bridge_is_available_if_only_runtime_review_flag_enabled(monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    fake = SimpleNamespace(
+        files=[Path("synthetic.jpg")],
+        _active_file_index=lambda: 0,
+        _active_file_has_corners=lambda: False,
+        _processing_active=False,
+    )
+    monkeypatch.delenv(FLAG, raising=False)
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    assert FinalScannerUI._manual_correction_available(fake)
