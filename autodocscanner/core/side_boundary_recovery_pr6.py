@@ -1,9 +1,9 @@
 """PR6 experimental one-side boundary relocation, visual review ONLY.
 
 Recover a single incorrectly placed edge of a near-card quadrilateral by
-sampling coherent Lab transitions along a family of parallel image-relative
-lines. Unlike ranking whole background regions, this preserves the other
-three candidate sides. A shifted line is only a geometric hypothesis.
+sampling coherent Lab transitions along a family of offset and *tilted*
+image-relative lines. Unlike ranking whole background regions, this preserves
+the other three candidate sides. A shifted line is only a geometric hypothesis.
 
 No identity or color assumptions, OCR, ML, photo-specific rules, file writes,
 automatic selection, warp output, or mutation of the input image.
@@ -38,7 +38,7 @@ def _intersection(a, b, c, d):
     return a + fraction * first
 
 
-def _side_transition(lab, a, b, inward, offset, sample_distance):
+def _side_transition(lab, a, b, inward, offset, sample_distance, tilt=0.):
     """Robust coherent color transition on a proposed physical edge.
 
     A median Lab vector rejects isolated strong texture strokes. This is
@@ -46,9 +46,12 @@ def _side_transition(lab, a, b, inward, offset, sample_distance):
     """
     h, w = lab.shape[:2]
     fractions = np.linspace(.08, .92, 48)
+    # Endpoint-relative shifts can differ. This handles genuine projective
+    # slant where a translated copy of the original edge cannot fit the card.
+    displacements = float(offset) + float(tilt) * (2 * fractions - 1)
     midpoints = (
         a[None, :] + fractions[:, None] * (b - a)[None, :]
-        + float(offset) * inward[None, :]
+        + displacements[:, None] * inward[None, :]
     )
     inside = midpoints + inward[None, :] * sample_distance
     outside = midpoints - inward[None, :] * sample_distance
@@ -79,12 +82,42 @@ def _side_transition(lab, a, b, inward, offset, sample_distance):
     return strength * support ** 1.5 * coverage
 
 
-def recover_one_side_hypotheses(image, corners, *, max_results=2):
+def prepare_side_recovery_lab(image, *, max_longest=1150):
+    """Prepare Lab once for many candidates, bounded for large phone photos.
+
+    Local image data is returned in memory only and must never be serialized.
+    """
+    if (not isinstance(image, np.ndarray) or image.ndim != 3
+            or image.shape[2] != 3 or image.dtype != np.uint8
+            or type(max_longest) is not int or max_longest < 200):
+        return None
+    height, width = image.shape[:2]
+    if min(height, width) < 32:
+        return None
+    scale = min(1., float(max_longest) / max(height, width))
+    small = (cv2.resize(
+        image, (max(2, round(width * scale)),
+                max(2, round(height * scale))),
+        interpolation=cv2.INTER_AREA,
+    ) if scale < 1 else image)
+    lab = cv2.GaussianBlur(
+        cv2.cvtColor(small, cv2.COLOR_BGR2LAB), (3, 3), 0
+    ).astype(np.float32)
+    return lab, scale
+
+
+def recover_one_side_hypotheses(image, corners, *, max_results=2,
+                                prepared=None):
     """Find up to max_results possible single-side shifts in original pixels.
 
     Each result preserves the other two corners and refits only the two
     adjacent corners by intersections. It is *not* a valid KTP decision.
     The parent hypothesis must already have a valid convex quadrilateral.
+    Allow skewed sides and significant inward shrinkage for oversized parents.
+    External lines can look identical: this remains a *review-only hypothesis*.
+
+    prepared is an optional (Lab, scale) from prepare_side_recovery_lab to
+    avoid repeated full-resolution conversion for multiple candidates.
     """
     if (not isinstance(image, np.ndarray) or image.ndim != 3
             or image.shape[2] != 3 or image.dtype != np.uint8
@@ -94,11 +127,18 @@ def recover_one_side_hypotheses(image, corners, *, max_results=2):
     if not valid:
         return []
 
-    h, w = image.shape[:2]
-    points = _order(corners)
-    lab = cv2.GaussianBlur(
-        cv2.cvtColor(image, cv2.COLOR_BGR2LAB), (3, 3), 0,
-    ).astype(np.float32)
+    if prepared is None:
+        prepared = prepare_side_recovery_lab(image)
+    if not isinstance(prepared, tuple) or len(prepared) != 2:
+        return []
+    lab, scale = prepared
+    if (not isinstance(lab, np.ndarray) or lab.ndim != 3
+            or lab.shape[2] != 3 or lab.dtype != np.float32
+            or not isinstance(scale, (int, float))
+            or not np.isfinite(scale) or not 0 < scale <= 1):
+        return []
+    h, w = lab.shape[:2]
+    points = _order(corners) * scale
     center = points.mean(axis=0)
     sample_distance = max(2., min(h, w) * .0075)
     old_area = abs(float(cv2.contourArea(points.astype(np.float32))))
@@ -120,61 +160,70 @@ def recover_one_side_hypotheses(image, corners, *, max_results=2):
         if gap < 20.:
             continue
 
-        # Search inward far enough to recover an oversized parent rectangle,
-        # while limiting outward expansion to avoid selecting the image frame.
+        # A large background box may need to shrink by most of one side's
+        # separation. Also search a limited change of orientation: projective
+        # card edges need not run parallel to the original background edge.
         offsets = np.unique(np.r_[
-            np.linspace(-.15 * gap, .58 * gap, 38),
-            0.,
+            np.linspace(-.10 * gap, .78 * gap, 45), 0.,
         ])
-        scores = [
-            _side_transition(
-                lab, a, b, inward, offset, sample_distance,
-            ) for offset in offsets
-        ]
-        best_index = int(np.argmax(scores))
-        best_score = float(scores[best_index])
+        tilts = gap * np.asarray((-.16, -.08, 0., .08, .16))
         initial_score = _side_transition(
             lab, a, b, inward, 0., sample_distance,
         )
-        shift = float(offsets[best_index])
-        if (best_score < 11.
-                or best_score < max(1.6 * initial_score,
-                                    initial_score + 10.)
-                or abs(shift) < .035 * gap):
-            continue
-
-        shifted_a, shifted_b = a + shift * inward, b + shift * inward
-        left = _intersection(
-            shifted_a, shifted_b,
-            points[(index - 1) % 4], points[index],
-        )
-        right = _intersection(
-            shifted_a, shifted_b,
-            points[(index + 1) % 4], points[(index + 2) % 4],
-        )
-        if left is None or right is None:
-            continue
-        proposed = points.copy()
-        proposed[index] = left
-        proposed[(index + 1) % 4] = right
-        new_area = abs(float(cv2.contourArea(proposed.astype(np.float32))))
-        if not .48 <= new_area / max(old_area, 1.) <= 1.25:
-            continue
-        geometry_ok, _, _ = validate_quad(proposed, image.shape)
-        if not geometry_ok:
-            continue
-        # Only one side moved, and neither strong line evidence nor an
-        # increased score grants permission to auto-crop or save.
-        hypotheses.append({
-            "corners": np.round(proposed, 3).tolist(),
-            "changed_side_index": int(index),
-            "shift_fraction_of_parent_gap": round(shift / gap, 4),
-            "side_score_before": round(initial_score, 3),
-            "side_score_after": round(best_score, 3),
-            "status": "hypothesis_for_manual_review",
-            "auto_select": None,
-            "auto_crop_allowed": False,
-        })
+        minimum_score = max(11., 1.5 * initial_score,
+                            initial_score + 10.)
+        potentials = []
+        for shift in offsets:
+            if abs(shift) < .035 * gap:
+                continue
+            for tilt in tilts:
+                evidence = _side_transition(
+                    lab, a, b, inward, float(shift), sample_distance,
+                    tilt=float(tilt),
+                )
+                if evidence >= minimum_score:
+                    potentials.append((float(evidence), float(shift),
+                                       float(tilt)))
+        # The highest edge score could create an invalid quadrilateral.
+        # Try the strongest bounded alternatives before failing closed.
+        potentials.sort(key=lambda row: -row[0])
+        for best_score, shift, tilt in potentials[:32]:
+            shifted_a = a + (shift - tilt) * inward
+            shifted_b = b + (shift + tilt) * inward
+            left = _intersection(
+                shifted_a, shifted_b,
+                points[(index - 1) % 4], points[index],
+            )
+            right = _intersection(
+                shifted_a, shifted_b,
+                points[(index + 1) % 4], points[(index + 2) % 4],
+            )
+            if left is None or right is None:
+                continue
+            proposed = points.copy()
+            proposed[index] = left
+            proposed[(index + 1) % 4] = right
+            new_area = abs(float(cv2.contourArea(proposed.astype(np.float32))))
+            # Large reductions are expected when the old box included
+            # extensive background; this is NOT permission to crop.
+            if not .28 <= new_area / max(old_area, 1.) <= 1.25:
+                continue
+            original_coords = proposed / scale
+            geometry_ok, _, _ = validate_quad(original_coords, image.shape)
+            if not geometry_ok:
+                continue
+            hypotheses.append({
+                "corners": np.round(original_coords, 3).tolist(),
+                "changed_side_index": int(index),
+                "shift_fraction_of_parent_gap": round(shift / gap, 4),
+                "side_tilt_fraction_of_parent_gap": round(tilt / gap, 4),
+                "side_score_before": round(initial_score, 3),
+                "side_score_after": round(best_score, 3),
+                "status": "hypothesis_for_manual_review",
+                "auto_select": None,
+                "auto_crop_allowed": False,
+            })
+            break
 
     hypotheses.sort(
         key=lambda entry: -(
