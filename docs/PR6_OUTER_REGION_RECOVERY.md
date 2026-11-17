@@ -155,3 +155,53 @@ applied to the scanner or saved.
 To make objective progress, compare normalized physical-card corner errors
 and severe false-crop rates on a local set of independently annotated, new
 photos. Keep real KTP images and JSON outside the repository.
+
+
+## Experimental Side Recovery — correcting a misaligned single side
+
+A visual-review example showed Outer Region hypotheses whose **bottom, left
+and right edges were near a physical card, but the top edge remained on the
+background**. No global contour-ranking score could move that missing side.
+
+`autodocscanner/core/side_boundary_recovery_pr6.py` provides an additional
+**review-only, one-side-at-a-time hypothesis**:
+
+1. Start with a valid Outer Region quadrilateral in original-image pixels.
+2. For each side, scan parallel offsets over a fraction of the quadrilateral
+   width/height. Measure robust, directionally coherent transitions across
+   that side in **Lab color space**; do not search for any fixed card color.
+3. If a displaced line has much stronger continuous evidence than the
+   existing line, intersect it with the two adjacent original side lines
+   to produce two new corners. The opposite corners remain unchanged.
+4. Require valid convex geometry and bounded area change. Never assume the
+   biggest gradient is necessarily a KTP boundary.
+
+The generator adds a separate **Side Recovery** family to the Visual Candidate
+Debugging list, identifying its `v2_...` parent, the side changed and the
+before/after edge-evidence values. These evidence values are **not confidence
+percentages**, accuracy measurements or a verified document boundary.
+
+Crucially, the hypotheses are appended **after all existing PR6 decisions
+and manual-fallback calculations have completed**. They are not candidates
+for PR6 auto-select, do not modify its Review Gate, and are never used for
+automatic perspective correction or image export.
+
+### Limitations and evaluation
+
+This can help when an initial quadrilateral is already near the card on
+most sides, but cannot reliably solve entirely wrong backgrounds,
+self-occluded edges, complex partial borders, or an image without a
+discernible physical document. A wrongly aligned internal photo box can
+also have strong edge transitions. If no better line is found, **Side
+Recovery may legitimately show zero proposals**.
+
+Synthetic tests cover multiple rotations, color/gray cards, background
+texture, correctly aligned candidates (which must not move), uniform
+images, invalid geometry, original-image immutability and unchanged
+PR6 manual-review routing. These tests are not a substitute for a fresh
+unseen, manually annotated set of real KTP photos.
+
+To inspect locally, enable `AUTODOCSCANNER_PR6_RUNTIME_REVIEW=1`, click
+**Review PR6**, then select **Side Recovery** in Visual Candidate Debugging.
+Compare it to its originating **Outer Region** geometry; do not save the
+recovered quadrilateral automatically.
