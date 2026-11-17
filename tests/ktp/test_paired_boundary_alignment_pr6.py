@@ -16,7 +16,7 @@ from autodocscanner.core.paired_boundary_alignment_pr6 import (
     propose_paired_alignment,
 )
 from autodocscanner.core.side_boundary_recovery_pr6 import (
-    prepare_side_recovery_lab,
+    prepare_side_recovery_lab, _order,
 )
 
 
@@ -58,6 +58,7 @@ def _scene(*, rotation=0, color=(62, 139, 205), clutter=True):
 
 
 def _inward_normal(corners, index):
+    corners = _order(corners)
     a, b = np.asarray(corners[index], float), np.asarray(
         corners[(index + 1) % 4], float,
     )
@@ -70,10 +71,17 @@ def _inward_normal(corners, index):
 
 
 def _mean_error(predicted, expected):
-    return float(np.linalg.norm(
-        np.asarray(predicted, float) - np.asarray(expected, float),
-        axis=1,
-    ).mean())
+    predicted = np.asarray(predicted, float)
+    expected = np.asarray(expected, float)
+    variants = [
+        np.roll(expected, offset, axis=0) for offset in range(4)
+    ] + [
+        np.roll(expected[::-1], offset, axis=0) for offset in range(4)
+    ]
+    return min(
+        float(np.linalg.norm(predicted - variant, axis=1).mean())
+        for variant in variants
+    )
 
 
 @pytest.mark.parametrize("rotation", [0, 22, 51, 93, 139, 164])
@@ -114,7 +122,7 @@ def test_already_correct_card_corners_not_shifted_to_internal_portrait():
 
 def test_moving_one_good_side_to_fix_other_is_not_allowed():
     image, truth = _scene(rotation=20)
-    wrong = truth.astype(float).copy()
+    wrong = _order(truth).copy()
     wrong[:2] -= _inward_normal(truth, 0) * 65
     # Opposite edge still follows the true card. A shared translation must
     # not worsen it merely to improve the first side.
