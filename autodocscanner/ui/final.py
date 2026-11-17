@@ -12,6 +12,10 @@ except ImportError:
     windnd = None
 
 from autodocscanner.ui.safe import SafeScannerUI
+from autodocscanner.ui.manual_corner_magnifier_pr6 import (
+    magnifier_image,
+    magnifier_canvas_position,
+)
 from autodocscanner.ui.manual_fallback_bridge_pr6 import (
     experimental_manual_bridge_enabled,
     manual_editor_available,
@@ -728,7 +732,11 @@ class FinalScannerUI(SafeScannerUI):
             shell,
             text=(
                 "Geser empat titik ke sudut fisik KTP. "
-                "Koreksi ini hanya dipakai bila hasil otomatis belum sesuai."
+                + (
+                    "Tekan dan tahan titik untuk kaca pembesar 4×."
+                    if bridge_enabled else
+                    "Koreksi ini hanya dipakai bila hasil otomatis belum sesuai."
+                )
             ),
             bg=palette["surface"],
             fg=palette["muted"],
@@ -777,6 +785,7 @@ class FinalScannerUI(SafeScannerUI):
             "offset": None,
             "image_item": None,
             "canvas_size": None,
+            "magnifier_photo": None,
         }
 
         def render(
@@ -997,6 +1006,58 @@ class FinalScannerUI(SafeScannerUI):
                         tags=("manual-overlay",),
                     )
 
+            # Show zoom only while the user is holding/dragging a corner.
+            if bridge_enabled:
+                render_magnifier()
+
+        def render_magnifier():
+            canvas.delete("manual-magnifier")
+            render_state["magnifier_photo"] = None
+            corner_index = active["index"]
+            if not bridge_enabled or corner_index is None:
+                return
+
+            point = working_corners[corner_index]
+            display_point = canvas_point_for_corner(point)
+            if display_point is None:
+                return
+            popup_size = 160
+            position = magnifier_canvas_position(
+                display_point,
+                (canvas.winfo_width(), canvas.winfo_height()),
+                size=popup_size,
+            )
+            if position is None:
+                return
+            try:
+                preview = magnifier_image(
+                    source, point, size=popup_size, zoom=4,
+                )
+                photo = ImageTk.PhotoImage(preview, master=dialog)
+            except (ValueError, OSError):
+                return
+            render_state["magnifier_photo"] = photo
+            x, y = position
+            canvas.create_rectangle(
+                x - 3, y - 3, x + popup_size + 3, y + popup_size + 3,
+                fill=palette["surface"], outline=palette["accent"],
+                width=2, tags=("manual-magnifier",),
+            )
+            canvas.create_image(
+                x, y, image=photo, anchor="nw", tags=("manual-magnifier",),
+            )
+            canvas.create_rectangle(
+                x + 5, y + 5, x + 66, y + 27,
+                fill="#FFFFFF", outline="#64748B",
+                tags=("manual-magnifier",),
+            )
+            canvas.create_text(
+                x + 35, y + 16,
+                text=("TL", "TR", "BR", "BL")[corner_index] + " 4×",
+                fill="#172033", font=("Segoe UI Semibold", 9),
+                tags=("manual-magnifier",),
+            )
+
         def canvas_point_for_corner(point):
             display_size = render_state[
                 "display_size"
@@ -1114,6 +1175,8 @@ class FinalScannerUI(SafeScannerUI):
             active[
                 "index"
             ] = closest
+            if bridge_enabled:
+                render_magnifier()
 
         def on_drag(event):
             corner_index = active[
@@ -1140,6 +1203,8 @@ class FinalScannerUI(SafeScannerUI):
             active[
                 "index"
             ] = None
+            if bridge_enabled:
+                render_magnifier()
 
         def apply_manual():
             if getattr(self, "_processing_active", False):
