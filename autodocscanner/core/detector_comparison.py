@@ -83,6 +83,7 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
         report[name]["source"] = (meta or {}).get("selected_source")
 
     proposals = contour_candidates(image, max_candidates=max_proposals)
+    proposal_origins = ["contour"] * len(proposals)
     # Optional additional *physical-boundary hypotheses* from independently
     # observed Hough line segments. Default offline reports and the released
     # automatic detector remain unchanged. These are never auto-accepted.
@@ -102,8 +103,15 @@ def compare_detectors(image, *, expected=None, max_proposals=24,
             ):
                 continue
             proposals.append(points)
+            proposal_origins.append("four_line")
             line_added += 1
     evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
+    # Match origin labels to post-validation v2 indices; rejected candidates
+    # must not shift the display labels. These labels carry no authority.
+    report["pr6_v2_proposal_origins"] = [
+        label for label, item in zip(proposal_origins, evaluated)
+        if item.get("geometry_valid") is True
+    ]
     report["pr6_line_proposal_count"] = line_added
     # Filter using the actual ordered corners that are reported and warped.
     report["v2"], report["v2_rejected_post_order"] = _filter_valid_candidates(evaluated)
