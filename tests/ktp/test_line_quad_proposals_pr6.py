@@ -147,3 +147,39 @@ def test_line_proposals_are_optional_and_do_not_change_baseline_report(monkeypat
     assert enhanced["pr6_review_consolidation_shadow"]["auto_crop_allowed"] is False
     assert enhanced["pr6_review_consolidation_shadow"]["auto_select"] is None
     assert enhanced["pr6_manual_fallback_shadow"]["auto_crop_allowed"] is False
+
+
+
+def test_offline_cli_can_compare_contour_only_and_long_edges(tmp_path, monkeypatch):
+    import json
+    import sys
+    from autodocscanner.core import detector_comparison as comparison
+
+    image_path = tmp_path / "synthetic.png"
+    image, _ = _synthetic_card(rotation=21, clutter=8)
+    assert cv2.imwrite(str(image_path), image)
+    calls = []
+
+    def fake_compare(image, *, expected=None, max_proposals=24,
+                     include_line_candidates=False):
+        calls.append((expected, include_line_candidates))
+        return {"four_line_enabled": include_line_candidates}
+
+    monkeypatch.setattr(comparison, "compare_detectors", fake_compare)
+    old_report = tmp_path / "baseline.json"
+    new_report = tmp_path / "four_line.json"
+    monkeypatch.setattr(sys, "argv", [
+        "detector_comparison.py", str(tmp_path), "--output", str(old_report),
+    ])
+    comparison.main()
+    monkeypatch.setattr(sys, "argv", [
+        "detector_comparison.py", str(tmp_path),
+        "--include-line-proposals", "--output", str(new_report),
+    ])
+    comparison.main()
+
+    assert calls == [(None, False), (None, True)]
+    baseline = json.loads(old_report.read_text(encoding="utf-8"))
+    extended = json.loads(new_report.read_text(encoding="utf-8"))
+    assert baseline["synthetic.png"]["four_line_enabled"] is False
+    assert extended["synthetic.png"]["four_line_enabled"] is True
