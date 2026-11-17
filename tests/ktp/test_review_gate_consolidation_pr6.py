@@ -297,3 +297,17 @@ def test_extreme_unrepresentable_corner_coordinate_fails_closed():
     result = consolidate_review_gate(data)
     assert result["status"] == "manual_review"
     assert "manual_handoff:preview_not_ready" in result["reason_codes"]
+
+
+
+def test_intentionally_unselected_manual_decision_is_not_source_mismatch():
+    data = report()
+    decision = data["pr6_candidate_decision_shadow"]
+    decision["status"] = "manual_review"
+    decision["action"] = "manual_corners"
+    decision["suggested_for_review"] = None
+    decision["reasons"] = ["incomplete_independent_boundary_evidence"]
+    final = consolidate_review_gate(data)
+    assert final["status"] == "manual_review"
+    assert "candidate_decision:source_mismatch" not in final["reason_codes"]
+    assert "pr6_candidate_decision_shadow:requires_manual_review" in final["reason_codes"]
