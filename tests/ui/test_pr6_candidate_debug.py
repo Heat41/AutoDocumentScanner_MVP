@@ -280,3 +280,50 @@ def test_real_tk_no_paired_alignment_explains_two_side_evidence(tmp_path):
         popup.destroy()
     finally:
         root.destroy()
+
+
+
+def test_missing_paired_alignment_explains_blocking_edge_for_selected_source():
+    diagnostic = _diag()
+    diagnostic["paired_alignment_parent_checks"] = [{
+        "source": "side_recovery_3",
+        "status": "rejected",
+        "failure_reason": "no_opposite_sides_both_improved",
+        "paired_side_indices": [0, 2],
+        "attempts_evaluated": 60,
+        "best_attempt": {
+            "shift_fraction_of_pair_gap": -.14,
+            "side_scores_before": [8.0, 14.0],
+            "side_scores_after": [20.0, 17.0],
+            "required_side_scores": [15.0, 21.0],
+            "blocking_side_index": 2,
+            "both_pass": False,
+        },
+    }]
+    candidate = dict(diagnostic["candidates"][0])
+    candidate["source"] = "side_recovery_3"
+    candidate["family"] = "Side Recovery"
+    candidate["side_recovery_details"] = {
+        "parent_source": "v2_7",
+        "changed_side_index": 0,
+    }
+    explanation = format_pr6_candidate_details(candidate, diagnostic)
+    assert "ALASAN PAIRED ALIGNMENT" in explanation
+    assert "Jumlah perpindahan diperiksa: 60" in explanation
+    assert "Atas: 8.00 → 20.00; minimum 15.00" in explanation
+    assert "Bawah: 14.00 → 17.00; minimum 21.00" in explanation
+    assert "Sisi yang paling menghambat: Bawah" in explanation
+    assert "bukan ketepatan sudut" in explanation
+
+
+def test_missing_paired_alignment_diagnostics_not_wrongly_shown_for_other_source():
+    diagnostic = _diag()
+    diagnostic["paired_alignment_parent_checks"] = [{
+        "source": "side_recovery_3",
+        "failure_reason": "no_opposite_sides_both_improved",
+        "attempts_evaluated": 60,
+    }]
+    text = format_pr6_candidate_details(
+        diagnostic["candidates"][0], diagnostic,
+    )
+    assert "ALASAN PAIRED ALIGNMENT" not in text
