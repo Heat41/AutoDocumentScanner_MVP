@@ -327,3 +327,97 @@ def test_missing_paired_alignment_diagnostics_not_wrongly_shown_for_other_source
         diagnostic["candidates"][0], diagnostic,
     )
     assert "ALASAN PAIRED ALIGNMENT" not in text
+
+
+
+def test_independent_sides_details_show_both_independent_offsets_and_no_auto_crop():
+    report = _diag()
+    candidate = dict(report["candidates"][0])
+    candidate["source"] = "independent_sides_0"
+    candidate["family"] = "Independent Sides"
+    candidate["ranking_score"] = None
+    candidate["independent_sides_details"] = {
+        "parent_source": "side_recovery_3",
+        "outer_region_source": "v2_7",
+        "paired_side_indices": [0, 2],
+        "independent_offset_fractions": [-.13, -.24],
+        "side_scores_before": [11.84, 0.0],
+        "side_scores_after": [20.0, 14.0],
+    }
+    text = format_pr6_candidate_details(candidate, report)
+    assert "DUA SISI DIPERBAIKI TERPISAH" in text
+    assert "side_recovery_3" in text and "v2_7" in text
+    assert "Atas: perpindahan -0.13" in text
+    assert "Bawah: perpindahan -0.24" in text
+    assert "bukan probabilitas" in text
+    assert "Tidak ikut ranking, Review Gate, atau auto-crop" in text
+
+
+def test_independent_sides_rejection_reports_edge_peaks_for_its_parent():
+    report = _diag()
+    report["independent_sides_parent_checks"] = [{
+        "source": "side_recovery_3",
+        "status": "rejected",
+        "failure_reason": "unsupported_boundary_for_one_or_both_sides",
+        "side_checks": [
+            {
+                "side_index": 0, "score_before": 11.84,
+                "strongest_score": 13.5, "required_score": 18.84,
+                "strongest_offset_fraction": -.15,
+            },
+            {
+                "side_index": 2, "score_before": 0,
+                "strongest_score": 3.14, "required_score": 11.0,
+                "strongest_offset_fraction": .21,
+            },
+        ],
+    }]
+    candidate = dict(report["candidates"][0])
+    candidate["source"] = "side_recovery_3"
+    candidate["side_recovery_details"] = {"parent_source": "v2_7"}
+    explanation = format_pr6_candidate_details(candidate, report)
+    assert "PEMERIKSAAN INDEPENDENT SIDES" in explanation
+    assert "Atas: bukti awal 11.84" in explanation
+    assert "Bawah: bukti awal 0.00" in explanation
+    assert "puncak 3.14" in explanation
+    assert "Puncak bukti tidak otomatis menjadi kandidat crop" in explanation
+
+
+def test_independent_sides_rejection_not_attributed_to_wrong_parent():
+    report = _diag()
+    report["independent_sides_parent_checks"] = [{
+        "source": "side_recovery_3",
+        "status": "rejected", "side_checks": [],
+    }]
+    candidate = dict(report["candidates"][0])
+    candidate["source"] = "side_recovery_2"
+    candidate["side_recovery_details"] = {"parent_source": "v2_7"}
+    assert "PEMERIKSAAN INDEPENDENT SIDES" not in (
+        format_pr6_candidate_details(candidate, report)
+    )
+
+
+def test_real_tk_independent_sides_zero_message(tmp_path):
+    path = tmp_path / "anonymous_synthetic.png"
+    Image.new("RGB", (360, 240), "#B7C6D8").save(path)
+    report = _diag()
+    report.update({
+        "independent_sides_count": 0,
+        "independent_sides_parents_examined": 4,
+        "independent_sides_reason_codes": [
+            "no_independent_two_side_hypothesis_passed"
+        ],
+    })
+    root = _tk_root()
+    root.withdraw()
+    try:
+        popup = open_pr6_candidate_debug_dialog(root, path, report)
+        popup.update()
+        labels = [str(w.cget("text")) for w in _children(popup, ttk.Label)]
+        assert any(
+            "Independent Sides: 4 kandidat awal diperiksa" in label
+            for label in labels
+        )
+        popup.destroy()
+    finally:
+        root.destroy()
