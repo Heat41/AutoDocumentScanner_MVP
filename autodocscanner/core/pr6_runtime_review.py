@@ -19,6 +19,9 @@ from autodocscanner.core.detector_comparison import compare_detectors
 from autodocscanner.core.manual_fallback_validation_pr6 import (
     validate_manual_ui_corners_pr6,
 )
+from autodocscanner.core.pr6_visual_diagnostics import (
+    build_pr6_visual_diagnostics,
+)
 
 
 RUNTIME_FLAG = "AUTODOCSCANNER_PR6_RUNTIME_REVIEW"
@@ -135,6 +138,11 @@ def evaluate_pr6_runtime_image(image, *, analyzer=compare_detectors):
         "file_write_performed": False,
         "image_shape": list(image.shape[:2]),
         "mode": "experimental_runtime_review_only",
+        # Source-pixel corners and evidence only; no image bytes are stored
+        # and none of these diagnostics can authorize a crop or selection.
+        "visual_debug": build_pr6_visual_diagnostics(
+            report, image.shape,
+        ),
     }
 
 
