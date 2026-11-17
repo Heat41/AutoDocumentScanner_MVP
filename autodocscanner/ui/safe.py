@@ -25,6 +25,11 @@ class SafeScannerUI(ScannerUI):
         ).strip()
 
         metadata = failure.get("metadata") or {}
+        # PR6 review is an intentional, uncommitted result, not a failed
+        # image export or a high-confidence auto-crop.
+        runtime_review = metadata.get("pr6_runtime_review") or {}
+        if runtime_review.get("status") in ("preview_review", "manual_review"):
+            return "Status: Menunggu konfirmasi", message
         validation = metadata.get("validation") or {}
         quality = metadata.get("quality") or {}
 
