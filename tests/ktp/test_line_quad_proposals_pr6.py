@@ -161,8 +161,10 @@ def test_offline_cli_can_compare_contour_only_and_long_edges(tmp_path, monkeypat
     calls = []
 
     def fake_compare(image, *, expected=None, max_proposals=24,
-                     include_line_candidates=False, include_chroma_candidates=False):
-        calls.append((expected, include_line_candidates, include_chroma_candidates))
+                     include_line_candidates=False, include_chroma_candidates=False,
+                     include_region_candidates=False):
+        calls.append((expected, include_line_candidates,
+                      include_chroma_candidates, include_region_candidates))
         return {
             "four_line_enabled": include_line_candidates,
             "chroma_enabled": include_chroma_candidates,
@@ -181,7 +183,9 @@ def test_offline_cli_can_compare_contour_only_and_long_edges(tmp_path, monkeypat
     ])
     comparison.main()
 
-    assert calls == [(None, False, False), (None, True, False)]
+    assert calls == [
+        (None, False, False, False), (None, True, False, False),
+    ]
     baseline = json.loads(old_report.read_text(encoding="utf-8"))
     extended = json.loads(new_report.read_text(encoding="utf-8"))
     assert baseline["synthetic.png"]["four_line_enabled"] is False
