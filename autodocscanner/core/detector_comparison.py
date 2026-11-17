@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from autodocscanner.core.experimental_candidates import contour_candidates
+from autodocscanner.core.line_quad_proposals_pr6 import line_quad_candidates
 from autodocscanner.core.quad_validation import validate_quad
 from autodocscanner.core.boundary_evidence import boundary_evidence
 from autodocscanner.core.candidate_ranking_v3 import rank_candidates
@@ -69,7 +70,8 @@ def _filter_valid_candidates(evaluated):
     return valid, len(evaluated) - len(valid)
 
 
-def compare_detectors(image, *, expected=None, max_proposals=24):
+def compare_detectors(image, *, expected=None, max_proposals=24,
+                      include_line_candidates=False):
     """Side-by-side diagnostics. Scores are NOT proof of correct KTP bounds."""
     stable = StableBaselinePerspectiveEngine()
     adaptive = AutoPerspectiveEngine()
@@ -81,7 +83,28 @@ def compare_detectors(image, *, expected=None, max_proposals=24):
         report[name]["source"] = (meta or {}).get("selected_source")
 
     proposals = contour_candidates(image, max_candidates=max_proposals)
+    # Optional additional *physical-boundary hypotheses* from independently
+    # observed Hough line segments. Default offline reports and the released
+    # automatic detector remain unchanged. These are never auto-accepted.
+    line_added = 0
+    if include_line_candidates:
+        for proposed in line_quad_candidates(image, max_candidates=6):
+            if len(proposed) != 4:
+                continue
+            points = np.asarray(proposed, dtype=np.float32)
+            if not np.isfinite(points).all():
+                continue
+            if any(
+                float(np.linalg.norm(
+                    points - np.asarray(old, dtype=np.float32), axis=1,
+                ).mean()) / max(float(np.hypot(*image.shape[:2])), 1.) < .018
+                for old in proposals
+            ):
+                continue
+            proposals.append(points)
+            line_added += 1
     evaluated = [_metric(adaptive, image, quad, expected) for quad in proposals]
+    report["pr6_line_proposal_count"] = line_added
     # Filter using the actual ordered corners that are reported and warped.
     report["v2"], report["v2_rejected_post_order"] = _filter_valid_candidates(evaluated)
     report["v2_proposal_count"] = len(report["v2"])
