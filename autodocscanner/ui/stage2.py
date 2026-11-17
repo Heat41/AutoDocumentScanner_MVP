@@ -544,7 +544,14 @@ class Stage2ScannerUI(ResponsiveScannerUI):
         review_count = 0
         errors = []
         output_format = "image"
-        pr6_runtime = experimental_pr6_runtime_enabled()
+        # PR6 review is an explicit action separate from Proses Otomatis.
+        # The environment flag merely exposes the action; it must not
+        # hijack the legacy automatic-processing button.
+        pr6_runtime = (
+            experimental_pr6_runtime_enabled()
+            and getattr(self, "_pr6_review_requested", False) is True
+        )
+        self._pr6_review_requested = False
 
         self.output_dir.mkdir(
             parents=True,
