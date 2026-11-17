@@ -1,0 +1,27 @@
+name: PR6 experimental runtime review tests
+
+on:
+  push:
+    branches:
+      - experiment/ktp-dynamic-perspective-v3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-review-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy pillow opencv-python-headless
+      - name: PR6 runtime and UI synthetic regression
+        run: |
+          python -m pytest tests/ktp/test_pr6_runtime_review.py tests/ui/test_pr6_runtime_review_flow.py tests/ui/test_manual_fallback_bridge_pr6.py tests/ktp/test_review_gate_consolidation_pr6.py -q
