@@ -3,6 +3,10 @@ import argparse
 
 from autodocscanner.services.batch import BatchScanRunner
 from autodocscanner.core.scanner import AutoDocumentScanner
+from autodocscanner.core.pr6_runtime_review import (
+    evaluate_pr6_runtime_file,
+    experimental_pr6_runtime_enabled,
+)
 
 
 INPUT_DIR = Path("input")
@@ -125,6 +129,42 @@ def main():
         from autodocscanner.ui.stage2 import main as run_ui
 
         run_ui()
+        return
+
+    if experimental_pr6_runtime_enabled():
+        # An explicit runtime-review opt-in must never silently run the
+        # legacy CLI batch auto-crop. Only the GUI can obtain a real user's
+        # four-corner confirmation. CLI reports decisions without saving.
+        print("======================================")
+        print(" PR6 REVIEW EKSPERIMEN — TANPA CROP")
+        print("======================================")
+        images = get_input_images(INPUT_DIR)
+        if not images:
+            print("Tidak ada gambar dalam folder input.")
+            return
+        counts = {"preview_review": 0, "manual_review": 0, "error": 0}
+        for index, input_path in enumerate(images, start=1):
+            try:
+                plan = evaluate_pr6_runtime_file(input_path)
+                decision = plan["status"]
+                counts[decision] += 1
+                print(
+                    f"[{index}/{len(images)}] {input_path.name}: "
+                    f"{decision} (memerlukan konfirmasi GUI)"
+                )
+            except Exception:
+                counts["error"] += 1
+                print(
+                    f"[{index}/{len(images)}] {input_path.name}: "
+                    "gagal dianalisis; jangan crop otomatis"
+                )
+        print(
+            f"Review: {counts['preview_review']}, "
+            f"Manual: {counts['manual_review']}, "
+            f"Gagal: {counts['error']}"
+        )
+        print("Tidak ada gambar hasil yang disimpan.")
+        print("Buka editor dengan: python app.py --ui")
         return
 
     print("======================================")
