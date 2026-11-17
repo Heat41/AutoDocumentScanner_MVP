@@ -10,6 +10,9 @@ import math
 
 import numpy as np
 
+from autodocscanner.core.boundary_localization_pr6 import localize_candidate_boundary
+from autodocscanner.core.physical_boundary_pr6 import verify_physical_boundary
+
 
 MAX_DISPLAY_CANDIDATES = 40
 
@@ -51,12 +54,16 @@ def _codes(value):
     return [x for x in _list(value) if isinstance(x, str) and len(x) <= 120][:24]
 
 
-def build_pr6_visual_diagnostics(report, image_shape):
+def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
     """Make a small immutable-by-convention display snapshot from PR6 report.
 
     Supports stable/adaptive and all post-validation V2 candidate indices,
-    including provenance of optional four-independent-line proposals.
-    Every source can be selected regardless of the final manual/preview route.
+    including provenance of optional four-independent-line and chromatic-edge
+    proposals. Every source can be selected regardless of the final route.
+
+    If source pixels are provided, independently remeasure ALL displayed
+    candidates for this *visualization only*. These numbers never enter
+    selection, ranking, or any review gate, and are not cached in the report.
     """
     report = _dict(report)
     try:
@@ -111,7 +118,10 @@ def build_pr6_visual_diagnostics(report, image_shape):
     ]
     for index, item in enumerate(v2):
         origin = origins[index] if index < len(origins) else "contour"
-        family = "Four-Line" if origin == "four_line" else "Kontur V2"
+        family = (
+            "Four-Line" if origin == "four_line" else
+            "Chroma" if origin == "chroma" else "Kontur V2"
+        )
         sources.append((f"v2_{index}", family, _dict(item)))
 
     rows = []
@@ -122,12 +132,26 @@ def build_pr6_visual_diagnostics(report, image_shape):
 
         representative = groups.get(name)
         combined_info = _dict(combined_by_source.get(representative))
-        localization_info = (
-            _dict(localization.get(name)) if representative == name else {}
+        visualization_remeasured = (
+            isinstance(image, np.ndarray)
+            and image.shape[:2] == (h, w)
+            and image.dtype == np.uint8
         )
-        physical_info = (
-            _dict(physical.get(name)) if representative == name else {}
-        )
+        if visualization_remeasured:
+            # Selection-group representative metrics are NOT attributable to
+            # every member's geometry. Measure this exact four-corner quad.
+            try:
+                localization_info = localize_candidate_boundary(image, points)
+                physical_info = verify_physical_boundary(image, points)
+            except (ValueError, TypeError, OverflowError):
+                localization_info, physical_info = {}, {}
+        else:
+            localization_info = (
+                _dict(localization.get(name)) if representative == name else {}
+            )
+            physical_info = (
+                _dict(physical.get(name)) if representative == name else {}
+            )
         outer_sides = _dict(source.get("boundary_evidence")).get("side_support")
         local_sides = _list(localization_info.get("side_localization"))
         physical_sides = _list(physical_info.get("side_measurements"))
@@ -170,13 +194,33 @@ def build_pr6_visual_diagnostics(report, image_shape):
                 if isinstance(assessment.get("evidence_state"), str) else None
             ),
             "assessment_reasons": _codes(assessment.get("reasons")),
-            "physical_measurements_for_this_quad": representative == name,
+            "physical_measurements_for_this_quad": (
+                visualization_remeasured or representative == name
+            ),
+            "measurements_visual_only": bool(visualization_remeasured),
         })
 
+    family_counts = {
+        "Stable": sum(1 for row in rows if row["family"] == "Stable"),
+        "Adaptive": sum(1 for row in rows if row["family"] == "Adaptive"),
+        "Kontur V2": sum(1 for row in rows if row["family"] == "Kontur V2"),
+        "Four-Line": sum(1 for row in rows if row["family"] == "Four-Line"),
+        "Chroma": sum(1 for row in rows if row["family"] == "Chroma"),
+    }
     return {
         "status": "offline_visual_diagnostic_only",
         "image_shape": [h, w],
         "candidate_count": len(rows),
+        "family_counts": family_counts,
+        "generated_four_line_count": int(
+            report.get("pr6_line_proposal_count") or 0
+        ),
+        "generated_chroma_count": int(
+            report.get("pr6_chroma_proposal_count") or 0
+        ),
+        "rejected_after_geometry": int(
+            report.get("v2_rejected_post_order") or 0
+        ),
         "candidates": rows,
         "review_decision": (
             gate.get("status") if gate.get("status") in (
