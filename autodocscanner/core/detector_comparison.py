@@ -231,6 +231,10 @@ def main():
     parser.add_argument("folder", type=Path)
     parser.add_argument("--annotations", type=Path, default=None, help="JSON filename -> four corners")
     parser.add_argument("--output", type=Path, default=Path("ktp_detector_comparison.json"))
+    parser.add_argument(
+        "--include-line-proposals", action="store_true",
+        help="Include experimental four-line KTP boundary candidates for evaluation only",
+    )
     args = parser.parse_args()
     annotations = _load_expected(args.annotations)
     results = {}
@@ -241,7 +245,10 @@ def main():
         if image is None:
             results[file.name] = {"error": "unreadable"}
             continue
-        results[file.name] = compare_detectors(image, expected=annotations.get(file.name))
+        results[file.name] = compare_detectors(
+            image, expected=annotations.get(file.name),
+            include_line_candidates=args.include_line_proposals,
+        )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Evaluated {len(results)} images -> {args.output}")
