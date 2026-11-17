@@ -318,3 +318,43 @@ def test_no_unverified_photo_pixels_or_personal_fields_in_recovery_report():
         assert "identity" not in proposal
         assert "expected" not in proposal
         assert "ground_truth" not in proposal
+
+
+
+def test_zero_side_recovery_explains_why_after_search(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+
+    image, true = _scene(rotation=22)
+    monkeypatch.setattr(
+        comparison, "recover_one_side_hypotheses",
+        lambda *_args, **_kwargs: [],
+    )
+    report = comparison.compare_detectors(
+        image, include_region_candidates=True,
+    )
+    details = report["pr6_side_recovery_shadow"]
+    assert details["parents_examined"] >= 1
+    assert details["hypotheses_before_dedup"] == 0
+    assert details["reason_codes"] == [
+        "no_side_shift_passed_visual_evidence_and_geometry"
+    ]
+    assert details["candidate_count"] == 0
+    assert details["auto_crop_allowed"] is False
+
+
+def test_no_outer_region_parent_is_distinguished_from_failed_relocation(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+
+    image, true = _scene(rotation=22)
+    monkeypatch.setattr(
+        comparison, "region_outer_quad_candidates",
+        lambda *_args, **_kwargs: [],
+    )
+    report = comparison.compare_detectors(
+        image, include_region_candidates=True,
+    )
+    details = report["pr6_side_recovery_shadow"]
+    assert details["parents_examined"] == 0
+    assert details["reason_codes"] == ["no_outer_region_parent"]
+    assert details["candidate_count"] == 0
+    assert report["pr6_review_consolidation_shadow"]["auto_crop_allowed"] is False
