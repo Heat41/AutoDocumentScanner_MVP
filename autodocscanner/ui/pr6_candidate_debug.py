@@ -142,6 +142,38 @@ def format_pr6_candidate_details(candidate, diagnostics):
             "Metrik sisi dihitung ulang khusus untuk tampilan; bukan "
             "dasar pemilihan otomatis."
         )
+    independent = candidate.get("independent_sides_details")
+    if isinstance(independent, dict):
+        info.append("")
+        info.append("DUA SISI DIPERBAIKI TERPISAH — HANYA PREVIEW")
+        info.append(
+            "Kandidat asal: " + str(independent.get("parent_source") or "?")
+        )
+        info.append(
+            "Asal Outer Region: "
+            + str(independent.get("outer_region_source") or "?")
+        )
+        indices = independent.get("paired_side_indices") or []
+        fractions = independent.get("independent_offset_fractions") or []
+        before = independent.get("side_scores_before") or []
+        after = independent.get("side_scores_after") or []
+        if all(isinstance(v, list) and len(v) == 2
+               for v in (indices, fractions, before, after)):
+            for index, fraction, old, new in zip(
+                indices, fractions, before, after
+            ):
+                name = (SIDE_NAMES[index]
+                        if isinstance(index, int) and 0 <= index < 4
+                        else "Sisi")
+                info.append(
+                    f"  {name}: perpindahan {_num(fraction)}; "
+                    f"bukti {_num(old)} → {_num(new)}"
+                )
+        info.append(
+            "Jarak dua sisi boleh berbeda. Ini bukan probabilitas, "
+            "pengenalan KTP, atau otorisasi crop."
+        )
+        info.append("Tidak ikut ranking, Review Gate, atau auto-crop.")
     paired = candidate.get("paired_alignment_details")
     if isinstance(paired, dict):
         info.append("")
@@ -226,6 +258,56 @@ def format_pr6_candidate_details(candidate, diagnostics):
         info.append(
             "Kandidat ini tidak ikut ranking, Review Gate, atau auto-crop."
         )
+        independent_checks = diagnostics.get(
+            "independent_sides_parent_checks"
+        )
+        independent_check = next(
+            (
+                row for row in independent_checks
+                if isinstance(row, dict) and row.get("source") == source
+            ),
+            None,
+        ) if isinstance(independent_checks, list) else None
+        if isinstance(independent_check, dict):
+            info.append("")
+            info.append("PEMERIKSAAN INDEPENDENT SIDES")
+            outcome = independent_check.get("failure_reason")
+            if independent_check.get("status") == "proposed":
+                info.append(
+                    "Dua sisi memiliki usulan geometri; tetap belum "
+                    "terverifikasi sebagai batas KTP."
+                )
+            elif outcome == "unsupported_boundary_for_one_or_both_sides":
+                info.append(
+                    "Satu atau kedua sisi belum memiliki bukti tepi "
+                    "yang cukup untuk pergeseran independen."
+                )
+            elif outcome == "joined_geometry_or_boundary_rejected":
+                info.append(
+                    "Kombinasi tepi ditemukan tetapi geometri atau "
+                    "bukti setelah perpotongan belum memenuhi syarat."
+                )
+            else:
+                info.append(
+                    "Status: " + str(outcome or "belum tersedia")
+                )
+            for check in independent_check.get("side_checks") or []:
+                if not isinstance(check, dict):
+                    continue
+                index = check.get("side_index")
+                label = (
+                    SIDE_NAMES[index] if isinstance(index, int)
+                    and 0 <= index < 4 else "Sisi"
+                )
+                info.append(
+                    f"  {label}: bukti awal {_num(check.get('score_before'))}; "
+                    f"puncak {_num(check.get('strongest_score'))}; "
+                    f"syarat {_num(check.get('required_score'))}; "
+                    f"jarak {_num(check.get('strongest_offset_fraction'))}"
+                )
+            info.append(
+                "Puncak bukti tidak otomatis menjadi kandidat crop."
+            )
         checks = diagnostics.get("paired_alignment_parent_checks")
         check = next(
             (
@@ -469,7 +551,8 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         f"Chroma {counts.get('Chroma', 0)} • "
         f"Outer Region {counts.get('Outer Region', 0)} • "
         f"Side Recovery {counts.get('Side Recovery', 0)} • "
-        f"Paired Alignment {counts.get('Paired Alignment', 0)}"
+        f"Paired Alignment {counts.get('Paired Alignment', 0)} • "
+        f"Independent Sides {counts.get('Independent Sides', 0)}"
     )
     ttk.Label(root, text=summary, wraplength=880).pack(
         anchor="w", pady=(0, 6)
@@ -520,6 +603,19 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
             )
         ttk.Label(
             root, text=explanation, wraplength=880,
+        ).pack(anchor="w", pady=(0, 6))
+
+    if (diagnostics.get("independent_sides_count", 0) == 0
+            and diagnostics.get("independent_sides_reason_codes")):
+        tested = diagnostics.get("independent_sides_parents_examined") or 0
+        ttk.Label(
+            root,
+            text=(
+                f"Independent Sides: {tested} kandidat awal diperiksa; "
+                "belum ada usulan yang memenuhi bukti kedua sisi dan "
+                "validasi geometri. Lihat rincian pada Side Recovery."
+            ),
+            wraplength=880,
         ).pack(anchor="w", pady=(0, 6))
 
     main = ttk.Frame(root)
