@@ -1,12 +1,9 @@
 from pathlib import Path
 import argparse
+import os
 
 from autodocscanner.services.batch import BatchScanRunner
 from autodocscanner.core.scanner import AutoDocumentScanner
-from autodocscanner.core.pr6_runtime_review import (
-    evaluate_pr6_runtime_file,
-    experimental_pr6_runtime_enabled,
-)
 
 
 INPUT_DIR = Path("input")
@@ -131,7 +128,12 @@ def main():
         run_ui()
         return
 
-    if experimental_pr6_runtime_enabled():
+    if os.environ.get("AUTODOCSCANNER_PR6_RUNTIME_REVIEW") == "1":
+        # Lazy import keeps the legacy CLI startup and dependencies unchanged
+        # when the experimental flag is absent.
+        from autodocscanner.core.pr6_runtime_review import (
+            evaluate_pr6_runtime_file,
+        )
         # An explicit runtime-review opt-in must never silently run the
         # legacy CLI batch auto-crop. Only the GUI can obtain a real user's
         # four-corner confirmation. CLI reports decisions without saving.
