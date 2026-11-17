@@ -31,9 +31,9 @@ $env:AUTODOCSCANNER_PR6_RUNTIME_REVIEW = "1"
 python app.py --ui
 ```
 
-This runtime flag exposes a **Review PR6** button next to the ordinary
-automatic processing controls and enables the manual four-corner editor
-with its 4× magnifier. The `AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE` flag
+This runtime flag exposes a **Review PR6** button next to the file
+controls (**Kosongkan**) without crowding the responsive bottom toolbar,
+and enables the manual four-corner editor with its 4× magnifier. The `AUTODOCSCANNER_PR6_MANUAL_UI_BRIDGE` flag
 is not needed when runtime PR6 review is enabled.
 
 **Use `Proses Otomatis` to run the existing automatic scanner. Use
