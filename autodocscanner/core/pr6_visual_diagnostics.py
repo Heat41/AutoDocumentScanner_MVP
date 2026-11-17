@@ -377,6 +377,58 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "paired_alignment_reason_codes": _codes(
             paired_alignment.get("reason_codes")
         ),
+        "paired_alignment_parent_checks": [
+            {
+                "source": item.get("source"),
+                "outer_region_source": item.get("outer_region_source"),
+                "status": item.get("status"),
+                "failure_reason": item.get("failure_reason"),
+                "paired_side_indices": [
+                    index for index in _list(item.get("paired_side_indices"))
+                    if isinstance(index, int) and not isinstance(index, bool)
+                    and 0 <= index < 4
+                ][:2],
+                "attempts_evaluated": item.get("attempts_evaluated", 0),
+                "best_attempt": (
+                    {
+                        "shift_fraction_of_pair_gap": _number(
+                            _dict(item.get("best_attempt")).get(
+                                "shift_fraction_of_pair_gap"
+                            )
+                        ),
+                        "side_scores_before": [
+                            _number(x) for x in _list(
+                                _dict(item.get("best_attempt")).get(
+                                    "side_scores_before"
+                                )
+                            )[:2]
+                        ],
+                        "side_scores_after": [
+                            _number(x) for x in _list(
+                                _dict(item.get("best_attempt")).get(
+                                    "side_scores_after"
+                                )
+                            )[:2]
+                        ],
+                        "required_side_scores": [
+                            _number(x) for x in _list(
+                                _dict(item.get("best_attempt")).get(
+                                    "required_side_scores"
+                                )
+                            )[:2]
+                        ],
+                        "blocking_side_index": _dict(
+                            item.get("best_attempt")
+                        ).get("blocking_side_index"),
+                        "both_pass": _dict(item.get("best_attempt")).get(
+                            "both_pass"
+                        ) is True,
+                    } if isinstance(item.get("best_attempt"), dict) else None
+                ),
+            }
+            for raw in _list(paired_alignment.get("parent_checks"))[:12]
+            if (item := _dict(raw))
+        ],
         "rejected_after_geometry": int(
             report.get("v2_rejected_post_order") or 0
         ),
