@@ -218,17 +218,15 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
         f"{row.get('family', '?')} — {row.get('source', '?')}"
         for row in candidates
     ]
-    selection = tk.StringVar(value=labels[0] if labels else "Tidak ditemukan kandidat")
     picker = ttk.Combobox(
         picker_bar, state="readonly", width=32,
         values=labels if labels else ["Tidak ditemukan kandidat"],
-        textvariable=selection,
     )
     picker.pack(side="left", fill="x", expand=False)
-    if labels:
-        # Setting a StringVar does not reliably establish Combobox.current()
-        # on every Tk/Windows theme. Select the first candidate explicitly.
-        picker.current(0)
+    # Do not use a temporary StringVar here: when its Python owner is
+    # collected, Tk loses the selection and current() becomes -1.
+    # The Combobox itself owns and maintains the selected index.
+    picker.current(0)
     ttk.Label(
         picker_bar, text=f"{len(candidates)} kandidat (bukan jumlah kartu)",
     ).pack(side="left", padx=(10, 0))
