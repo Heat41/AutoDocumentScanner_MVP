@@ -221,7 +221,9 @@ def test_contextual_region_ranking_preserves_card_hypotheses_amid_distractors():
     image, outer = _scene(rotation=18, seed=7)
     # A large, clean, saturated external object can outrank the actual
     # document under area/fill heuristics. Synthetic distractor only.
-    cv2.rectangle(image, (25, 25), (235, 145), (200, 65, 60), -1)
+    # Keep the distractor separate from the card. Occluding a physical
+    # corner is a different, inherently ambiguous failure condition.
+    cv2.rectangle(image, (25, 25), (195, 125), (200, 65, 60), -1)
     center = np.asarray(outer, float).mean(axis=0)
     inner = center + (np.asarray(outer, float) - center) * .3
     context = [{
