@@ -359,6 +359,30 @@ def open_pr6_candidate_debug_dialog(parent, path, diagnostics):
     ttk.Label(root, text=summary, wraplength=880).pack(
         anchor="w", pady=(0, 6)
     )
+    # A zero is actionable only when we distinguish a lack of parents
+    # from a search that found no acceptable side displacement.
+    reasons = diagnostics.get("side_recovery_reason_codes") or []
+    tested = diagnostics.get("side_recovery_parents_examined") or 0
+    if diagnostics.get("generated_side_recovery_count", 0) == 0 and reasons:
+        if "no_outer_region_parent" in reasons:
+            explanation = (
+                "Side Recovery: belum ada kandidat Outer Region "
+                "untuk dijadikan titik awal."
+            )
+        elif "all_recovered_hypotheses_overlap_previous_candidates" in reasons:
+            explanation = (
+                f"Side Recovery: {tested} kandidat asal diperiksa, "
+                "tetapi alternatif yang ditemukan sudah ada di daftar."
+            )
+        else:
+            explanation = (
+                f"Side Recovery: {tested} kandidat asal diperiksa; "
+                "belum ditemukan perpindahan satu sisi yang memenuhi "
+                "syarat bukti tepi dan geometri."
+            )
+        ttk.Label(
+            root, text=explanation, wraplength=880,
+        ).pack(anchor="w", pady=(0, 6))
 
     main = ttk.Frame(root)
     main.pack(fill="both", expand=True)
