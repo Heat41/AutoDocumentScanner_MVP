@@ -172,6 +172,35 @@ def format_pr6_candidate_details(candidate, diagnostics):
             info.extend(
                 f"  • {code}" for code in codes[:12] if isinstance(code, str)
             )
+        context = outer.get("region_context")
+        if isinstance(context, dict):
+            info.append("")
+            info.append("KONTEKS WILAYAH (BUKAN IDENTIFIKASI KTP)")
+            info.append(
+                "Struktur internal: "
+                f"{_num(context.get('interior_spatial_coverage'))} cakupan sel"
+                " • " + _num(context.get("interior_edge_density")) + " kerapatan tepi"
+            )
+            info.append(
+                "Kelompok garis internal: "
+                f"{context.get('interior_axis_line_bands', 0)}"
+            )
+            info.append(
+                "Sumber lain dengan geometri mirip: "
+                + (", ".join(context.get("corroborating_families") or [])
+                   or "tidak ada")
+            )
+            info.append(
+                "Kandidat kecil yang terkandung: "
+                f"{context.get('nested_inner_candidates', 0)}"
+            )
+            risk = context.get("reason_codes")
+            if isinstance(risk, list) and risk:
+                info.append("Peringatan konteks:")
+                info.extend(f"  • {code}" for code in risk[:12])
+            info.append(
+                "Objek lain bisa memiliki struktur dan bukti sisi serupa."
+            )
         info.append(
             "Kejelasan garis atau homography tidak membuktikan objek ini KTP."
         )
