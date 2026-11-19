@@ -451,7 +451,7 @@ def test_outer_region_shows_both_direct_side_checks():
     assert "Atas + Bawah" in details
     assert "Kanan + Kiri" in details
     assert "puncak 12.00" in details
-    assert "syarat 15.00" in details
+    assert "syarat pindah 15.00" in details
     assert "izin crop" in details
 
 
