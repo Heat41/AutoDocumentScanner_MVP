@@ -1,9 +1,9 @@
 """PR6 independent opposite-side border hypotheses — offline visual review.
 
 Unlike a common translation, this allows two opposite edges to move by
-DIFFERENT distances, changing the candidate extent while preserving the
-orientation of the two adjacent edges. Both new edges must independently
-show coherent Lab boundary evidence. No KTP identity classification,
+DIFFERENT distances, or preserves one already-supported border while
+independently relocating its opposite edge. Final border evidence must
+remain valid after reconstructing the four corners. No KTP classification,
 automatic crop, photo-specific assumptions, disk/network writes or ML.
 """
 from __future__ import annotations
@@ -102,6 +102,11 @@ def propose_independent_opposite_sides(
         required = max(11., 1.25 * before, before + 7.)
         alternatives = []
         strongest = (before, 0.)
+        # An opposite side already on a strong boundary must NOT be
+        # forced to move just to demonstrate an artificial score gain.
+        # This is a *candidate-only* anchored hypothesis; an unchanged
+        # weak edge cannot be treated as a verified physical boundary.
+        anchor_supported = before >= 11.
         for frac in offset_fractions:
             if abs(frac) < .025:
                 continue
@@ -123,6 +128,11 @@ def propose_independent_opposite_sides(
             diverse.append(entry)
             if len(diverse) == 5:
                 break
+        # Reserve a slot for an already-supported original edge. An
+        # anchored side has exactly zero displacement, not a guessed
+        # additional edge. At least one opposite side must still move.
+        if anchor_supported:
+            diverse = diverse[:4] + [(before, 0., 0.)]
         support_by_side.append(diverse)
         checks.append({
             "side_index": idx,
@@ -130,7 +140,13 @@ def propose_independent_opposite_sides(
             "required_score": round(required, 3),
             "strongest_score": round(strongest[0], 3),
             "strongest_offset_fraction": round(strongest[1], 4),
-            "has_supported_alternative": bool(diverse),
+            "has_supported_alternative": bool(
+                any(abs(item[1]) > 1e-9 for item in diverse)
+            ),
+            "original_side_anchor_supported": bool(anchor_supported),
+            "supported_shift_count": sum(
+                abs(item[1]) > 1e-9 for item in diverse
+            ),
         })
 
     if info is not None:
@@ -147,6 +163,10 @@ def propose_independent_opposite_sides(
     combinations = 0
     for first in support_by_side[0]:
         for second in support_by_side[1]:
+            # A (0, 0) combination is the unmodified input, not a
+            # refinement. Never report it as a fresh proposal.
+            if abs(first[1]) < 1e-9 and abs(second[1]) < 1e-9:
+                continue
             combinations += 1
             moved = {}
             for idx, (_, _, delta) in zip(side_ids, (first, second)):
@@ -189,18 +209,37 @@ def propose_independent_opposite_sides(
                 confirmed.append(float(_side_transition(
                     lab, a, b, inward, 0., sample_distance,
                 )))
-            if any(score < max(
-                10., check["score_before"] * 1.20,
-                check["score_before"] + 6.,
-            ) for score, check in zip(confirmed, checks)):
+            # A moved edge must still exhibit a newly strengthened
+            # transition after line intersection. A held edge must
+            # already be strong AND retain at least 85% of that evidence
+            # in the joined geometry. The parent is never auto-selected.
+            offsets = (first[1], second[1])
+            requires = [
+                max(10., check["score_before"] * .85)
+                if abs(offset) < 1e-9 else
+                max(10., check["score_before"] * 1.20,
+                    check["score_before"] + 6.)
+                for offset, check in zip(offsets, checks)
+            ]
+            if any(score < minimum
+                   for score, minimum in zip(confirmed, requires)):
                 continue
 
+            anchor_indices = [
+                index for index, offset in zip(side_ids, offsets)
+                if abs(offset) < 1e-9
+            ]
             hypotheses.append({
                 "corners": np.round(recovered, 3).tolist(),
                 "paired_side_indices": list(side_ids),
                 "independent_offset_fractions": [
                     round(first[1], 4), round(second[1], 4),
                 ],
+                "anchored_side_indices": anchor_indices,
+                "refinement_kind": (
+                    "one_side_held_one_shifted"
+                    if anchor_indices else "two_sides_shifted"
+                ),
                 "side_scores_before": [
                     check["score_before"] for check in checks
                 ],
@@ -209,8 +248,10 @@ def propose_independent_opposite_sides(
                 "auto_select": None,
                 "auto_crop_allowed": False,
                 "_sort_evidence": min(
-                    confirmed[0] - checks[0]["score_before"],
-                    confirmed[1] - checks[1]["score_before"],
+                    score - check["score_before"]
+                    for score, check, offset in zip(
+                        confirmed, checks, offsets
+                    ) if abs(offset) > 1e-9
                 ),
             })
 

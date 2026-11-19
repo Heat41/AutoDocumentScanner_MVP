@@ -61,3 +61,25 @@ Lihat bagian **INDEPENDENT SIDES LANGSUNG DARI OUTER REGION**
 untuk bukti awal, puncak, ambang dan alasan penolakan pada kedua
 pasangan sisi. Indeks v2_N adalah lokal per pemeriksaan gambar;
 jangan menyamakan v2_2 antar foto.
+
+
+## Sisi sudah kuat tidak perlu dipaksa bergeser
+
+Independent Sides lama mensyaratkan KEDUA sisi berhadapan mengalami
+pergeseran dengan kenaikan skor tepi yang besar. Jika satu tepi kartu
+sudah kuat pada kandidat Outer Region awal, aturan ini berpotensi
+menolak perbaikan yang hanya diperlukan di sisi lainnya.
+
+Percobaan tambahan **one-side-held-one-shifted** memperbolehkan
+satu sisi tetap di offset nol **hanya ketika skor tepi awal >=11**.
+Sisi lawan tetap WAJIB memiliki pergeseran dengan bukti tepi lebih
+kuat, dan kedua sisi diperiksa ulang sesudah penggabungan geometri.
+Kandidat tanpa perpindahan pada kedua sisi dibuang. Hasil tetap
+visual-review only, tidak mengubah scoring, pemilihan PR6, crop,
+manual fallback, atau foto sumber.
+
+Pada Visual Candidate Debugging, sisi yang dipertahankan diberi
+label DITAHAN; diagnostik juga menginformasikan apabila bukti awal
+belum cukup untuk mempertahankan sisi tersebut. Hasil tidak dijamin
+muncul pada foto nyata, apalagi benar-benar mengikuti batas fisik
+KTP: syarat warna/kontras saja belum membuktikan identitas kartu.

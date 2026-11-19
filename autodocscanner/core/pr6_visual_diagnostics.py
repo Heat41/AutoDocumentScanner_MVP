@@ -270,6 +270,12 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 "independent_offset_fractions": independent_item.get(
                     "independent_offset_fractions"
                 ),
+                "anchored_side_indices": independent_item.get(
+                    "anchored_side_indices", []
+                ),
+                "refinement_kind": independent_item.get(
+                    "refinement_kind"
+                ),
                 "side_scores_before": independent_item.get("side_scores_before"),
                 "side_scores_after": independent_item.get("side_scores_after"),
             } if independent_item is not None else None,
@@ -435,6 +441,15 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                         ),
                         "has_supported_alternative": (
                             check.get("has_supported_alternative") is True
+                        ),
+                        "original_side_anchor_supported": (
+                            check.get("original_side_anchor_supported") is True
+                        ),
+                        "supported_shift_count": (
+                            int(check["supported_shift_count"])
+                            if type(check.get("supported_shift_count")) is int
+                            and 0 <= check["supported_shift_count"] <= 5
+                            else 0
                         ),
                     }
                     for raw_check in _list(item.get("side_checks"))[:2]

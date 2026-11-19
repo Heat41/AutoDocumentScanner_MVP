@@ -308,3 +308,35 @@ def test_region_context_warnings_survive_read_only_visual_projection():
     assert "sparse_internal_structure" in reasons
     assert "no_independent_geometric_corroboration" in reasons
     assert snapshot["auto_crop_allowed"] is False
+
+
+
+def test_independent_anchored_proposal_metadata_is_display_only():
+    report = _report()
+    report["pr6_independent_sides_shadow"] = {
+        "auto_select": None, "auto_crop_allowed": False,
+        "candidates": [{
+            "corners": deepcopy(CORNERS),
+            "parent_source": "v2_0",
+            "outer_region_source": "v2_0",
+            "paired_side_indices": [0, 2],
+            "anchored_side_indices": [0],
+            "refinement_kind": "one_side_held_one_shifted",
+            "independent_offset_fractions": [0., -.11],
+            "side_scores_before": [15., 1.],
+            "side_scores_after": [14., 18.],
+        }],
+        "parent_checks": [],
+    }
+    diagnostic = build_pr6_visual_diagnostics(report, (240, 360))
+    candidate = next(
+        item for item in diagnostic["candidates"]
+        if item["family"] == "Independent Sides"
+    )
+    assert candidate["independent_sides_details"]["anchored_side_indices"] == [0]
+    assert candidate["independent_sides_details"]["refinement_kind"] == (
+        "one_side_held_one_shifted"
+    )
+    assert candidate["ranking_score"] is None
+    assert diagnostic["auto_select"] is None
+    assert diagnostic["auto_crop_allowed"] is False

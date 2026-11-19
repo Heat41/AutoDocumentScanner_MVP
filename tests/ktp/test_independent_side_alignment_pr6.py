@@ -308,3 +308,55 @@ def test_small_independent_result_remains_visible_below_old_dedup_range(monkeypa
     assert independent["candidates"][0]["parent_source"] == "v2_0"
     assert independent["candidates"][0]["parent_family"] == "outer_region"
     assert result["pr6_review_consolidation_shadow"]["auto_crop_allowed"] is False
+
+
+
+@pytest.mark.parametrize("rotation", [0, 21, 68, 133])
+@pytest.mark.parametrize("pair", [0, 1])
+@pytest.mark.parametrize("anchor_first", [True, False])
+def test_one_strong_opposite_edge_can_be_held_while_other_moves(
+        rotation, pair, anchor_first):
+    image, truth = _scene(rotation)
+    initial = _order(truth).copy()
+    displaced_side = pair + 2 if anchor_first else pair
+    normal = _normal(initial, displaced_side)
+    initial[displaced_side] += normal * 26.
+    initial[(displaced_side + 1) % 4] += normal * 26.
+    details = {}
+    result = propose_independent_opposite_sides(
+        image, initial, pair_side_index=pair, max_results=4,
+        diagnostics=details,
+    )
+    assert result, details
+    anchored_side = pair if anchor_first else pair + 2
+    assert any(
+        anchored_side in item["anchored_side_indices"]
+        and item["refinement_kind"] == "one_side_held_one_shifted"
+        for item in result
+    ), result
+    assert min(_error(row["corners"], truth) for row in result) < 14
+    assert details["status"] == "proposed"
+    assert all(row["auto_select"] is None
+               and row["auto_crop_allowed"] is False
+               for row in result)
+
+
+@pytest.mark.parametrize("rotation", [0, 43, 106])
+def test_already_correct_borders_still_do_not_generate_original_as_new(rotation):
+    image, truth = _scene(rotation)
+    details = {}
+    result = propose_independent_opposite_sides(
+        image, truth, pair_side_index=0, diagnostics=details,
+    )
+    assert result == []
+    assert details["status"] == "rejected"
+    assert details["pairs_evaluated"] >= 0
+
+
+def test_strong_one_side_alone_without_other_edge_fails_closed():
+    image = np.full((420, 640, 3), 127, dtype=np.uint8)
+    cv2.rectangle(image, (90, 85), (440, 320), (76, 130, 182), 3)
+    # Both true borders already aligned -> no new geometry should be
+    # manufactured, even though the existing color transitions are strong.
+    truth = [[90, 85], [440, 85], [440, 320], [90, 320]]
+    assert propose_independent_opposite_sides(image, truth) == []

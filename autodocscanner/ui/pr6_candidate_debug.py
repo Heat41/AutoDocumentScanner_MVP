@@ -146,6 +146,11 @@ def format_pr6_candidate_details(candidate, diagnostics):
     if isinstance(independent, dict):
         info.append("")
         info.append("DUA SISI DIPERBAIKI TERPISAH — HANYA PREVIEW")
+        if independent.get("refinement_kind") == "one_side_held_one_shifted":
+            info.append(
+                "Satu sisi bertepi kuat tetap di posisi asal; "
+                "sisi lawannya digeser."
+            )
         info.append(
             "Kandidat asal: " + str(independent.get("parent_source") or "?")
         )
@@ -165,9 +170,11 @@ def format_pr6_candidate_details(candidate, diagnostics):
                 name = (SIDE_NAMES[index]
                         if isinstance(index, int) and 0 <= index < 4
                         else "Sisi")
+                held = index in (independent.get("anchored_side_indices") or [])
                 info.append(
-                    f"  {name}: perpindahan {_num(fraction)}; "
-                    f"bukti {_num(old)} → {_num(new)}"
+                    f"  {name}: perpindahan {_num(fraction)}"
+                    + (" (DITAHAN)" if held else "")
+                    + f"; bukti {_num(old)} → {_num(new)}"
                 )
         info.append(
             "Jarak dua sisi boleh berbeda. Ini bukan probabilitas, "
@@ -251,7 +258,10 @@ def format_pr6_candidate_details(candidate, diagnostics):
                     info.append(
                         f"  {label}: awal {_num(side.get('score_before'))}; "
                         f"puncak {_num(side.get('strongest_score'))}; "
-                        f"syarat {_num(side.get('required_score'))}"
+                        f"syarat pindah {_num(side.get('required_score'))}"
+                        + ("; boleh ditahan" if side.get(
+                            "original_side_anchor_supported"
+                        ) else "; tidak boleh ditahan")
                     )
             info.append(
                 "Hanya bukti tepi; bukan pemilihan otomatis atau izin crop."
@@ -341,6 +351,9 @@ def format_pr6_candidate_details(candidate, diagnostics):
                     f"puncak {_num(check.get('strongest_score'))}; "
                     f"syarat {_num(check.get('required_score'))}; "
                     f"jarak {_num(check.get('strongest_offset_fraction'))}"
+                    + ("; boleh ditahan" if check.get(
+                        "original_side_anchor_supported"
+                    ) else "; tidak boleh ditahan")
                 )
             info.append(
                 "Puncak bukti tidak otomatis menjadi kandidat crop."

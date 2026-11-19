@@ -453,3 +453,25 @@ def test_outer_region_shows_both_direct_side_checks():
     assert "puncak 12.00" in details
     assert "syarat 15.00" in details
     assert "izin crop" in details
+
+
+
+def test_held_independent_side_is_explicitly_labelled_in_review():
+    report = _diag()
+    candidate = dict(report["candidates"][0])
+    candidate["family"] = "Independent Sides"
+    candidate["source"] = "independent_sides_0"
+    candidate["independent_sides_details"] = {
+        "parent_source": "v2_2",
+        "outer_region_source": "v2_2",
+        "paired_side_indices": [0, 2],
+        "anchored_side_indices": [0],
+        "refinement_kind": "one_side_held_one_shifted",
+        "independent_offset_fractions": [0., -.11],
+        "side_scores_before": [15., 1.],
+        "side_scores_after": [14., 18.],
+    }
+    description = format_pr6_candidate_details(candidate, report)
+    assert "sisi lawannya digeser" in description
+    assert "(DITAHAN)" in description
+    assert "tidak ikut ranking" in description or "Tidak ikut ranking" in description
