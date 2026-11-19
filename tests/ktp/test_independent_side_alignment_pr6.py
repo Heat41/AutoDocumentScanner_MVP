@@ -229,3 +229,82 @@ def test_snapshot_exposes_independent_side_warning_without_auto_crop():
     assert candidate["ranking_score"] is None
     assert visual["auto_select"] is None
     assert visual["auto_crop_allowed"] is False
+
+
+
+def test_original_outer_region_examined_on_both_axes_without_side_recovery(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+
+    image, quad = _scene(20)
+    monkeypatch.setattr(comparison, "contour_candidates", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        comparison, "region_outer_quad_candidates",
+        lambda *_a, **_k: [quad.copy()],
+    )
+    monkeypatch.setattr(
+        comparison, "recover_one_side_hypotheses", lambda *_a, **_k: [],
+    )
+    visited = []
+
+    def check(_image, points, *, pair_side_index, diagnostics=None, **_):
+        visited.append(pair_side_index)
+        if diagnostics is not None:
+            diagnostics.update({
+                "status": "rejected",
+                "paired_side_indices": [pair_side_index, pair_side_index+2],
+                "failure_reason": "unsupported_boundary_for_one_or_both_sides",
+            })
+        return []
+
+    monkeypatch.setattr(
+        comparison, "propose_independent_opposite_sides", check,
+    )
+    report = comparison.compare_detectors(
+        image, include_region_candidates=True,
+    )
+    independent = report["pr6_independent_sides_shadow"]
+    assert visited == [0, 1]
+    assert report["pr6_side_recovery_shadow"]["candidate_count"] == 0
+    assert independent["direct_outer_region_parents_examined"] == 1
+    assert independent["direct_outer_region_pair_checks"] == 2
+    assert [item["source"] for item in independent["parent_checks"]] == [
+        "v2_0", "v2_0",
+    ]
+    assert independent["auto_select"] is None
+    assert independent["auto_crop_allowed"] is False
+
+
+def test_small_independent_result_remains_visible_below_old_dedup_range(monkeypatch):
+    from autodocscanner.core import detector_comparison as comparison
+
+    image, quad = _scene(15)
+    monkeypatch.setattr(comparison, "contour_candidates", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        comparison, "region_outer_quad_candidates",
+        lambda *_a, **_k: [quad.copy()],
+    )
+    monkeypatch.setattr(
+        comparison, "recover_one_side_hypotheses", lambda *_a, **_k: [],
+    )
+
+    def check(_image, points, *, pair_side_index, **_):
+        if pair_side_index == 1:
+            return []
+        return [{
+            "corners": (np.asarray(points, np.float64) + [0, 14]).tolist(),
+            "auto_select": None,
+            "auto_crop_allowed": False,
+            "paired_side_indices": [0, 2],
+        }]
+
+    monkeypatch.setattr(
+        comparison, "propose_independent_opposite_sides", check,
+    )
+    result = comparison.compare_detectors(
+        image, include_region_candidates=True,
+    )
+    independent = result["pr6_independent_sides_shadow"]
+    assert independent["candidate_count"] == 1
+    assert independent["candidates"][0]["parent_source"] == "v2_0"
+    assert independent["candidates"][0]["parent_family"] == "outer_region"
+    assert result["pr6_review_consolidation_shadow"]["auto_crop_allowed"] is False

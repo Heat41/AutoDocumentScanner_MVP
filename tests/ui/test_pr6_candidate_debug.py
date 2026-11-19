@@ -421,3 +421,35 @@ def test_real_tk_independent_sides_zero_message(tmp_path):
         popup.destroy()
     finally:
         root.destroy()
+
+
+
+def test_outer_region_shows_both_direct_side_checks():
+    report = _diag()
+    candidate = dict(report["candidates"][0])
+    candidate["family"] = "Outer Region"
+    candidate["source"] = "v2_2"
+    report["independent_sides_parent_checks"] = [
+        {
+            "source": "v2_2", "parent_family": "outer_region",
+            "paired_side_indices": [0, 2],
+            "status": "rejected",
+            "failure_reason": "unsupported_boundary_for_one_or_both_sides",
+            "side_checks": [{
+                "side_index": 0, "score_before": 8,
+                "strongest_score": 12, "required_score": 15,
+            }],
+        },
+        {
+            "source": "v2_2", "parent_family": "outer_region",
+            "paired_side_indices": [1, 3],
+            "status": "rejected", "side_checks": [],
+        },
+    ]
+    details = format_pr6_candidate_details(candidate, report)
+    assert "INDEPENDENT SIDES LANGSUNG DARI OUTER REGION" in details
+    assert "Atas + Bawah" in details
+    assert "Kanan + Kiri" in details
+    assert "puncak 12.00" in details
+    assert "syarat 15.00" in details
+    assert "izin crop" in details

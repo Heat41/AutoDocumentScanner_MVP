@@ -41,3 +41,23 @@ hipotesis yang disembunyikan oleh batas tampilan. Jika sebuah keluarga
 tidak terlihat, periksa jumlah pembangkitan ini sebelum menyimpulkan
 bahwa algoritma gagal. Nilai terbaik tetap ORACLE pasca-anotasi,
 tidak dapat digunakan sebagai ambang otomatis.
+
+
+## Evaluasi langsung kandidat Outer Region
+
+Independent Sides sebelumnya hanya mencoba keluaran Side Recovery.
+Sekarang setiap Outer Region valid diperiksa langsung pada dua pasangan
+sisi berhadapan (atas/bawah dan kiri/kanan), lalu keluaran Side Recovery
+tetap diperiksa. Perubahan dilakukan **setelah** seluruh PR6 Review
+Gate dan manual fallback. Tidak ada perubahan pada crop otomatis.
+
+Penyaringan duplikat khusus hasil Independent Sides dikurangi dari
+1,8% menjadi 0,3% diagonal gambar agar pergeseran kecil tetap
+tersedia untuk inspeksi. Ambang bukti tepi dan geometri TIDAK
+dilonggarkan. Hasil bisa tetap nol.
+
+Pilih kandidat Outer Region dalam Visual Candidate Debugging.
+Lihat bagian **INDEPENDENT SIDES LANGSUNG DARI OUTER REGION**
+untuk bukti awal, puncak, ambang dan alasan penolakan pada kedua
+pasangan sisi. Indeks v2_N adalah lokal per pemeriksaan gambar;
+jangan menyamakan v2_2 antar foto.

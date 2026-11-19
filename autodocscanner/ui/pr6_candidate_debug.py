@@ -219,6 +219,43 @@ def format_pr6_candidate_details(candidate, diagnostics):
         info.append(
             "Hasil ini TIDAK ikut ranking, Review Gate, atau auto-crop."
         )
+    if candidate.get("family") == "Outer Region":
+        raw_checks = diagnostics.get("independent_sides_parent_checks")
+        checks = raw_checks if isinstance(raw_checks, list) else []
+        tested = [
+            check for check in checks if isinstance(check, dict)
+            and check.get("source") == source
+            and check.get("parent_family") == "outer_region"
+        ][:2]
+        if tested:
+            info.append("")
+            info.append("INDEPENDENT SIDES LANGSUNG DARI OUTER REGION")
+            for check in tested:
+                names = [
+                    SIDE_NAMES[i] for i in check.get("paired_side_indices") or []
+                    if type(i) is int and 0 <= i < 4
+                ]
+                info.append(
+                    "Pasangan " + " + ".join(names) + ": "
+                    + str(check.get("status") or "belum dicoba")
+                    + " | " + str(check.get("failure_reason") or "tanpa penolakan")
+                )
+                for side in check.get("side_checks") or []:
+                    if not isinstance(side, dict):
+                        continue
+                    index = side.get("side_index")
+                    label = (
+                        SIDE_NAMES[index] if type(index) is int
+                        and 0 <= index < 4 else "Sisi"
+                    )
+                    info.append(
+                        f"  {label}: awal {_num(side.get('score_before'))}; "
+                        f"puncak {_num(side.get('strongest_score'))}; "
+                        f"syarat {_num(side.get('required_score'))}"
+                    )
+            info.append(
+                "Hanya bukti tepi; bukan pemilihan otomatis atau izin crop."
+            )
     relocated = candidate.get("side_recovery_details")
     if isinstance(relocated, dict):
         info.append("")

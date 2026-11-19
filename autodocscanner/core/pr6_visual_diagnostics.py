@@ -404,6 +404,12 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
         "independent_sides_parents_examined": int(
             independent.get("parents_examined") or 0
         ),
+        "independent_direct_region_parents_examined": int(
+            independent.get("direct_outer_region_parents_examined") or 0
+        ),
+        "independent_direct_region_pair_checks": int(
+            independent.get("direct_outer_region_pair_checks") or 0
+        ),
         "independent_sides_reason_codes": _codes(
             independent.get("reason_codes")
         ),
@@ -411,6 +417,11 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
             {
                 "source": item.get("source"),
                 "outer_region_source": item.get("outer_region_source"),
+                "parent_family": item.get("parent_family"),
+                "paired_side_indices": [
+                    index for index in _list(item.get("paired_side_indices"))
+                    if type(index) is int and 0 <= index < 4
+                ][:2],
                 "status": item.get("status"),
                 "failure_reason": item.get("failure_reason"),
                 "side_checks": [
@@ -431,7 +442,7 @@ def build_pr6_visual_diagnostics(report, image_shape, *, image=None):
                 ],
                 "pairs_evaluated": item.get("pairs_evaluated", 0),
             }
-            for raw in _list(independent.get("parent_checks"))[:12]
+            for raw in _list(independent.get("parent_checks"))[:40]
             if (item := _dict(raw))
         ],
         "paired_alignment_parent_checks": [
