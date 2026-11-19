@@ -26,6 +26,12 @@ from autodocscanner.ui.manual_fallback_bridge_pr6 import (
 from autodocscanner.ui.pr6_candidate_debug import (
     open_pr6_candidate_debug_dialog,
 )
+from autodocscanner.core.pr6_local_corner_evaluation import (
+    evaluate_pr6_candidates_against_manual,
+)
+from autodocscanner.ui.pr6_local_evaluation_dialog import (
+    open_pr6_local_evaluation_dialog,
+)
 
 
 class FinalScannerUI(SafeScannerUI):
@@ -859,6 +865,7 @@ class FinalScannerUI(SafeScannerUI):
             ]
             for point in corners
         ]
+        edited_corner_indices = set()
         active = {
             "index": None,
         }
@@ -1275,6 +1282,9 @@ class FinalScannerUI(SafeScannerUI):
             if point is None:
                 return
 
+            old = working_corners[corner_index]
+            if abs(point[0]-old[0]) > .01 or abs(point[1]-old[1]) > .01:
+                edited_corner_indices.add(corner_index)
             working_corners[
                 corner_index
             ] = point
@@ -1288,6 +1298,37 @@ class FinalScannerUI(SafeScannerUI):
             ] = None
             if bridge_enabled:
                 render_magnifier()
+
+        def measure_local_pr6():
+            # No scanner invocation, JPG/PDF export, or annotation persistence.
+            if getattr(self, "_processing_active", False):
+                self.status_text.set("Tunggu proses selesai untuk evaluasi PR6.")
+                return
+            if len(edited_corner_indices) != 4:
+                self.status_text.set(
+                    "Geser keempat titik ke batas fisik KTP sebelum evaluasi."
+                )
+                return
+            if self._active_file_index() != index or self.files[index] != path:
+                self.status_text.set("Foto aktif berubah. Ulangi Review PR6.")
+                return
+            reviews = getattr(self, "_pr6_runtime_review_by_file", {})
+            review = reviews.get(key) if isinstance(reviews, dict) else None
+            snapshot = (
+                review.get("visual_debug") if isinstance(review, dict) else None
+            )
+            original = cv2.imread(str(path))
+            if original is None or original.shape[:2] != (
+                    source_height, source_width):
+                self.status_text.set("Orientasi sumber berubah. Ulangi Review PR6.")
+                return
+            try:
+                report = evaluate_pr6_candidates_against_manual(
+                    snapshot, working_corners, original.shape,
+                )
+                open_pr6_local_evaluation_dialog(dialog, report)
+            except (ValueError, tk.TclError) as exc:
+                self.status_text.set("Evaluasi PR6 gagal: " + str(exc))
 
         def apply_manual():
             if getattr(self, "_processing_active", False):
@@ -1377,6 +1418,7 @@ class FinalScannerUI(SafeScannerUI):
             dialog.destroy()
 
         def reset_to_auto():
+            edited_corner_indices.clear()
             for idx, point in enumerate(
                 corners
             ):
@@ -1417,6 +1459,14 @@ class FinalScannerUI(SafeScannerUI):
         ).pack(
             side="left"
         )
+
+        if (bridge_enabled and experimental_pr6_runtime_enabled()
+                and isinstance(runtime_review, dict)
+                and isinstance(runtime_review.get("visual_debug"), dict)):
+            ttk.Button(
+                button_row, text="Ukur Kandidat PR6",
+                style="Quiet.TButton", command=measure_local_pr6,
+            ).pack(side="left", padx=(8, 0))
 
         ttk.Button(
             button_row,

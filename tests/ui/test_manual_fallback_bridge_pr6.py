@@ -474,3 +474,70 @@ def test_manual_bridge_is_available_if_only_runtime_review_flag_enabled(monkeypa
     monkeypatch.delenv(FLAG, raising=False)
     monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
     assert FinalScannerUI._manual_correction_available(fake)
+
+
+
+def test_local_pr6_measurement_requires_four_edited_handles_and_does_not_save(
+        tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+    from autodocscanner.ui import final
+
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, scan_calls, status = _fake_ui(tmp_path)
+    points = fallback_starting_corners((400, 300))
+    fake._pr6_runtime_review_by_file = {str(path): {
+        "status": "manual_review",
+        "visual_debug": {
+            "status": "offline_visual_diagnostic_only",
+            "image_shape": [300, 400], "auto_select": None,
+            "auto_crop_allowed": False,
+            "candidates": [
+                {"source": "stable", "family": "Stable", "corners": points},
+            ],
+        },
+    }}
+    reports = []
+    monkeypatch.setattr(
+        final, "open_pr6_local_evaluation_dialog",
+        lambda parent, report: reports.append(report),
+    )
+    before = path.read_bytes()
+    FinalScannerUI.open_manual_correction(fake)
+    assert "Ukur Kandidat PR6" in buttons
+    buttons["Ukur Kandidat PR6"].command()
+    assert "keempat titik" in status.value.lower()
+    assert not reports
+
+    widgets[0].idle()
+    canvas = next(w for w in widgets if "<B1-Motion>" in w.bindings)
+    scale = min((700 - 48)/400, (490 - 48)/300)
+    dw, dh = round(400*scale), round(300*scale)
+    ox, oy = (700-dw)/2, (490-dh)/2
+    for x, y in points:
+        event = SimpleNamespace(x=ox+x*dw/400, y=oy+y*dh/300)
+        moved = SimpleNamespace(x=event.x+2, y=event.y+2)
+        canvas.bindings["<Button-1>"](event)
+        canvas.bindings["<B1-Motion>"](moved)
+        canvas.bindings["<ButtonRelease-1>"](moved)
+    buttons["Ukur Kandidat PR6"].command()
+    assert len(reports) == 1
+    assert reports[0]["candidate_count"] == 1
+    assert reports[0]["auto_crop_allowed"] is False
+    assert not scan_calls
+    assert path.read_bytes() == before
+    assert str(path) not in fake._output_by_file
+    assert str(path) in fake._pr6_runtime_review_by_file
+
+
+def test_local_measurement_button_absent_without_review_data(
+        tmp_path, monkeypatch):
+    from autodocscanner.ui.final import FinalScannerUI
+
+    monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
+    _, widgets, buttons = _fake_editor(monkeypatch)
+    fake, path, calls, status = _fake_ui(tmp_path)
+    FinalScannerUI.open_manual_correction(fake)
+    assert "Ukur Kandidat PR6" not in buttons
+    assert "Terapkan Koreksi" in buttons
+    assert not calls
