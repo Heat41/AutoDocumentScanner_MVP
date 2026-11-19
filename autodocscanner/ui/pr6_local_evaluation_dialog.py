@@ -51,6 +51,51 @@ def format_local_pr6_evaluation(report):
             f"  PERHATIAN: {hidden} hipotesis tidak masuk tampilan; "
             "angka kesalahan hanya mencakup kandidat yang ditampilkan."
         )
+    skipped_details = report.get("skipped_details") or []
+    if skipped_details:
+        lines.extend((
+            "",
+            "ALASAN KANDIDAT DILEWATI (tidak masuk ranking in-frame):",
+        ))
+        labels = {
+            "corner_outside_original_photo": (
+                "Ada sudut di luar foto asli; hanya boleh evaluasi geometri"
+            ),
+            "outside_visual_diagnostic_extent": (
+                "Sudut terlalu jauh di luar foto untuk evaluasi"
+            ),
+            "invalid_corner_geometry": (
+                "Koordinat kandidat rusak atau tidak terbaca"
+            ),
+        }
+        for item in skipped_details:
+            lines.append(
+                f"  {item['source']} ({item['family']}): "
+                + labels.get(item["reason"], "Tidak valid")
+            )
+    outside = report.get("outside_frame_evaluations") or []
+    if outside:
+        lines.extend((
+            "",
+            "KANDIDAT DI LUAR FOTO — UKURAN GEOMETRI SAJA, BUKAN CROP:",
+            "Hasil di bawah TIDAK masuk statistik metode atau ranking "
+            "kandidat dalam foto.",
+        ))
+        for row in outside:
+            lines.append(
+                f"  {row['source']} ({row['family']}): "
+                f"{row['mean_error_px']:.2f} px | "
+                f"{100*row['normalized_error']:.2f}% diagonal | "
+                f"maks {row['max_error_px']:.2f} px"
+            )
+            for label, error, shift in zip(
+                ("Kiri-atas", "Kanan-atas", "Kanan-bawah", "Kiri-bawah"),
+                row["corner_errors_px"], row["corner_offsets_xy_px"]
+            ):
+                lines.append(
+                    f"    {label:<12} {error:.2f} px "
+                    f"(dx {shift[0]:+.2f}, dy {shift[1]:+.2f})"
+                )
     lines.extend(("", "PER KANDIDAT (urutan kesalahan setelah acuan manual):"))
     for row in report.get("candidates", []):
         lines.append(

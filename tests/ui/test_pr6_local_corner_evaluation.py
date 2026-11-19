@@ -90,3 +90,29 @@ def test_report_shows_per_corner_named_errors_and_generator_counts():
     assert "Paired Alignment: 0" in text
     assert "Independent Sides: 0" in text
     assert "2 hipotesis tidak masuk tampilan" in text
+
+
+
+def test_read_only_evaluation_explains_skipped_off_photo_independent_sides():
+    points = [[80, 50], [230, 50], [230, 150], [80, 150]]
+    snap = {
+        "status": "offline_visual_diagnostic_only",
+        "image_shape": [200, 320],
+        "auto_crop_allowed": False, "auto_select": None,
+        "candidates": [
+            {"source": "stable", "family": "Stable", "corners": points},
+            {"source": "independent_sides_0", "family": "Independent Sides",
+             "corners": [[-4, 50], [230, 50], [230, 150], [80, 150]]},
+        ],
+    }
+    summary = format_local_pr6_evaluation(
+        evaluate(snap, points, (200, 320))
+    )
+    assert "Kandidat terukur: 1; dilewati: 1" in summary
+    assert "ALASAN KANDIDAT DILEWATI" in summary
+    assert "independent_sides_0" in summary
+    assert "Ada sudut di luar foto asli" in summary
+    assert "KANDIDAT DI LUAR FOTO" in summary
+    assert "BUKAN CROP" in summary
+    assert "Independent Sides" in summary
+    assert "0.00%" in summary

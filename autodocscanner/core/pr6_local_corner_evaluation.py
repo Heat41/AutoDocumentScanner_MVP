@@ -22,16 +22,28 @@ FAMILIES = frozenset({
 
 
 def _candidate_points(value, height, width):
+    """Separate *measurable* diagnostic geometry from in-frame crop safety.
+
+    The read-only visual snapshot already accepts quads at most 4% beyond
+    the image. A slightly off-frame quad can be compared with a human
+    reference, but MUST NEVER enter the in-frame candidate ranking or any
+    crop authorization. Anything beyond the snapshot tolerance is rejected.
+    """
     try:
         points = np.asarray(value, dtype=np.float64)
     except (TypeError, ValueError, OverflowError):
-        return None
+        return None, "invalid_corner_geometry"
     if points.shape != (4, 2) or not np.isfinite(points).all():
-        return None
+        return None, "invalid_corner_geometry"
+    if (np.any(points[:, 0] < -.04 * width)
+            or np.any(points[:, 0] > 1.04 * width)
+            or np.any(points[:, 1] < -.04 * height)
+            or np.any(points[:, 1] > 1.04 * height)):
+        return None, "outside_visual_diagnostic_extent"
     if (np.any(points[:, 0] < 0) or np.any(points[:, 0] >= width)
             or np.any(points[:, 1] < 0) or np.any(points[:, 1] >= height)):
-        return None
-    return points
+        return points, "corner_outside_original_photo"
+    return points, None
 
 
 def _corner_distances(candidate, reference):
@@ -84,6 +96,7 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
     reference = np.asarray(truth, np.float64)
     diagonal = math.hypot(width, height)
     rows, seen = [], set()
+    skipped_details, outside_frame = [], []
     for candidate in candidates[:40]:
         if not isinstance(candidate, dict):
             continue
@@ -95,11 +108,16 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
                 or source in seen):
             continue
         seen.add(source)
-        points = _candidate_points(candidate.get("corners"), height, width)
+        points, issue = _candidate_points(
+            candidate.get("corners"), height, width
+        )
         if points is None:
+            skipped_details.append({
+                "source": source, "family": family, "reason": issue,
+            })
             continue
         distances, signed_offsets = _corner_distances(points, reference)
-        rows.append({
+        measurement = {
             "source": source, "family": family,
             "mean_error_px": round(float(distances.mean()), 2),
             "max_error_px": round(float(distances.max()), 2),
@@ -114,8 +132,20 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
                 for dx, dy in signed_offsets
             ],
             "worst_corner_index": int(np.argmax(distances)),
-        })
+        }
+        if issue is not None:
+            # Off-photo vertices can be diagnostically measured but are
+            # expressly excluded from in-frame family oracle statistics.
+            outside_frame.append(measurement)
+            skipped_details.append({
+                "source": source, "family": family, "reason": issue,
+            })
+        else:
+            rows.append(measurement)
     rows.sort(key=lambda row: (row["normalized_error"], row["source"]))
+    outside_frame.sort(
+        key=lambda row: (row["normalized_error"], row["source"])
+    )
     groups = defaultdict(list)
     for row in rows:
         groups[row["family"]].append(row)
@@ -142,6 +172,10 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
         "normalization": "original_image_diagonal",
         "candidate_count": len(rows),
         "skipped_count": min(len(candidates), 40) - len(rows),
+        # Only safe source/family identifiers and numeric errors; no photo,
+        # annotated coordinates, path, identity text, or image bytes.
+        "skipped_details": skipped_details,
+        "outside_frame_evaluations": outside_frame,
         "undisplayed_hypothesis_count": count("source_hypotheses_hidden"),
         "generation": {
             "side_recovery": count("generated_side_recovery_count"),

@@ -83,3 +83,29 @@ label DITAHAN; diagnostik juga menginformasikan apabila bukti awal
 belum cukup untuk mempertahankan sisi tersebut. Hasil tidak dijamin
 muncul pada foto nyata, apalagi benar-benar mengikuti batas fisik
 KTP: syarat warna/kontras saja belum membuktikan identitas kartu.
+
+
+## Kandidat visual di luar foto dan angka evaluasi yang hilang
+
+Visual Candidate Debugging sebelumnya mengizinkan sudut kandidat
+maksimal sekitar 4% di luar batas foto asli supaya hipotesis yang
+sedikit terpotong tetap dapat diperiksa. Sementara itu, evaluator
+manual menolak semua titik di luar foto dan hanya menampilkan
+jumlah kandidat yang "dilewati" tanpa menjelaskan identitas atau
+penyebabnya.
+
+Sekarang laporan **ALASAN KANDIDAT DILEWATI** menyebut sumber
+dan sebab penolakan (koordinat rusak, di luar toleransi visual,
+atau sebagian sudut di luar foto). Kandidat dengan sudut sedikit
+di luar foto tetapi masih di dalam toleransi Visual Candidate
+Debugging boleh diukur secara matematis pada bagian terpisah
+**KANDIDAT DI LUAR FOTO — UKURAN GEOMETRI SAJA**.
+Nilainya tidak digabung dengan ranking dan statistik keluarga
+yang sepenuhnya berada dalam foto, serta sama sekali tidak
+memberikan izin untuk auto-crop, menyimpan data, atau memodifikasi
+source. Seluruh acuan manual tetap lokal dan hanya digunakan
+SETELAH proses PR6 selesai.
+
+Gunakan laporan ini untuk melihat apakah Independent Sides memang
+di luar frame dan seberapa jauh sudutnya meleset, bukan untuk
+mengoptimasi ambang dari satu foto pengembangan.

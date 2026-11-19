@@ -202,3 +202,72 @@ def test_no_absolute_annotation_coordinates_enter_evaluation_report():
         assert "corners" not in row
         assert "reference_corners" not in row
         assert len(row["corner_offsets_xy_px"]) == 4
+
+
+
+def test_off_frame_independent_sides_is_diagnosed_and_measured_separately():
+    snapshot = _snapshot()
+    snapshot["candidates"] = [{
+        "source": "independent_sides_0",
+        "family": "Independent Sides",
+        "corners": [[-6, 90], [460, 100], [450, 300], [145, 290]],
+    }]
+    original = deepcopy(snapshot)
+    outcome = evaluate(snapshot, TRUTH, SIZE)
+    assert outcome["candidate_count"] == 0
+    assert outcome["skipped_count"] == 1
+    assert outcome["families"] == []
+    assert outcome["candidates"] == []
+    assert outcome["skipped_details"] == [{
+        "source": "independent_sides_0",
+        "family": "Independent Sides",
+        "reason": "corner_outside_original_photo",
+    }]
+    measured = outcome["outside_frame_evaluations"]
+    assert len(measured) == 1
+    assert measured[0]["source"] == "independent_sides_0"
+    assert measured[0]["corner_errors_px"] == [146., 0., 0., 0.]
+    assert measured[0]["mean_error_px"] == 36.5
+    assert measured[0]["max_error_px"] == 146.
+    assert outcome["auto_select"] is None
+    assert outcome["auto_crop_allowed"] is False
+    assert outcome["crop_performed"] is False
+    assert outcome["file_write_performed"] is False
+    assert snapshot == original
+
+
+def test_two_off_frame_independent_sides_are_not_silent_or_ranked():
+    snapshot = _snapshot()
+    snapshot["candidates"] = [
+        {"source": "v2_3", "family": "Outer Region",
+         "corners": deepcopy(TRUTH)},
+        {"source": "independent_sides_0", "family": "Independent Sides",
+         "corners": [[-6, 90], [460, 100], [450, 300], [145, 290]]},
+        {"source": "independent_sides_1", "family": "Independent Sides",
+         "corners": [[140, -8], [460, 100], [450, 300], [145, 290]]},
+    ]
+    measured = evaluate(snapshot, TRUTH, SIZE)
+    assert measured["candidate_count"] == 1
+    assert measured["skipped_count"] == 2
+    assert [x["source"] for x in measured["outside_frame_evaluations"]] == [
+        "independent_sides_1", "independent_sides_0",
+    ]
+    assert measured["families"][0]["family"] == "Outer Region"
+    assert all(row["family"] == "Independent Sides"
+               for row in measured["outside_frame_evaluations"])
+    assert measured["auto_select"] is None
+
+
+def test_far_outside_visual_tolerance_still_skipped_without_geometry_measurement():
+    snapshot = _snapshot()
+    snapshot["candidates"] = [
+        {"source": "independent_sides_0", "family": "Independent Sides",
+         "corners": [[-55, 90], [460, 100], [450, 300], [145, 290]]},
+    ]
+    result = evaluate(snapshot, TRUTH, SIZE)
+    assert result["candidate_count"] == 0
+    assert result["skipped_count"] == 1
+    assert result["outside_frame_evaluations"] == []
+    assert result["skipped_details"][0]["reason"] == (
+        "outside_visual_diagnostic_extent"
+    )
