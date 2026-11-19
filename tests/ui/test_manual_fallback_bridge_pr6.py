@@ -477,14 +477,17 @@ def test_manual_bridge_is_available_if_only_runtime_review_flag_enabled(monkeypa
 
 
 
+@pytest.mark.parametrize("path_as_text", [False, True])
 def test_local_pr6_measurement_requires_four_edited_handles_and_does_not_save(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, path_as_text):
     from autodocscanner.ui.final import FinalScannerUI
     from autodocscanner.ui import final
 
     monkeypatch.setenv("AUTODOCSCANNER_PR6_RUNTIME_REVIEW", "1")
     _, widgets, buttons = _fake_editor(monkeypatch)
     fake, path, scan_calls, status = _fake_ui(tmp_path)
+    if path_as_text:
+        fake.files = [str(path)]
     points = fallback_starting_corners((400, 300))
     fake._pr6_runtime_review_by_file = {str(path): {
         "status": "manual_review",

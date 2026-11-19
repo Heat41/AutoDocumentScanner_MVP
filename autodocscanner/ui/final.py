@@ -1309,7 +1309,7 @@ class FinalScannerUI(SafeScannerUI):
                     "Geser keempat titik ke batas fisik KTP sebelum evaluasi."
                 )
                 return
-            if self._active_file_index() != index or self.files[index] != path:
+            if self._active_file_index() != index or Path(self.files[index]) != path:
                 self.status_text.set("Foto aktif berubah. Ulangi Review PR6.")
                 return
             reviews = getattr(self, "_pr6_runtime_review_by_file", {})
