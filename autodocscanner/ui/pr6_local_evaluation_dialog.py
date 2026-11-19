@@ -29,6 +29,28 @@ def format_local_pr6_evaluation(report):
         )
     if not report.get("families"):
         lines.append("Tidak ada kandidat yang dapat diukur.")
+    generation = report.get("generation") or {}
+    if generation:
+        lines.extend((
+            "",
+            "KETERSEDIAAN KANDIDAT PR6 (bukan akurasi):",
+            "  Side Recovery: "
+            + str(generation.get("side_recovery", 0))
+            + " | Paired Alignment: "
+            + str(generation.get("paired_alignment", 0))
+            + " | Independent Sides: "
+            + str(generation.get("independent_sides", 0)),
+            "  Induk diuji: Paired "
+            + str(generation.get("paired_parents_examined", 0))
+            + " | Independent "
+            + str(generation.get("independent_parents_examined", 0)),
+        ))
+    hidden = report.get("undisplayed_hypothesis_count", 0)
+    if hidden:
+        lines.append(
+            f"  PERHATIAN: {hidden} hipotesis tidak masuk tampilan; "
+            "angka kesalahan hanya mencakup kandidat yang ditampilkan."
+        )
     lines.extend(("", "PER KANDIDAT (urutan kesalahan setelah acuan manual):"))
     for row in report.get("candidates", []):
         lines.append(
@@ -37,6 +59,27 @@ def format_local_pr6_evaluation(report):
             f"{100*row['normalized_error']:>6.2f}% | "
             f"maks {row['max_error_px']:.2f} px"
         )
+    lines.extend((
+        "",
+        "PER SUDUT — 5 KANDIDAT PALING DEKAT (selisih acuan manual):",
+        "dx positif: kandidat di kanan acuan; dy positif: di bawah.",
+    ))
+    names = ("Kiri-atas", "Kanan-atas", "Kanan-bawah", "Kiri-bawah")
+    for row in report.get("candidates", [])[:5]:
+        if (not isinstance(row.get("corner_errors_px"), list)
+                or not isinstance(row.get("corner_offsets_xy_px"), list)
+                or len(row["corner_errors_px"]) != 4
+                or len(row["corner_offsets_xy_px"]) != 4):
+            continue
+        lines.append(f"  {row['source']} ({row['family']})")
+        for corner, error, offsets in zip(
+            names, row["corner_errors_px"], row["corner_offsets_xy_px"]
+        ):
+            dx, dy = offsets
+            lines.append(
+                f"    {corner:<12} {error:>7.2f} px "
+                f"(dx {dx:+.2f}, dy {dy:+.2f})"
+            )
     lines.extend((
         "", "Bukan hasil auto-crop, tidak dipakai memilih kandidat.",
         "Tidak ada gambar, koordinat acuan atau laporan yang disimpan.",

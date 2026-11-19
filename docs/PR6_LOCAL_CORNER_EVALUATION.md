@@ -23,3 +23,21 @@ terhadap unseen holdout baru dengan label independen tetap diperlukan.
 
 Koreksi Manual biasa, Proses Otomatis, PDF/JPG, SnipSheet dan branch main
 tetap tidak diubah oleh fitur evaluasi. Tidak ada file yang diunggah.
+
+
+## Analisis tambahan setelah evaluasi awal
+
+Laporan menampilkan kesalahan per sudut **TL/TR/BR/BL** untuk lima
+kandidat terdekat. Setiap sudut memuat jarak ke acuan manual, serta
+selisih (dx,dy) dalam piksel foto asli. dx positif berarti kandidat
+di sebelah kanan titik acuan, dy positif berarti di bawahnya.
+Ini membantu membedakan satu sudut meleset, satu sisi salah, atau
+seluruh kotak bergeser. Urutan sudut tetap dipetakan ke label manual
+walaupun titik pertama kandidat berbeda atau foto diputar.
+
+Laporan juga menampilkan jumlah usulan Side Recovery, Paired Alignment
+dan Independent Sides, jumlah kandidat asal yang diuji, serta jumlah
+hipotesis yang disembunyikan oleh batas tampilan. Jika sebuah keluarga
+tidak terlihat, periksa jumlah pembangkitan ini sebelum menyimpulkan
+bahwa algoritma gagal. Nilai terbaik tetap ORACLE pasca-anotasi,
+tidak dapat digunakan sebagai ambang otomatis.

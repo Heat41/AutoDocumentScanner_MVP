@@ -37,16 +37,21 @@ def _candidate_points(value, height, width):
 def _corner_distances(candidate, reference):
     # Candidate source may start at a different cyclic vertex. Never
     # assume image rotation means a particular TL/TR ordering.
+    # The output MUST be indexed by human-labelled TL/TR/BR/BL. Rotating
+    # the *reference* would return errors indexed by arbitrary candidate
+    # vertices, making the corner names misleading for rotated sources.
     variants = [
-        np.roll(reference, i, axis=0) for i in range(4)
+        np.roll(candidate, i, axis=0) for i in range(4)
     ] + [
-        np.roll(reference[::-1], i, axis=0) for i in range(4)
+        np.roll(candidate[::-1], i, axis=0) for i in range(4)
     ]
-    return min(
-        (np.linalg.norm(candidate - alternative, axis=1)
-         for alternative in variants),
-        key=lambda distances: float(distances.mean()),
+    aligned = min(
+        variants,
+        key=lambda alternative: float(
+            np.linalg.norm(alternative - reference, axis=1).mean()
+        ),
     )
+    return np.linalg.norm(aligned - reference, axis=1), aligned - reference
 
 
 def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
@@ -93,12 +98,22 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
         points = _candidate_points(candidate.get("corners"), height, width)
         if points is None:
             continue
-        distances = _corner_distances(points, reference)
+        distances, signed_offsets = _corner_distances(points, reference)
         rows.append({
             "source": source, "family": family,
             "mean_error_px": round(float(distances.mean()), 2),
             "max_error_px": round(float(distances.max()), 2),
             "normalized_error": round(float(distances.mean()) / diagonal, 6),
+            # TL/TR/BR/BL ordered error vectors; no absolute annotated
+            # positions, image pixels or reference coordinates are returned.
+            "corner_errors_px": [
+                round(float(value), 2) for value in distances
+            ],
+            "corner_offsets_xy_px": [
+                [round(float(dx), 2), round(float(dy), 2)]
+                for dx, dy in signed_offsets
+            ],
+            "worst_corner_index": int(np.argmax(distances)),
         })
     rows.sort(key=lambda row: (row["normalized_error"], row["source"]))
     groups = defaultdict(list)
@@ -115,6 +130,10 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
             "p90_error": round(float(np.percentile(errors, 90)), 6),
         })
     stats.sort(key=lambda item: (item["best_error"], item["family"]))
+    def count(key):
+        value = snapshot.get(key)
+        return min(value, 10000) if type(value) is int and value >= 0 else 0
+
     return {
         "status": "post_manual_reference_evaluation_only",
         "auto_select": None, "auto_crop_allowed": False,
@@ -123,5 +142,13 @@ def evaluate_pr6_candidates_against_manual(snapshot, corners, image_shape):
         "normalization": "original_image_diagonal",
         "candidate_count": len(rows),
         "skipped_count": min(len(candidates), 40) - len(rows),
+        "undisplayed_hypothesis_count": count("source_hypotheses_hidden"),
+        "generation": {
+            "side_recovery": count("generated_side_recovery_count"),
+            "paired_alignment": count("generated_paired_alignment_count"),
+            "independent_sides": count("independent_sides_count"),
+            "paired_parents_examined": count("paired_alignment_parents_examined"),
+            "independent_parents_examined": count("independent_sides_parents_examined"),
+        },
         "families": stats, "candidates": rows,
     }

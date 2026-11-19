@@ -120,3 +120,85 @@ def test_no_candidates_reported_as_no_data_not_an_accuracy_claim():
     result = evaluate(snap, TRUTH, SIZE)
     assert result["candidate_count"] == 0
     assert result["candidates"] == []
+
+
+
+def test_corner_error_vectors_follow_manual_labels_after_cyclic_rotation():
+    snap = _snapshot()
+    # One displaced physical top-left, the rest exactly aligned. The source
+    # can begin at a different corner without changing the named error.
+    modified = np.asarray(TRUTH, np.float64).copy()
+    modified[0] += [15, -20]
+    snap["candidates"] = [{
+        "source": "v2_3", "family": "Outer Region",
+        "corners": np.roll(modified, 2, axis=0).tolist(),
+    }]
+    row = evaluate(snap, TRUTH, SIZE)["candidates"][0]
+    assert row["corner_errors_px"] == [25.0, 0.0, 0.0, 0.0]
+    assert row["corner_offsets_xy_px"] == [
+        [15.0, -20.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]
+    ]
+    assert row["worst_corner_index"] == 0
+
+
+@pytest.mark.parametrize("angle", [0, 35, 93, 174])
+def test_corner_offsets_and_errors_rotation_invariant(angle):
+    center = np.asarray(TRUTH, np.float64).mean(axis=0)
+    theta = np.deg2rad(angle)
+    rotation = np.array([
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta), np.cos(theta)],
+    ])
+    # Rotate around image centre, then fit into a large original frame.
+    shifted = (np.asarray(TRUTH, np.float64) - center) @ rotation.T
+    shifted += np.asarray([700, 700])
+    wrong = shifted.copy()
+    wrong[2] += [8, 6]
+    # Valid manual TL/TR/BR/BL order requires clockwise polygon order,
+    # independently of the photo's portrait/landscape rotation.
+    snap = {
+        "status": "offline_visual_diagnostic_only",
+        "image_shape": [1500, 1500], "auto_crop_allowed": False,
+        "auto_select": None,
+        "candidates": [{
+            "source": "side_recovery_0", "family": "Side Recovery",
+            "corners": np.roll(wrong, 1, axis=0).tolist(),
+        }],
+    }
+    row = evaluate(snap, shifted.tolist(), (1500, 1500))["candidates"][0]
+    assert row["corner_errors_px"] == [0., 0., 10., 0.]
+    assert row["corner_offsets_xy_px"][2] == [8., 6.]
+    assert row["worst_corner_index"] == 2
+
+
+def test_generation_counts_distinguish_absent_from_hidden_proposals():
+    snap = _snapshot()
+    snap.update({
+        "generated_side_recovery_count": 3,
+        "generated_paired_alignment_count": 0,
+        "independent_sides_count": 2,
+        "paired_alignment_parents_examined": 3,
+        "independent_sides_parents_examined": 3,
+        "source_hypotheses_hidden": 12,
+    })
+    evaluated = evaluate(snap, TRUTH, SIZE)
+    assert evaluated["generation"] == {
+        "side_recovery": 3, "paired_alignment": 0,
+        "independent_sides": 2, "paired_parents_examined": 3,
+        "independent_parents_examined": 3,
+    }
+    assert evaluated["undisplayed_hypothesis_count"] == 12
+    assert evaluated["auto_select"] is None
+    assert evaluated["auto_crop_allowed"] is False
+
+
+def test_no_absolute_annotation_coordinates_enter_evaluation_report():
+    report = evaluate(_snapshot(), TRUTH, SIZE)
+    assert "truth" not in report
+    assert "manual_corners" not in report
+    assert "ground_truth" not in report
+    assert "raw_photo" not in report
+    for row in report["candidates"]:
+        assert "corners" not in row
+        assert "reference_corners" not in row
+        assert len(row["corner_offsets_xy_px"]) == 4

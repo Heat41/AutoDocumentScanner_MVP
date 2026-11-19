@@ -64,3 +64,29 @@ def test_real_tk_dialog_displays_results_without_saving_or_changing_source():
     finally:
         dialog.destroy()
         root.destroy()
+
+
+
+def test_report_shows_per_corner_named_errors_and_generator_counts():
+    snapshot = {
+        "status": "offline_visual_diagnostic_only",
+        "image_shape": [200, 320],
+        "auto_select": None, "auto_crop_allowed": False,
+        "generated_side_recovery_count": 4,
+        "generated_paired_alignment_count": 0,
+        "independent_sides_count": 0,
+        "paired_alignment_parents_examined": 4,
+        "independent_sides_parents_examined": 4,
+        "source_hypotheses_hidden": 2,
+        "candidates": [{
+            "source": "v2_3", "family": "Outer Region",
+            "corners": [[85, 50], [230, 50], [230, 150], [80, 150]],
+        }],
+    }
+    truth = [[80, 50], [230, 50], [230, 150], [80, 150]]
+    text = format_local_pr6_evaluation(evaluate(snapshot, truth, (200, 320)))
+    assert "Kiri-atas" in text and "5.00 px" in text
+    assert "dx +5.00" in text
+    assert "Paired Alignment: 0" in text
+    assert "Independent Sides: 0" in text
+    assert "2 hipotesis tidak masuk tampilan" in text
